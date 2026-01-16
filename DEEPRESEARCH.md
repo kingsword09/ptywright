@@ -7,12 +7,12 @@
 然而，终端环境不存在 DOM。终端的历史可以追溯到电传打字机（Teletype），其核心通信协议至今仍基于字节流。现代终端模拟器（Terminal Emulator）通过伪终端（Pseudo-Terminal, PTY）与 Shell 或应用程序通信。应用程序发送纯文本和 ANSI 转义序列（如 \x1b[31m 表示红色），终端模拟器解析这些序列并在屏幕网格（Grid）上渲染字符。对于测试工具而言，终端是一个“黑盒”，内部只有二维字符数组，没有“按钮”、“输入框”或“菜单”的语义概念 3。
 因此，要在终端实现“点击”和“截图测试”，必须解决两个核心问题：
 语义逆向工程（Semantic Reverse Engineering）： 如何从无结构的字符网格中识别出 UI 元素的位置？
-输入合成（Input Synthesis）： 如何将高层的交互意图（如“点击(10, 5)”）转换为底层 Shell 能理解的字节序列（如 SGR 鼠标编码 \x1b。它并没有试图直接控制本地的终端窗口，而是利用了 **xterm.js**——这也是 VS Code 内置终端的渲染引擎——在 Node.js 环境中运行一个“虚拟终端”。 这种架构的优势在于极高的保真度。由于 xterm.js 是业界事实标准之一，tui-test 能够精确模拟现代终端的渲染行为。它提供了一套类似 Jest/Playwright 的断言 API，例如 await expect(terminal.getByText("foo")).toBeVisible()`。然而，它的局限性在于主要面向 Node.js 生态，且其核心主要用于测试基于 xterm.js 的应用，而非通用的系统级 Agent 测试。
+输入合成（Input Synthesis）： 如何将高层的交互意图（如“点击(10, 5)”）转换为底层 Shell 能理解的字节序列（如 SGR 鼠标编码 \x1b。它并没有试图直接控制本地的终端窗口，而是利用了 **xterm.js**——这也是 VS Code 内置终端的渲染引擎——在 Node.js 环境中运行一个“虚拟终端”。 这种架构的优势在于极高的保真度。由于 xterm.js 是业界事实标准之一，ptywright 能够精确模拟现代终端的渲染行为。它提供了一套类似 Jest/Playwright 的断言 API，例如 await expect(terminal.getByText("foo")).toBeVisible()`。然而，它的局限性在于主要面向 Node.js 生态，且其核心主要用于测试基于 xterm.js 的应用，而非通用的系统级 Agent 测试。
 2.1.2 GeorgePearse/mcp-tui-test：MCP 原生的测试服务
 mcp-tui-test 是一个专门为 Claude 等 AI Agent 设计的 MCP 服务器 4。它明确宣称自己是“终端用户界面的 Playwright”。
 该项目采用了一种双模式架构来应对终端应用的复杂性：
 流模式 (Stream Mode)： 基于 pexpect，适用于 Git、NPM 等线性输出的 CLI 工具。它将输出视为简单的文本流，进行正则匹配。
-缓冲模式 (Buffer Mode)： 结合了 pexpect 和 pyte。pyte 是一个纯 Python 实现的 VT100 终端模拟器，它在内存中维护了一个屏幕缓冲区（Screen Buffer）。这使得 mcp-tui-test 能够回答“光标是否在第 5 行？”或“屏幕右下角是否有特定文本？”等位置相关的问题。
+缓冲模式 (Buffer Mode)： 结合了 pexpect 和 pyte。pyte 是一个纯 Python 实现的 VT100 终端模拟器，它在内存中维护了一个屏幕缓冲区（Screen Buffer）。这使得 mcp-ptywright 能够回答“光标是否在第 5 行？”或“屏幕右下角是否有特定文本？”等位置相关的问题。
 尽管 mcp-tui-test 是目前最符合用户“MCP”需求的现成方案，但在调研中发现其目前尚不支持鼠标交互（Mouse Support）4。这意味着它无法直接测试 TUI 应用中的点击行为，这是其作为完整测试方案的一个重大缺失。
 2.1.3 Textual Pilot：框架内的白盒测试
 如果被测应用是基于 Python 的 Textual 框架构建的，那么 Textual Pilot 提供了最完美的测试体验 6。Pilot 能够绕过底层的 ANSI 序列，直接与应用的对象模型交互。
@@ -135,7 +135,7 @@ import time
 import os
 
 # 初始化 MCP 服务器
-mcp = FastMCP("terminal-driver")
+mcp = FastMCP("ptywright")
 
 # 连接或启动 Tmux Server
 server = libtmux.Server()
@@ -245,7 +245,7 @@ if __name__ == "__main__":
 5.1 CI/CD 集成 (GitHub Actions)
 在 CI 环境中，由于没有物理显示器，必须使用 Tmux 的分离模式（Detached Mode）。
 Install: apt-get install tmux, pip install libtmux fastmcp.
-Run: 启动 terminal-driver-mcp。
+Run: 启动 ptywright。
 Test: 运行测试脚本（或 Agent），调用 MCP 工具执行端到端测试。
 Artifacts: 失败时调用 capture_pane 导出完整日志，或使用 vhs 生成当前状态的 GIF 并上传为 Artifact。
 5.2 视觉回归 (Visual Regression)

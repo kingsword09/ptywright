@@ -1,5 +1,5 @@
 {
-  "name": "tui-test",
+  "name": "ptywright",
   "private": true,
   "type": "module",
   "scripts": {
@@ -8,8 +8,8 @@
     "codex:help-test": "mkdir -p .tmp && codex exec --skip-git-repo-check -o .tmp/codex_help_test.last.txt - < prompts/codex_help_test.prompt && cat .tmp/codex_help_test.last.txt",
     "codex:ansi-color-demo": "mkdir -p .tmp && codex exec --skip-git-repo-check -o .tmp/ansi_color_demo.last.txt - < prompts/ansi_color_demo.prompt && cat .tmp/ansi_color_demo.last.txt",
     "lint": "oxlint --type-aware --type-check .",
-    "format": "oxfmt src tests package.json tsconfig.json .oxlintrc.json .oxfmtrc.jsonc",
-    "format:check": "oxfmt --check src tests package.json tsconfig.json .oxlintrc.json .oxfmtrc.jsonc"
+    "format": "oxfmt src tests package.json tsconfig.json .oxlintrc.json .oxfmtrc.json",
+    "format:check": "oxfmt --check src tests package.json tsconfig.json .oxlintrc.json .oxfmtrc.json"
   },
   "dependencies": {
     "@modelcontextprotocol/sdk": "^1.25.2",

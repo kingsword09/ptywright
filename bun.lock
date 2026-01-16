@@ -3,7 +3,7 @@
   "configVersion": 1,
   "workspaces": {
     "": {
-      "name": "tui-test",
+      "name": "ptywright",
       "dependencies": {
         "@modelcontextprotocol/sdk": "^1.25.2",
         "@xterm/headless": "^6.0.0",

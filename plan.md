@@ -1,7 +1,7 @@
 # ExecPlan
 
 ## Purpose
-- 在 `tui-test/` 内实现一个**通用的终端可观测/可测试驱动器**（优先 TypeScript + Bun），面向任意 TUI（pi-tui / ratatui / ink / vim 类应用），提供类似 Playwright/CDP 的“查看当前界面状态”的能力。
+- 在 `ptywright/` 内实现一个**通用的终端可观测/可测试驱动器**（优先 TypeScript + Bun），面向任意 TUI（pi-tui / ratatui / ink / vim 类应用），提供类似 Playwright/CDP 的“查看当前界面状态”的能力。
 - 第一优先级：**确定性与可回归**（能把“做着做着做坏掉”固定住）。
 - 第二优先级：给 Agent“看界面”的能力（不强依赖 PNG 截图，先用更稳定的“终端语义快照”）。
 
@@ -27,7 +27,7 @@
 目标：每次失败都能“看过程”，降低排查成本。
 - 录制：产出 asciicast v3（或兼容）事件流（output/input/resize/marker/exit）。
 - 报告：生成 `report.html` 回放 + filmstrip（关键步骤 `snapshot_view`/`snapshot_view_ansi`）。
-- 可选渲染：`cast -> gif/svg`（例如 agg/svg-term-cli）作为 CI artifacts（建议只在失败或 TRACE=1 时生成）。
+- 可选渲染：`cast -> gif/svg`（agg、svg-term-cli），或用 vhs/terminalizer 生成 gif/mp4（建议只在失败或 TRACE=1 时生成）。
 验收：在本仓库 fixtures 上生成可回放产物；CI/本地一键打开验收。
 
 ### M3：交互增强（鼠标/点击）
@@ -69,7 +69,7 @@
 - **终端仿真用 xterm headless**：用成熟解析器把 ANSI/VT 序列变成可查询的 buffer，避免自研解析器带来的不确定性（DRY/KISS）。
 
 ## Outcomes & Retrospective
-- 目标输出：一个可独立运行的 `terminal-driver-mcp`，以及一套可重复执行的回归测试样例（golden snapshots）。
+- 目标输出：一个可独立运行的 `ptywright`，以及一套可重复执行的回归测试样例（golden snapshots）。
 - 若出现 flaky：优先补 `wait_for_stable_screen` 与 deterministic 配置（禁动画/固定尺寸/固定 TERM）。
 
 ## Context and Orientation

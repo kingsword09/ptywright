@@ -23,7 +23,7 @@ test("MCP server smoke test", async () => {
   });
 
   const client = new Client({
-    name: "tui-test-smoke",
+    name: "ptywright-smoke",
     version: "0.0.0",
   });
 

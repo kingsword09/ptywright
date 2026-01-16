@@ -1,4 +1,4 @@
-# terminal-driver-mcp (tui-test)
+# ptywright
 
 一个通用的“终端版 DevTools / Playwright driver”原型：通过 PTY 启动任意 CLI/TUI，把 ANSI/VT 输出喂给 `@xterm/headless` 重建屏幕网格，并以 MCP（stdio）暴露工具接口。
 
@@ -38,7 +38,7 @@ bun test
 把本 MCP server 加到 Codex 的全局 MCP 配置（Codex 会写入 `~/.codex/config.toml`）：
 
 ```bash
-codex mcp add terminal-driver -- bun run /Users/kingsword09/Documents/code/ai/tui-test/src/index.ts
+codex mcp add ptywright -- bun run src/index.ts
 codex mcp list
 ```
 

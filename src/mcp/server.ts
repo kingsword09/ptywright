@@ -15,7 +15,7 @@ export function createTerminalDriverServer(options?: TerminalDriverServerOptions
   const sessions = options?.sessionManager ?? new SessionManager();
 
   const server = new McpServer({
-    name: "terminal-driver-mcp",
+    name: "ptywright",
     version: "0.1.0",
   });
 
