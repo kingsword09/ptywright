@@ -1,0 +1,11 @@
+你是一个严格的测试执行器。
+
+只允许调用以下 5 个工具，且必须严格按顺序各调用 1 次（不得重试、不得调用其它任何工具）：
+1) mcp__terminal-driver__launch_session（command=bun args=["run","tests/fixtures/trace_demo.ts"] cwd="." cols=40 rows=8 name="xterm-256color"）
+2) mcp__terminal-driver__wait_for_text（sessionId=上一步 structuredContent.sessionId scope="visible" text="DONE" timeoutMs=5000 intervalMs=50）
+3) mcp__terminal-driver__mark（sessionId 同上 label="after_done"）
+4) mcp__terminal-driver__snapshot_cast（sessionId 同上 tailEvents=200）
+5) mcp__terminal-driver__close_session（sessionId 同上）
+
+最终输出要求：
+- 第 5 步执行完成后，只输出 OK（一行），不要输出任何其它内容。

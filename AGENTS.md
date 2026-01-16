@@ -42,8 +42,11 @@
   - `bun run codex:help-test`
   - `bun run codex:ansi-color-demo`
 - 自定义场景：新增一个 `prompts/*.prompt`，然后用
-  - `codex exec --skip-git-repo-check -o .tmp/<name>.txt - < prompts/<name>.prompt`
-  - 再 `cat .tmp/<name>.txt` 看最终产物（避免终端内手写转义/换行）。
+  - `bun run src/codex/extract_mcp_tool_text.ts --prompt prompts/<name>.prompt --tool <tool> --out .tmp/<name>.txt --jsonl .tmp/<name>.jsonl --stderr .tmp/<name>.stderr.log`
+  - 再 `cat .tmp/<name>.txt`（从 `codex exec --json` 里提取 MCP tool 的 `content[0].text`，避免 shell 转义/长输出污染）。
+
+## Scenario Runner（JSON）
+- 用 JSON 场景文件驱动 TUI：`bun run scenario:run <scenario.json>`（默认产物在 `.tmp/scenarios/<name>/`）
 
 ## 跨平台与换行
 - `.gitattributes` 强制仓库存储为 LF；`.editorconfig` 统一编辑器行为。

@@ -8,6 +8,13 @@ export type TerminalDriverServerOptions = {
   sessionManager?: SessionManager;
 };
 
+const textMaskRuleSchema = z.object({
+  regex: z.string().min(1),
+  flags: z.string().optional(),
+  replacement: z.string().optional(),
+  preserveLength: z.boolean().optional(),
+});
+
 export function createTerminalDriverServer(options?: TerminalDriverServerOptions): {
   server: McpServer;
   sessions: SessionManager;
@@ -79,6 +86,41 @@ export function createTerminalDriverServer(options?: TerminalDriverServerOptions
   );
 
   server.tool(
+    "send_mouse",
+    {
+      sessionId: z.string().min(1),
+      action: z.enum(["down", "up", "move", "click", "scroll_up", "scroll_down"]),
+      x: z.number().int(),
+      y: z.number().int(),
+      button: z.enum(["left", "middle", "right"]).optional(),
+      shift: z.boolean().optional(),
+      alt: z.boolean().optional(),
+      ctrl: z.boolean().optional(),
+    },
+    async (args) => {
+      const session = sessions.getSession(args.sessionId);
+      if (!session) {
+        return toolError(`session not found: ${args.sessionId}`);
+      }
+
+      const modifiers =
+        args.shift || args.alt || args.ctrl
+          ? { shift: args.shift, alt: args.alt, ctrl: args.ctrl }
+          : undefined;
+
+      session.sendMouse({
+        action: args.action,
+        x: args.x,
+        y: args.y,
+        button: args.button,
+        modifiers,
+      });
+
+      return { content: [{ type: "text", text: "ok" }] };
+    },
+  );
+
+  server.tool(
     "resize",
     {
       sessionId: z.string().min(1),
@@ -104,6 +146,7 @@ export function createTerminalDriverServer(options?: TerminalDriverServerOptions
       trimBottom: z.boolean().optional(),
       maxLines: z.number().int().positive().optional(),
       tailLines: z.number().int().positive().optional(),
+      mask: z.array(textMaskRuleSchema).optional(),
     },
     async (args) => {
       const session = sessions.getSession(args.sessionId);
@@ -113,13 +156,20 @@ export function createTerminalDriverServer(options?: TerminalDriverServerOptions
       if (args.maxLines !== undefined && args.tailLines !== undefined) {
         return toolError("snapshot_text: maxLines and tailLines are mutually exclusive");
       }
-      const { text, hash } = await session.snapshotText({
-        scope: args.scope,
-        trimRight: args.trimRight,
-        trimBottom: args.trimBottom,
-        maxLines: args.maxLines,
-        tailLines: args.tailLines,
-      });
+      let text: string;
+      let hash: string;
+      try {
+        ({ text, hash } = await session.snapshotText({
+          scope: args.scope,
+          trimRight: args.trimRight,
+          trimBottom: args.trimBottom,
+          maxLines: args.maxLines,
+          tailLines: args.tailLines,
+          mask: args.mask,
+        }));
+      } catch (error) {
+        return toolError((error as Error).message);
+      }
       return {
         content: [{ type: "text", text }],
         structuredContent: { sessionId: args.sessionId, hash, text },
@@ -136,6 +186,7 @@ export function createTerminalDriverServer(options?: TerminalDriverServerOptions
       trimBottom: z.boolean().optional(),
       maxLines: z.number().int().positive().optional(),
       tailLines: z.number().int().positive().optional(),
+      mask: z.array(textMaskRuleSchema).optional(),
     },
     async (args) => {
       const session = sessions.getSession(args.sessionId);
@@ -146,13 +197,21 @@ export function createTerminalDriverServer(options?: TerminalDriverServerOptions
         return toolError("snapshot_ansi: maxLines and tailLines are mutually exclusive");
       }
 
-      const { ansi, plain, hash } = await session.snapshotAnsi({
-        scope: args.scope,
-        trimRight: args.trimRight,
-        trimBottom: args.trimBottom,
-        maxLines: args.maxLines,
-        tailLines: args.tailLines,
-      });
+      let ansi: string;
+      let plain: string;
+      let hash: string;
+      try {
+        ({ ansi, plain, hash } = await session.snapshotAnsi({
+          scope: args.scope,
+          trimRight: args.trimRight,
+          trimBottom: args.trimBottom,
+          maxLines: args.maxLines,
+          tailLines: args.tailLines,
+          mask: args.mask,
+        }));
+      } catch (error) {
+        return toolError((error as Error).message);
+      }
 
       return {
         content: [{ type: "text", text: ansi }],
@@ -166,17 +225,67 @@ export function createTerminalDriverServer(options?: TerminalDriverServerOptions
     {
       sessionId: z.string().min(1),
       trimRight: z.boolean().optional(),
+      includeStyles: z.boolean().optional(),
     },
     async (args) => {
       const session = sessions.getSession(args.sessionId);
       if (!session) {
         return toolError(`session not found: ${args.sessionId}`);
       }
-      const { grid, hash } = await session.snapshotGrid({ trimRight: args.trimRight });
+      const { grid, hash } = await session.snapshotGrid({
+        trimRight: args.trimRight,
+        includeStyles: args.includeStyles,
+      });
       return {
         content: [{ type: "text", text: grid.lines.join("\n") }],
         structuredContent: { sessionId: args.sessionId, hash, grid },
       };
+    },
+  );
+
+  server.tool(
+    "snapshot_cast",
+    {
+      sessionId: z.string().min(1),
+      tailEvents: z.number().int().positive().optional(),
+    },
+    async (args) => {
+      const session = sessions.getSession(args.sessionId);
+      if (!session) {
+        return toolError(`session not found: ${args.sessionId}`);
+      }
+
+      const snapshot = await session.snapshotCast({
+        tailEvents: args.tailEvents,
+      });
+
+      return {
+        content: [{ type: "text", text: snapshot.cast }],
+        structuredContent: {
+          sessionId: args.sessionId,
+          eventCount: snapshot.events.length,
+          droppedEvents: snapshot.droppedEvents,
+          droppedDataChars: snapshot.droppedDataChars,
+          closeReason: session.getCloseReason(),
+        },
+      };
+    },
+  );
+
+  server.tool(
+    "mark",
+    {
+      sessionId: z.string().min(1),
+      label: z.string().optional(),
+    },
+    async (args) => {
+      const session = sessions.getSession(args.sessionId);
+      if (!session) {
+        return toolError(`session not found: ${args.sessionId}`);
+      }
+
+      session.mark(args.label);
+      return { content: [{ type: "text", text: "ok" }] };
     },
   );
 
@@ -273,6 +382,7 @@ export function createTerminalDriverServer(options?: TerminalDriverServerOptions
       maxLines: z.number().int().positive().optional(),
       tailLines: z.number().int().positive().optional(),
       lineNumbers: z.boolean().optional(),
+      mask: z.array(textMaskRuleSchema).optional(),
     },
     async (args) => {
       const session = sessions.getSession(args.sessionId);
@@ -283,13 +393,20 @@ export function createTerminalDriverServer(options?: TerminalDriverServerOptions
         return toolError("snapshot_view: maxLines and tailLines are mutually exclusive");
       }
 
-      const { text, hash } = await session.snapshotText({
-        scope: args.scope,
-        trimRight: args.trimRight,
-        trimBottom: args.trimBottom ?? true,
-        maxLines: args.maxLines,
-        tailLines: args.tailLines,
-      });
+      let text: string;
+      let hash: string;
+      try {
+        ({ text, hash } = await session.snapshotText({
+          scope: args.scope,
+          trimRight: args.trimRight,
+          trimBottom: args.trimBottom ?? true,
+          maxLines: args.maxLines,
+          tailLines: args.tailLines,
+          mask: args.mask,
+        }));
+      } catch (error) {
+        return toolError((error as Error).message);
+      }
 
       const view = formatSnapshotView({
         sessionId: args.sessionId,
@@ -317,6 +434,7 @@ export function createTerminalDriverServer(options?: TerminalDriverServerOptions
       maxLines: z.number().int().positive().optional(),
       tailLines: z.number().int().positive().optional(),
       lineNumbers: z.boolean().optional(),
+      mask: z.array(textMaskRuleSchema).optional(),
     },
     async (args) => {
       const session = sessions.getSession(args.sessionId);
@@ -327,13 +445,20 @@ export function createTerminalDriverServer(options?: TerminalDriverServerOptions
         return toolError("snapshot_view_ansi: maxLines and tailLines are mutually exclusive");
       }
 
-      const { ansi, hash } = await session.snapshotAnsi({
-        scope: args.scope,
-        trimRight: args.trimRight,
-        trimBottom: args.trimBottom ?? true,
-        maxLines: args.maxLines,
-        tailLines: args.tailLines,
-      });
+      let ansi: string;
+      let hash: string;
+      try {
+        ({ ansi, hash } = await session.snapshotAnsi({
+          scope: args.scope,
+          trimRight: args.trimRight,
+          trimBottom: args.trimBottom ?? true,
+          maxLines: args.maxLines,
+          tailLines: args.tailLines,
+          mask: args.mask,
+        }));
+      } catch (error) {
+        return toolError((error as Error).message);
+      }
 
       const view = formatSnapshotView({
         sessionId: args.sessionId,

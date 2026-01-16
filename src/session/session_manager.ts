@@ -51,12 +51,21 @@ export class SessionManager {
       env,
     });
 
+    const traceEnv = pickTraceEnv(env);
+    const traceCommand = [args.command, ...(args.args ?? [])].join(" ").trim();
+
     const session = new TerminalSession({
       id: sessionId,
       pty,
       cols,
       rows,
       snapshotRingSize: this.snapshotRingSize,
+      trace: {
+        command: traceCommand,
+        args: args.args ?? [],
+        cwd,
+        env: traceEnv,
+      },
     });
 
     this.sessions.set(sessionId, session);
@@ -120,4 +129,13 @@ function mergeEnv(
   }
 
   return env;
+}
+
+function pickTraceEnv(env: Record<string, string>): Record<string, string> {
+  const picked: Record<string, string> = {};
+  for (const key of ["TERM", "COLORTERM", "LANG", "LC_ALL"]) {
+    const value = env[key];
+    if (value) picked[key] = value;
+  }
+  return picked;
 }

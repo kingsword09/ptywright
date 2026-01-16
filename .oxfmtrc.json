@@ -1,6 +1,6 @@
 {
   "$schema": "./node_modules/oxfmt/configuration_schema.json",
-  "ignorePatterns": ["dist/**", "node_modules/**", ".tmp/**"],
+  "ignorePatterns": ["dist/**", "node_modules/**", ".tmp/**", "tests/golden/**"],
   "options": {
     "printWidth": 80,
     "tabWidth": 2,

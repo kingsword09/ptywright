@@ -13,12 +13,16 @@ bun run src/index.ts
 
 - `launch_session`：启动 PTY 会话
 - `send_text` / `press_key`：发送输入
+- `send_mouse`：发送 SGR 鼠标事件（click/move/scroll）
 - `resize`：调整终端尺寸
 - `snapshot_text`：返回可见屏幕文本（适合 Agent “看界面”与做 golden）
 - `snapshot_ansi`：返回带 ANSI/SGR 样式的可见屏幕（适合 debug/人眼验收）
 - `snapshot_view`：更适合人看的快照（带元信息+行号）
 - `snapshot_view_ansi`：带 ANSI/SGR 样式的 `snapshot_view`
+- `mask`（可选）：`snapshot_text/snapshot_ansi/snapshot_view/snapshot_view_ansi` 支持 `mask=[{regex,flags?,replacement?,preserveLength?}]`，用于把随机 id/时间戳等变成可 diff 的稳定快照
 - `snapshot_grid`：返回结构化屏幕网格（rows/cols/cursor/lines）
+- `snapshot_cast`：导出 asciicast 事件流（用于录像/回放/失败诊断）
+- `mark`：在 trace 中打点（asciicast marker event）
 - `wait_for_text`：等待文本/正则出现
 - `wait_for_stable_screen`：等待屏幕在 quiet window 内稳定（降低 flaky）
 - `list_sessions` / `close_session`
@@ -51,6 +55,11 @@ codex mcp list
 ```bash
 codex exec --skip-git-repo-check - < prompts/codex_help_test.prompt
 codex exec --skip-git-repo-check - < prompts/ansi_color_demo.prompt
+# 鼠标 click 演示
+codex exec --skip-git-repo-check - < prompts/mouse_click_demo.prompt
+codex exec --skip-git-repo-check - < prompts/trace_demo_cast.prompt
+# 带 mark 打点（用于 report filmstrip）
+codex exec --skip-git-repo-check - < prompts/trace_demo_cast_marked.prompt
 ```
 
 或用内置脚本：
@@ -58,4 +67,41 @@ codex exec --skip-git-repo-check - < prompts/ansi_color_demo.prompt
 ```bash
 bun run codex:help-test
 bun run codex:ansi-color-demo
+bun run codex:trace-demo
+bun run codex:trace-demo:txt
+bun run codex:mouse-click-demo
+bun run codex:trace-demo:marked
+
+# 生成 HTML 回放报告（filmstrip）
+bun run trace:report-demo
+# 或一键：先录制 cast 再生成报告
+bun run codex:trace-demo:report
+# 一键（含 mark）
+bun run codex:trace-demo:report:marked
+
+# 生成带颜色的 HTML 回放（更适合人看）
+bun run codex:ansi-color-demo:report
+
+# M5：mask 演示（随机 token -> 稳定快照）
+bun run codex:m5-mask-demo
 ```
+
+## Scenario Runner (JSON)
+
+把一次 TUI 测试写成 JSON：启动 → 输入 → 等待 → 快照（可 mask）→ 断言，并自动产出 `.cast` + `report.html`。
+
+```bash
+bun run scenario:run scenarios/m5_mask_demo.json
+# 或
+bun run scenario:m5-mask-demo
+```
+
+产物默认写到 `.tmp/scenarios/<name>/`（可用 `--artifacts-dir` 覆盖）。
+
+## Cast -> SVG/GIF (可选)
+
+录像类产物建议只用于失败诊断或人工验收；稳定回归优先用 `snapshot_grid` 做 diff。
+
+- SVG: `svg-term`（例如：`bunx svg-term --in .tmp/trace_demo.cast --out .tmp/trace_demo.svg`）
+- TXT: `asciinema convert -f txt .tmp/trace_demo.cast .tmp/trace_demo.txt`
+- GIF: `asciinema/agg`（例如：`agg --fps 30 .tmp/trace_demo.cast .tmp/trace_demo.gif`）

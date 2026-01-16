@@ -51,11 +51,14 @@
 
 ## Progress（按里程碑滚动更新）
 - [x] M0：可通用驱动 MVP
-- [ ] M1：确定性 UI 回归（golden diff + 边界覆盖）
-- [ ] M2：Trace/录像产物（cast + report + 可选 gif/svg）
-- [ ] M3：交互增强（鼠标/点击）
+- [x] M1：确定性 UI 回归（grid style-runs + golden + 边界 fixtures）
+- [x] M2：Trace/录像产物（cast + report + 可选 gif/svg）
+- [x] M3：交互增强（鼠标/点击）
 - [ ] M4：框架特化加速（ratatui/ink adapters）
 - [ ] M5：Agent/LLM 测试分层（stub/record-replay + live smoke）
+  - [x] M5.1：快照 mask/normalize（避免断言不稳定文案）
+  - [x] M5.2：Scenario runner（JSON 脚本化用例 + report/golden）
+  - [ ] M5.3：LLM cassette（record/replay + live smoke）
 
 ## Surprises & Discoveries
 - `codex` 的 Rust TUI 通过 `vt100` 虚拟终端后端做快照测试，证明“字符栅格快照”是稳定且高性价比的回归手段。

@@ -3,13 +3,19 @@ import { Terminal } from "@xterm/headless";
 import type { Disposable, PtyProcess } from "../pty/pty_adapter";
 import { encodeKey } from "../terminal/keys";
 import { renderAnsiLines } from "../terminal/ansi";
+import { encodeSgrMouse } from "../terminal/mouse";
+import type { MouseEvent } from "../terminal/mouse";
 import type { AnsiRenderedLine } from "../terminal/ansi";
 import { snapshotGrid, snapshotLines } from "../terminal/snapshot";
 import type { TerminalSnapshotGrid } from "../terminal/snapshot";
 import type { SnapshotScope } from "../terminal/snapshot";
 import type { TerminalMeta } from "../terminal/view";
+import { applyTextMaskRules } from "../terminal/mask";
+import type { TextMaskRule } from "../terminal/mask";
 import { fnv1a32 } from "../util/hash";
 import { sleep } from "../util/sleep";
+import { TraceRecorder } from "../trace/recorder";
+import type { TraceSnapshot } from "../trace/recorder";
 
 export type TerminalSessionOptions = {
   id: string;
@@ -17,6 +23,13 @@ export type TerminalSessionOptions = {
   cols: number;
   rows: number;
   snapshotRingSize: number;
+  trace?: {
+    command?: string;
+    args?: string[];
+    cwd?: string;
+    env?: Record<string, string>;
+    title?: string;
+  };
 };
 
 export type SnapshotFrame = {
@@ -29,12 +42,15 @@ export type TerminalSessionCloseReason =
   | { type: "closed_by_user" }
   | { type: "process_exit"; exitCode: number; signal?: number | string };
 
+const ESC = "\x1b";
+
 export class TerminalSession {
   readonly id: string;
 
   private readonly pty: PtyProcess;
   private readonly terminal: Terminal;
   private readonly snapshotRingSize: number;
+  private readonly trace: TraceRecorder;
 
   private writeChain: Promise<void> = Promise.resolve();
   private readonly disposables: Disposable[] = [];
@@ -56,9 +72,30 @@ export class TerminalSession {
       convertEol: true,
     });
 
+    this.trace = new TraceRecorder({
+      version: 2,
+      width: options.cols,
+      height: options.rows,
+      timestamp: Math.floor(Date.now() / 1000),
+      env: options.trace?.env,
+      title: options.trace?.title ?? options.id,
+      command: options.trace?.command,
+    });
+
+    this.disposables.push(
+      this.terminal.parser.registerCsiHandler({ final: "n" }, (params) =>
+        this.handleCsiDsr(params),
+      ),
+    );
+
+    this.disposables.push(
+      this.terminal.parser.registerCsiHandler({ final: "c" }, (params) => this.handleCsiDa(params)),
+    );
+
     this.disposables.push(
       this.pty.onData((data) => {
         this.appendRawOutput(data);
+        this.trace.recordOutput(data);
         this.enqueueWrite(data);
       }),
     );
@@ -79,17 +116,27 @@ export class TerminalSession {
   }
 
   resize(cols: number, rows: number): void {
+    this.trace.recordResize(cols, rows);
     this.pty.resize(cols, rows);
     this.terminal.resize(cols, rows);
   }
 
   sendText(text: string, options?: { enter?: boolean }): void {
     const enter = options?.enter ?? false;
-    this.pty.write(enter ? `${text}\r` : text);
+    const payload = enter ? `${text}\r` : text;
+    this.trace.recordInput(payload);
+    this.pty.write(payload);
   }
 
   pressKey(key: string): void {
     const encoded = encodeKey(key);
+    this.trace.recordInput(encoded);
+    this.pty.write(encoded);
+  }
+
+  sendMouse(event: MouseEvent): void {
+    const encoded = encodeSgrMouse(event);
+    this.trace.recordInput(encoded);
     this.pty.write(encoded);
   }
 
@@ -139,6 +186,8 @@ export class TerminalSession {
       lines = lines.slice(Math.max(0, lines.length - tail));
     }
 
+    lines = applyTextMaskRules(lines, options?.mask);
+
     const text = lines.join("\n");
     const hash = fnv1a32(text);
     if (options?.captureFrame ?? true) {
@@ -177,22 +226,59 @@ export class TerminalSession {
       lines = lines.slice(Math.max(0, lines.length - tail));
     }
 
+    if (options?.mask && options.mask.length > 0) {
+      const maskedPlain = applyTextMaskRules(
+        lines.map((line) => line.plain),
+        options.mask,
+      );
+      const maskedAnsi = applyTextMaskRules(
+        lines.map((line) => line.ansi),
+        options.mask,
+      );
+
+      lines = lines.map((line, idx) => ({
+        ...line,
+        plain: maskedPlain[idx] ?? "",
+        ansi: maskedAnsi[idx] ?? "",
+      }));
+    }
+
     const ansi = lines.map((l) => l.ansi).join("\n");
     const plain = lines.map((l) => l.plain).join("\n");
     const hash = fnv1a32(ansi);
     return { ansi, plain, hash, lines };
   }
 
-  async snapshotGrid(options?: { trimRight?: boolean; captureFrame?: boolean }): Promise<{
+  async snapshotGrid(options?: {
+    trimRight?: boolean;
+    includeStyles?: boolean;
+    captureFrame?: boolean;
+  }): Promise<{
     grid: TerminalSnapshotGrid;
     hash: string;
   }> {
-    const { hash } = await this.snapshotText({
+    await this.flush();
+
+    const grid = snapshotGrid(this.terminal, {
       trimRight: options?.trimRight,
-      captureFrame: options?.captureFrame,
+      includeStyles: options?.includeStyles,
     });
-    const grid = snapshotGrid(this.terminal, { trimRight: options?.trimRight });
+
+    const hash = fnv1a32(JSON.stringify(grid));
+    if (options?.captureFrame ?? true) {
+      this.captureFrame(grid.lines.join("\n"), hash);
+    }
+
     return { grid, hash };
+  }
+
+  async snapshotCast(options?: { tailEvents?: number }): Promise<TraceSnapshot> {
+    await this.flush();
+    return this.trace.snapshot({ tailEvents: options?.tailEvents });
+  }
+
+  mark(label?: string): void {
+    this.trace.mark(label);
   }
 
   getSnapshotFrames(): SnapshotFrame[] {
@@ -211,6 +297,7 @@ export class TerminalSession {
     intervalMs: number;
   }): Promise<{ found: boolean; text: string; hash: string }> {
     const startedAt = Date.now();
+    let closedSince: number | null = null;
     while (Date.now() - startedAt <= args.timeoutMs) {
       const snapshot = await this.snapshotText({ captureFrame: true, scope: args.scope });
       if (args.text && snapshot.text.includes(args.text)) {
@@ -221,7 +308,11 @@ export class TerminalSession {
       }
 
       if (this.isClosed()) {
-        break;
+        closedSince ??= Date.now();
+        const drainMs = Math.max(500, args.intervalMs * 4);
+        if (Date.now() - closedSince >= drainMs) {
+          break;
+        }
       }
 
       await sleep(args.intervalMs);
@@ -291,6 +382,36 @@ export class TerminalSession {
       this.snapshotRing.splice(0, this.snapshotRing.length - this.snapshotRingSize);
     }
   }
+
+  private handleCsiDsr(params: (number | number[])[]): boolean {
+    if (params.length !== 1) return false;
+
+    const raw = params[0];
+    const value = Array.isArray(raw) ? raw[0] : raw;
+    if (value === 5) {
+      this.pty.write(`${ESC}[0n`);
+      return true;
+    }
+
+    if (value !== 6) return false;
+
+    const meta = this.getMeta();
+    const row = meta.baseY + meta.cursorY - meta.viewportY + 1;
+    const col = meta.cursorX + 1;
+    this.pty.write(`${ESC}[${row};${col}R`);
+    return true;
+  }
+
+  private handleCsiDa(params: (number | number[])[]): boolean {
+    if (params.length > 1) return false;
+
+    const raw = params[0];
+    const value = raw === undefined ? 0 : Array.isArray(raw) ? raw[0] : raw;
+    if (value !== 0) return false;
+
+    this.pty.write(`${ESC}[?1;2c`);
+    return true;
+  }
 }
 
 type SnapshotTextOptions = {
@@ -300,6 +421,7 @@ type SnapshotTextOptions = {
   maxLines?: number;
   tailLines?: number;
   captureFrame?: boolean;
+  mask?: TextMaskRule[];
 };
 
 function trimBottomEmptyLines(lines: string[]): string[] {
@@ -316,6 +438,7 @@ type SnapshotAnsiOptions = {
   trimBottom?: boolean;
   maxLines?: number;
   tailLines?: number;
+  mask?: TextMaskRule[];
 };
 
 function trimBottomEmptyAnsiLines(lines: AnsiRenderedLine[]): AnsiRenderedLine[] {

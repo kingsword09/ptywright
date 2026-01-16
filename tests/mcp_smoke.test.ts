@@ -33,6 +33,9 @@ test("MCP server smoke test", async () => {
   expect(list.tools.some((t) => t.name === "launch_session")).toBe(true);
   expect(list.tools.some((t) => t.name === "snapshot_ansi")).toBe(true);
   expect(list.tools.some((t) => t.name === "snapshot_view_ansi")).toBe(true);
+  expect(list.tools.some((t) => t.name === "send_mouse")).toBe(true);
+  expect(list.tools.some((t) => t.name === "snapshot_cast")).toBe(true);
+  expect(list.tools.some((t) => t.name === "mark")).toBe(true);
 
   const launched = await client.callTool({
     name: "launch_session",
@@ -61,6 +64,11 @@ test("MCP server smoke test", async () => {
   const found = (waited.structuredContent as { found?: boolean } | undefined)?.found;
   expect(found).toBe(true);
 
+  await client.callTool({
+    name: "mark",
+    arguments: { sessionId, label: "smoke" },
+  });
+
   const snap = await client.callTool({
     name: "snapshot_view",
     arguments: { sessionId, trimRight: true },
@@ -82,6 +90,14 @@ test("MCP server smoke test", async () => {
   });
   const ansiViewText = firstTextContent(ansiViewSnap);
   expect(ansiViewText).toContain("Hello world");
+
+  const castSnap = await client.callTool({
+    name: "snapshot_cast",
+    arguments: { sessionId },
+  });
+  const castText = firstTextContent(castSnap);
+  expect(castText).toContain("Hello world");
+  expect(castText).toContain("smoke");
 
   await client.callTool({
     name: "close_session",

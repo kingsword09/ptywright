@@ -21,6 +21,17 @@ export type PressKeyArgs = {
   key: string;
 };
 
+export type SendMouseArgs = {
+  sessionId: SessionId;
+  action: "down" | "up" | "move" | "click" | "scroll_up" | "scroll_down";
+  x: number;
+  y: number;
+  button?: "left" | "middle" | "right";
+  shift?: boolean;
+  alt?: boolean;
+  ctrl?: boolean;
+};
+
 export type ResizeArgs = {
   sessionId: SessionId;
   cols: number;
@@ -39,6 +50,7 @@ export type SnapshotTextArgs = {
 export type SnapshotGridArgs = {
   sessionId: SessionId;
   trimRight?: boolean;
+  includeStyles?: boolean;
 };
 
 export type WaitForTextArgs = {
@@ -61,4 +73,14 @@ export type WaitForStableScreenArgs = {
 
 export type CloseSessionArgs = {
   sessionId: SessionId;
+};
+
+export type SnapshotCastArgs = {
+  sessionId: SessionId;
+  tailEvents?: number;
+};
+
+export type MarkArgs = {
+  sessionId: SessionId;
+  label?: string;
 };
