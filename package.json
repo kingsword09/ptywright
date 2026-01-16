@@ -1,0 +1,27 @@
+{
+  "name": "tui-test",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "bun run src/index.ts",
+    "test": "bun test",
+    "codex:help-test": "mkdir -p .tmp && codex exec --skip-git-repo-check -o .tmp/codex_help_test.last.txt - < prompts/codex_help_test.prompt && cat .tmp/codex_help_test.last.txt",
+    "codex:ansi-color-demo": "mkdir -p .tmp && codex exec --skip-git-repo-check -o .tmp/ansi_color_demo.last.txt - < prompts/ansi_color_demo.prompt && cat .tmp/ansi_color_demo.last.txt",
+    "lint": "oxlint --type-aware --type-check .",
+    "format": "oxfmt src tests package.json tsconfig.json .oxlintrc.json .oxfmtrc.jsonc",
+    "format:check": "oxfmt --check src tests package.json tsconfig.json .oxlintrc.json .oxfmtrc.jsonc"
+  },
+  "dependencies": {
+    "@modelcontextprotocol/sdk": "^1.25.2",
+    "@xterm/headless": "^6.0.0",
+    "bun-pty": "^0.4.7",
+    "zod": "^3.25.76"
+  },
+  "devDependencies": {
+    "bun-types": "^1.3.6",
+    "oxfmt": "^0.24.0",
+    "oxlint": "^1.39.0",
+    "oxlint-tsgolint": "^0.11.1",
+    "typescript": "^5.9.2"
+  }
+}

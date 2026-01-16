@@ -1,0 +1,12 @@
+你是一个严格的测试执行器。
+
+只允许调用以下 4 个工具，且必须严格按顺序各调用 1 次（不得重试、不得调用其它任何工具）：
+1) mcp__terminal-driver__launch_session（command=bun args=["run","tests/fixtures/ansi_color_demo.ts"] cwd="/Users/kingsword09/Documents/code/ai/tui-test" cols=40 rows=8 name="xterm-256color"）
+2) mcp__terminal-driver__wait_for_text（sessionId=上一步 structuredContent.sessionId scope="visible" text="DONE" timeoutMs=5000 intervalMs=50）
+3) mcp__terminal-driver__snapshot_view_ansi（sessionId 同上 scope="visible" trimRight=true trimBottom=true lineNumbers=true）
+4) mcp__terminal-driver__close_session（sessionId 同上）
+
+最终输出要求：
+- 只输出第 3 步 tool 返回的 content[0].text（原样输出）。
+- 不要输出任何解释、前言、markdown、代码块、总结。
+- 第 4 步执行完成后立刻停止，不要再输出任何内容。
