@@ -61,7 +61,7 @@
   - [ ] M5.3：LLM cassette（record/replay + live smoke）
 
 ## Surprises & Discoveries
-- `codex` 的 Rust TUI 通过 `vt100` 虚拟终端后端做快照测试，证明“字符栅格快照”是稳定且高性价比的回归手段。
+- 有 Rust TUI 项目通过 `vt100` 虚拟终端后端做快照测试，证明“字符栅格快照”是稳定且高性价比的回归手段。
 - `cargo search` 在当前环境对 crates.io 存在 SSL 问题，但 crates.io HTTP API 可访问；Rust 方案可行但依赖拉取需提前验证。
 - Bun 已安装（`1.3.6`），可以优先走 Bun 生态（`bun-pty` / Bun 新 terminal 能力需要先做 spike 验证）。
 

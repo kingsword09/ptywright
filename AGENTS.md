@@ -24,7 +24,6 @@
 - `src/pty/`：PTY 抽象与实现（`bun-pty`、`Bun.Terminal` 等）
 - `src/terminal/`：xterm headless 封装、grid/text/ansi 快照渲染
 - `tests/fixtures/`：可控输出的 demo 程序（用于稳定回归）
-- `prompts/`：给 `codex exec` 的非交互式 prompt（避免命令行转义痛苦）
 - `.tmp/`：本地运行产物（已在 `.gitignore` 忽略）
 
 ## PTY 后端选择（跨平台）
@@ -36,14 +35,6 @@
 - 断言主路径：`snapshot_view` / `snapshot_grid`（稳定、可 diff）。
 - 人眼/调试：`snapshot_view_ansi`（包含 ANSI/SGR；在某些日志/JSON 输出场景会变得不可读）。
 - 约定：不要默认在结构化返回里塞超长 `text`；需要时用显式参数开启（避免污染 Agent 上下文）。
-
-## Codex 调用方式（推荐）
-- 直接跑内置验收：
-  - `bun run codex:help-test`
-  - `bun run codex:ansi-color-demo`
-- 自定义场景：新增一个 `prompts/*.prompt`，然后用
-  - `bun run src/codex/extract_mcp_tool_text.ts --prompt prompts/<name>.prompt --tool <tool> --out .tmp/<name>.txt --jsonl .tmp/<name>.jsonl --stderr .tmp/<name>.stderr.log`
-  - 再 `cat .tmp/<name>.txt`（从 `codex exec --json` 里提取 MCP tool 的 `content[0].text`，避免 shell 转义/长输出污染）。
 
 ## Script Runner（JSON）
 - 用 JSON/TS 脚本文件驱动 TUI：`bun run script:run <file.json|file.ts>`（默认产物在 `.tmp/runs/<name>/`）

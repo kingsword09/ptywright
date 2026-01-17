@@ -48,56 +48,15 @@ bun test
 - PTY + xterm 解析与快照测试
 - MCP server 端到端 smoke（client 通过 stdio 启动 server 并调用 tools）
 
-## Use With Codex (可选)
+## Use With MCP Clients（可选）
 
-把本 MCP server 加到 Codex 的全局 MCP 配置（Codex 会写入 `~/.codex/config.toml`）：
-
-```bash
-codex mcp add ptywright -- bun run src/index.ts
-codex mcp list
-```
-
-在 Codex 里，工具名称通常会显示为 `mcp__<server>__<tool>`（例如 `mcp__ptywright__launch_session`），其中 `<server>` 就是你 `codex mcp add` 时起的名字。
-
-然后在 Codex 对话里让它调用 MCP tools（例如先 `launch_session` 再 `snapshot_text`）。
-
-### 免转义运行 prompt（推荐）
-
-把 prompt 写进文件，然后用 stdin 方式喂给 `codex exec`：
+本项目是一个 stdio transport 的 MCP server。直接启动：
 
 ```bash
-codex exec --skip-git-repo-check - < prompts/codex_help_test.prompt
-codex exec --skip-git-repo-check - < prompts/ansi_color_demo.prompt
-# 鼠标 click 演示
-codex exec --skip-git-repo-check - < prompts/mouse_click_demo.prompt
-codex exec --skip-git-repo-check - < prompts/trace_demo_cast.prompt
-# 带 mark 打点（用于 report filmstrip）
-codex exec --skip-git-repo-check - < prompts/trace_demo_cast_marked.prompt
+bun run src/index.ts
 ```
 
-或用内置脚本：
-
-```bash
-bun run codex:help-test
-bun run codex:ansi-color-demo
-bun run codex:trace-demo
-bun run codex:trace-demo:txt
-bun run codex:mouse-click-demo
-bun run codex:trace-demo:marked
-
-# 生成 HTML 回放报告（filmstrip）
-bun run trace:report-demo
-# 或一键：先录制 cast 再生成报告
-bun run codex:trace-demo:report
-# 一键（含 mark）
-bun run codex:trace-demo:report:marked
-
-# 生成带颜色的 HTML 回放（更适合人看）
-bun run codex:ansi-color-demo:report
-
-# M5：mask 演示（随机 token -> 稳定快照）
-bun run codex:m5-mask-demo
-```
+然后在你使用的 MCP client 里把它作为一个 stdio server 配置进去即可（不同 client 的配置方式不同）。
 
 ## Script Runner (JSON)
 
@@ -121,28 +80,6 @@ bun run script:m5-mask-demo
 bun run script:run-all
 ```
 
-### Codex CLI Smoke Scripts（可选）
-
-如果你想用 ptywright 回归 Codex CLI 自身（最小但覆盖面广），可以跑这些脚本：
-
-- `examples/codex_cli/help.json`
-- `examples/codex_cli/mcp_help.json`
-- `examples/codex_cli/features_list.json`
-- `examples/codex_cli/onboarding_welcome.json`
-
-运行：
-
-```bash
-bun run script:run-all examples/codex_cli
-```
-
-约定（降低 flaky/污染）：
-- 通过 `HOME/USERPROFILE=.tmp/ptywright-codex-home` 隔离 Codex 的默认 `~/.codex` 数据
-- onboarding 脚本使用 `--no-alt-screen` + `-c tui.animations=false -c tui.show_tooltips=false`
-
-在 Codex 交互式模式里让 Agent 全量跑一遍，可以直接这样描述：
-- “使用 ptywright MCP，依次 `run_script` 运行 `scripts/codex_cli/*`；失败时输出对应 artifacts 目录下的 `failure.last.view.txt` 与 `failure.error.txt` 摘要，并指出失败 step。”
-
 如果 JSON 里用到了 `type:"custom"`，用 `--steps <module.ts>` 注入 handlers（模块导出 `steps` 对象即可）：
 
 ```bash
@@ -164,12 +101,12 @@ bun run script:run scripts/m6_json_custom_demo.json --steps scripts/m6_json_cust
 
 ## Script Recording (MCP)
 
-在 Codex/Agent 通过 MCP tools 驱动时，可以一键把工具调用“录成脚本”，并在 `mark` 处自动落盘 golden：
+在任意 MCP client/Agent 通过 MCP tools 驱动时，可以一键把工具调用“录成脚本”，并在 `mark` 处自动落盘 golden：
 
-1) `mcp__ptywright__start_script_recording(name="my_flow")`
+1) `start_script_recording(name="my_flow")`
 2) 正常执行：`launch_session/send_text/press_key/wait_for_*`
 3) 关键节点打点：`mark(label="checkpoint")`（会自动生成 `snapshot + expectGolden`）
-4) `mcp__ptywright__stop_script_recording(recordingId=...)`（写入 `scripts/my_flow.json` + `tests/golden/scripts/my_flow/*.txt`）
+4) `stop_script_recording(recordingId=...)`（写入 `scripts/my_flow.json` + `tests/golden/scripts/my_flow/*.txt`）
 
 ## Script DSL (TypeScript)
 
@@ -189,6 +126,6 @@ bun run script:run scripts/m6_dsl_demo.ts
 
 录像类产物建议只用于失败诊断或人工验收；稳定回归优先用 `snapshot_grid` 做 diff。
 
-- SVG: `svg-term`（例如：`bunx svg-term --in .tmp/trace_demo.cast --out .tmp/trace_demo.svg`）
-- TXT: `bun run src/trace/cast_to_txt.ts --in .tmp/trace_demo.cast --out .tmp/trace_demo.txt`
-- GIF: `asciinema/agg`（例如：`agg --fps 30 .tmp/trace_demo.cast .tmp/trace_demo.gif`）
+- SVG: `svg-term`（例如：`bunx svg-term --in <castPath> --out <outSvg>`）
+- TXT: `bun run src/trace/cast_to_txt.ts --in <castPath> --out <outTxt>`
+- GIF: `asciinema/agg`（例如：`agg --fps 30 <castPath> <outGif>`）
