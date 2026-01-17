@@ -477,37 +477,42 @@ export function createTerminalDriverServer(options?: TerminalDriverServerOptions
     },
   );
 
-  server.tool(
-    "run_scenario",
-    {
-      scenarioPath: z.string().min(1),
-      artifactsDir: z.string().optional(),
-      stepsPath: z.string().optional(),
-      updateGoldens: z.boolean().optional(),
-    },
-    async (args) => {
-      const result = await runScenarioPath(args.scenarioPath, {
-        artifactsDir: args.artifactsDir,
-        stepsPath: args.stepsPath,
-        updateGoldens: args.updateGoldens,
-      });
-
-      if (!result.ok) {
-        return toolError(result.error, {
-          scenarioName: result.scenarioName,
-          artifactsDir: result.artifactsDir,
-          castPath: result.castPath,
-          reportPath: result.reportPath,
-          failureArtifacts: result.failureArtifacts,
+  function registerRunScriptTool(name: "run_scenario" | "run_script"): void {
+    server.tool(
+      name,
+      {
+        scenarioPath: z.string().min(1),
+        artifactsDir: z.string().optional(),
+        stepsPath: z.string().optional(),
+        updateGoldens: z.boolean().optional(),
+      },
+      async (args) => {
+        const result = await runScenarioPath(args.scenarioPath, {
+          artifactsDir: args.artifactsDir,
+          stepsPath: args.stepsPath,
+          updateGoldens: args.updateGoldens,
         });
-      }
 
-      return {
-        content: [{ type: "text", text: `ok artifacts=${result.artifactsDir}` }],
-        structuredContent: result,
-      };
-    },
-  );
+        if (!result.ok) {
+          return toolError(result.error, {
+            scenarioName: result.scenarioName,
+            artifactsDir: result.artifactsDir,
+            castPath: result.castPath,
+            reportPath: result.reportPath,
+            failureArtifacts: result.failureArtifacts,
+          });
+        }
+
+        return {
+          content: [{ type: "text", text: `ok artifacts=${result.artifactsDir}` }],
+          structuredContent: result,
+        };
+      },
+    );
+  }
+
+  registerRunScriptTool("run_scenario");
+  registerRunScriptTool("run_script");
 
   server.tool(
     "close_session",

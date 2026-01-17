@@ -7,10 +7,10 @@ import { loadStepHandlersModule } from "../src/scenario/module";
 import { runScenarioFile } from "../src/scenario/runner";
 
 test("JSON scenario supports custom steps (handlers injected)", async () => {
-  const scenarioPath = resolve("scenarios/m6_json_custom_demo.json");
+  const scenarioPath = resolve("scripts/m6_json_custom_demo.json");
   const artifactsDir = resolve(".tmp/test_scenarios/m6_json_custom_demo");
 
-  const loaded = await loadStepHandlersModule("scenarios/m6_json_custom_steps.ts");
+  const loaded = await loadStepHandlersModule("scripts/m6_json_custom_steps.ts");
 
   const result = await runScenarioFile(scenarioPath, { artifactsDir, steps: loaded.steps });
   expect(result.ok).toBe(true);

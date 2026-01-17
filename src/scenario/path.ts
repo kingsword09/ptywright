@@ -142,7 +142,7 @@ async function loadScenarioInput(
 function resolveArtifactsDir(scenario: Scenario, scenarioName: string, override?: string): string {
   if (override?.trim()) return resolve(override.trim());
   if (scenario.artifactsDir?.trim()) return resolve(scenario.artifactsDir.trim());
-  return resolve(".tmp", "scenarios", scenarioName);
+  return resolve(".tmp", "runs", scenarioName);
 }
 
 function resolveArtifactPath(artifactsDir: string, path: string): string {

@@ -45,8 +45,8 @@
   - `bun run src/codex/extract_mcp_tool_text.ts --prompt prompts/<name>.prompt --tool <tool> --out .tmp/<name>.txt --jsonl .tmp/<name>.jsonl --stderr .tmp/<name>.stderr.log`
   - 再 `cat .tmp/<name>.txt`（从 `codex exec --json` 里提取 MCP tool 的 `content[0].text`，避免 shell 转义/长输出污染）。
 
-## Scenario Runner（JSON）
-- 用 JSON 场景文件驱动 TUI：`bun run scenario:run <scenario.json>`（默认产物在 `.tmp/scenarios/<name>/`）
+## Script Runner（JSON）
+- 用 JSON/TS 脚本文件驱动 TUI：`bun run script:run <file.json|file.ts>`（默认产物在 `.tmp/runs/<name>/`）
 
 ## 跨平台与换行
 - `.gitattributes` 强制仓库存储为 LF；`.editorconfig` 统一编辑器行为。

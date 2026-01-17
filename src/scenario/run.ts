@@ -46,7 +46,7 @@ function parseArgs(argv: string[]): {
 
   if (!out.scenarioPath) {
     throw new Error(
-      "Usage: bun run src/scenario/run.ts <scenario.json|scenario.ts> [--artifacts-dir <dir>] [--steps <module.ts>] [--update-goldens]",
+      "Usage: bun run src/scenario/run.ts <file> [--artifacts-dir <dir>] [--steps <module.ts>] [--update-goldens]",
     );
   }
 

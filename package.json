@@ -46,7 +46,9 @@
     "codex:ansi-color-demo:report": "bun run codex:ansi-color-demo:cast && bun run trace:report-demo:ansi-color",
     "codex:m5-mask-demo": "mkdir -p .tmp && bun run src/codex/extract_mcp_tool_text.ts --prompt prompts/m5_mask_demo.prompt --tool snapshot_view --out .tmp/m5_mask_demo.last.txt --jsonl .tmp/codex_m5_mask_demo.jsonl --stderr .tmp/codex_m5_mask_demo.stderr.log && cat .tmp/m5_mask_demo.last.txt",
     "scenario:run": "bun run src/scenario/run.ts",
-    "scenario:m5-mask-demo": "bun run src/scenario/run.ts scenarios/m5_mask_demo.json"
+    "script:run": "bun run src/scenario/run.ts",
+    "scenario:m5-mask-demo": "bun run src/scenario/run.ts scripts/m5_mask_demo.json",
+    "script:m5-mask-demo": "bun run src/scenario/run.ts scripts/m5_mask_demo.json"
   },
   "dependencies": {
     "@modelcontextprotocol/sdk": "^1.25.2",

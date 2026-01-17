@@ -18,9 +18,9 @@ export async function loadScenarioModule(modulePath: string): Promise<{
   const absPath = resolve(process.cwd(), modulePath);
   const mod = (await import(pathToFileURL(absPath).href)) as Record<string, unknown>;
 
-  const scenario = mod.default ?? mod.scenario;
+  const scenario = mod.default ?? mod.script ?? mod.scenario;
   if (!scenario) {
-    throw new Error(`scenario module must export default or 'scenario': ${modulePath}`);
+    throw new Error(`script module must export default or 'script'/'scenario': ${modulePath}`);
   }
 
   const steps = extractStepHandlers(mod);

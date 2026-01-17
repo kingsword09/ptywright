@@ -40,13 +40,14 @@ test("MCP server smoke test", async () => {
   expect(list.tools.some((t) => t.name === "snapshot_cast")).toBe(true);
   expect(list.tools.some((t) => t.name === "mark")).toBe(true);
   expect(list.tools.some((t) => t.name === "run_scenario")).toBe(true);
+  expect(list.tools.some((t) => t.name === "run_script")).toBe(true);
 
   const scenarioRun = await client.callTool({
-    name: "run_scenario",
+    name: "run_script",
     arguments: {
-      scenarioPath: "scenarios/m6_json_custom_demo.json",
-      stepsPath: "scenarios/m6_json_custom_steps.ts",
-      artifactsDir: ".tmp/test_scenarios/mcp_run_scenario",
+      scenarioPath: "scripts/m6_json_custom_demo.json",
+      stepsPath: "scripts/m6_json_custom_steps.ts",
+      artifactsDir: ".tmp/test_scenarios/mcp_run_script",
     },
   });
   expect(scenarioRun.isError ?? false).toBe(false);

@@ -6,7 +6,7 @@ import { join, resolve } from "node:path";
 import { runScenarioFile } from "../src/scenario/runner";
 
 test("scenario runner executes JSON scenario and writes artifacts", async () => {
-  const scenarioPath = resolve("scenarios/m5_mask_demo.json");
+  const scenarioPath = resolve("scripts/m5_mask_demo.json");
   const artifactsDir = resolve(".tmp/test_scenarios/m5_mask_demo");
 
   const result = await runScenarioFile(scenarioPath, { artifactsDir });

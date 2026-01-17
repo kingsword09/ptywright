@@ -73,7 +73,7 @@ test("scenario DSL supports custom steps (direct runner)", async () => {
 });
 
 test("scenario module loader runs a TS DSL scenario", async () => {
-  const loaded = await loadScenarioModule("scenarios/m6_dsl_demo.ts");
+  const loaded = await loadScenarioModule("scripts/m6_dsl_demo.ts");
   const artifactsDir = resolve(".tmp/test_scenarios/m6_dsl_module_demo");
 
   const result = await runScenario(loaded.scenario, { artifactsDir, steps: loaded.steps });
