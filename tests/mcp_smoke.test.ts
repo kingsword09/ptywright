@@ -1,5 +1,8 @@
 import { expect, test } from "bun:test";
 
+import { existsSync, readFileSync } from "node:fs";
+import { join, resolve } from "node:path";
+
 import { Client } from "@modelcontextprotocol/sdk/client/index.js";
 import { StdioClientTransport } from "@modelcontextprotocol/sdk/client/stdio.js";
 
@@ -36,6 +39,24 @@ test("MCP server smoke test", async () => {
   expect(list.tools.some((t) => t.name === "send_mouse")).toBe(true);
   expect(list.tools.some((t) => t.name === "snapshot_cast")).toBe(true);
   expect(list.tools.some((t) => t.name === "mark")).toBe(true);
+  expect(list.tools.some((t) => t.name === "run_scenario")).toBe(true);
+
+  const scenarioRun = await client.callTool({
+    name: "run_scenario",
+    arguments: {
+      scenarioPath: "scenarios/m6_json_custom_demo.json",
+      stepsPath: "scenarios/m6_json_custom_steps.ts",
+      artifactsDir: ".tmp/test_scenarios/mcp_run_scenario",
+    },
+  });
+  expect(scenarioRun.isError ?? false).toBe(false);
+  const scenarioArtifactsDir = (
+    scenarioRun.structuredContent as { artifactsDir?: string } | undefined
+  )?.artifactsDir;
+  expect(typeof scenarioArtifactsDir).toBe("string");
+  const maskedPath = join(resolve(scenarioArtifactsDir ?? ""), "masked.txt");
+  expect(existsSync(maskedPath)).toBe(true);
+  expect(readFileSync(maskedPath, "utf8").trimEnd()).toBe("TOKEN: <id>\nDONE");
 
   const launched = await client.callTool({
     name: "launch_session",

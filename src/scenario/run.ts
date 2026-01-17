@@ -1,7 +1,4 @@
-import { basename, extname } from "node:path";
-
-import { loadScenarioModule, loadStepHandlersModule } from "./module";
-import { runScenario, runScenarioFile } from "./runner";
+import { runScenarioPath } from "./path";
 
 function parseArgs(argv: string[]): {
   scenarioPath: string;
@@ -64,50 +61,19 @@ function parseArgs(argv: string[]): {
 if (import.meta.main) {
   try {
     const args = parseArgs(process.argv.slice(2));
-
-    const ext = extname(args.scenarioPath).toLowerCase();
-    const baseName = basename(args.scenarioPath, extname(args.scenarioPath));
-    const isJson = ext === ".json";
-
-    const extraSteps = args.stepsPath
-      ? (await loadStepHandlersModule(args.stepsPath)).steps
-      : undefined;
-
-    const result = isJson
-      ? await runScenarioFile(args.scenarioPath, {
-          artifactsDir: args.artifactsDir,
-          updateGoldens: args.updateGoldens,
-          steps: extraSteps,
-        })
-      : await (async () => {
-          const loaded = await loadScenarioModule(args.scenarioPath);
-          const built =
-            loaded.scenario &&
-            typeof loaded.scenario === "object" &&
-            "build" in loaded.scenario &&
-            typeof (loaded.scenario as { build?: unknown }).build === "function"
-              ? (loaded.scenario as { build: () => unknown }).build()
-              : loaded.scenario;
-
-          const withName =
-            built && typeof built === "object" && !Array.isArray(built) && !("name" in built)
-              ? { ...built, name: baseName }
-              : built;
-
-          const mergedSteps =
-            loaded.steps && extraSteps
-              ? { ...loaded.steps, ...extraSteps }
-              : (loaded.steps ?? extraSteps);
-
-          return runScenario(withName, {
-            artifactsDir: args.artifactsDir,
-            updateGoldens: args.updateGoldens,
-            steps: mergedSteps,
-          });
-        })();
-
-    // eslint-disable-next-line no-console
-    console.log(`ok artifacts=${result.artifactsDir}`);
+    const result = await runScenarioPath(args.scenarioPath, {
+      artifactsDir: args.artifactsDir,
+      updateGoldens: args.updateGoldens,
+      stepsPath: args.stepsPath,
+    });
+    if (!result.ok) {
+      // eslint-disable-next-line no-console
+      console.error(result.error);
+      process.exitCode = 1;
+    } else {
+      // eslint-disable-next-line no-console
+      console.log(`ok artifacts=${result.artifactsDir}`);
+    }
   } catch (error) {
     // eslint-disable-next-line no-console
     console.error((error as Error).message);

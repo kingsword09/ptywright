@@ -25,6 +25,7 @@ bun run src/index.ts
 - `mark`：在 trace 中打点（asciicast marker event）
 - `wait_for_text`：等待文本/正则出现
 - `wait_for_stable_screen`：等待屏幕在 quiet window 内稳定（降低 flaky）
+- `run_scenario`：运行 `scenario.json|scenario.ts` 并产出 artifacts（cast/report/失败快照）
 - `list_sessions` / `close_session`
 
 ## Tests
@@ -104,6 +105,11 @@ bun run scenario:run scenarios/m6_json_custom_demo.json --steps scenarios/m6_jso
 
 产物默认写到 `.tmp/scenarios/<name>/`（可用 `--artifacts-dir` 覆盖）。
 
+失败时会额外落盘：
+- `failure.error.txt`（错误堆栈）
+- `failure.step.json`（失败的 step 信息）
+- `failure.last.txt` / `failure.last.view.txt`（最后一帧快照）
+
 ## Scenario DSL (TypeScript)
 
 用 TS builder 写 scenario（类型安全，可组合，支持自定义 step），底层仍复用同一个 runner：
@@ -115,6 +121,7 @@ bun run scenario:run scenarios/m6_dsl_demo.ts
 约定：
 - module 默认导出 scenario（或导出 `scenario`）。
 - 可选导出 `steps`（custom step handlers），用于执行 `type:"custom"` 的步骤。
+- 常用 handlers 可复用：`src/scenario/steps/*`。
 
 ## Cast -> SVG/GIF (可选)
 

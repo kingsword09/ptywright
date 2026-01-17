@@ -6,6 +6,7 @@ import { join, resolve } from "node:path";
 import { defineScenario, ScenarioBuilder } from "../src/scenario/dsl";
 import { loadScenarioModule } from "../src/scenario/module";
 import { runScenario } from "../src/scenario/runner";
+import { createAssertSnapshotEqualsStep } from "../src/scenario/steps";
 import type { CustomStepHandler } from "../src/scenario/runner";
 
 test("scenario DSL supports custom steps (direct runner)", async () => {
@@ -14,17 +15,9 @@ test("scenario DSL supports custom steps (direct runner)", async () => {
   };
 
   const steps = {
-    assertMaskedEquals: ((ctx, step) => {
-      const expected = step.payload?.expected;
-      if (expected === undefined) {
-        throw new Error("assertMaskedEquals: missing payload.expected");
-      }
-
-      const record = ctx.getSnapshot("masked");
-      if (record.text.trimEnd() !== expected) {
-        throw new Error("assertMaskedEquals failed");
-      }
-    }) satisfies CustomStepHandler<CustomSteps["assertMaskedEquals"]>,
+    assertMaskedEquals: createAssertSnapshotEqualsStep("masked") satisfies CustomStepHandler<
+      CustomSteps["assertMaskedEquals"]
+    >,
   } satisfies Record<string, CustomStepHandler>;
 
   const scenario = defineScenario(() =>

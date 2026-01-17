@@ -3,6 +3,7 @@ import { z } from "zod";
 
 import { SessionManager } from "../session/session_manager";
 import { formatSnapshotView } from "../terminal/view";
+import { runScenarioPath } from "../scenario/path";
 
 export type TerminalDriverServerOptions = {
   sessionManager?: SessionManager;
@@ -477,6 +478,38 @@ export function createTerminalDriverServer(options?: TerminalDriverServerOptions
   );
 
   server.tool(
+    "run_scenario",
+    {
+      scenarioPath: z.string().min(1),
+      artifactsDir: z.string().optional(),
+      stepsPath: z.string().optional(),
+      updateGoldens: z.boolean().optional(),
+    },
+    async (args) => {
+      const result = await runScenarioPath(args.scenarioPath, {
+        artifactsDir: args.artifactsDir,
+        stepsPath: args.stepsPath,
+        updateGoldens: args.updateGoldens,
+      });
+
+      if (!result.ok) {
+        return toolError(result.error, {
+          scenarioName: result.scenarioName,
+          artifactsDir: result.artifactsDir,
+          castPath: result.castPath,
+          reportPath: result.reportPath,
+          failureArtifacts: result.failureArtifacts,
+        });
+      }
+
+      return {
+        content: [{ type: "text", text: `ok artifacts=${result.artifactsDir}` }],
+        structuredContent: result,
+      };
+    },
+  );
+
+  server.tool(
     "close_session",
     {
       sessionId: z.string().min(1),
@@ -501,14 +534,17 @@ export function createTerminalDriverServer(options?: TerminalDriverServerOptions
   return { server, sessions };
 }
 
-function toolError(message: string): {
+function toolError(
+  message: string,
+  extra: Record<string, unknown> = {},
+): {
   isError: true;
   content: { type: "text"; text: string }[];
-  structuredContent: { error: string };
+  structuredContent: Record<string, unknown> & { error: string };
 } {
   return {
     isError: true,
     content: [{ type: "text", text: message }],
-    structuredContent: { error: message },
+    structuredContent: { error: message, ...extra },
   };
 }

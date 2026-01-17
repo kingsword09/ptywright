@@ -99,6 +99,8 @@ export async function runScenario(
 
   const snapshots = new Map<string, SnapshotRecord>();
   let last: SnapshotRecord | null = null;
+  let currentStepIndex = -1;
+  let currentStep: ScenarioStep | null = null;
 
   const resolveGoldenPath = (path: string) =>
     isAbsolute(path) ? path : resolve(process.cwd(), path);
@@ -116,6 +118,8 @@ export async function runScenario(
   try {
     for (let stepIndex = 0; stepIndex < parsed.steps.length; stepIndex += 1) {
       const step = parsed.steps[stepIndex] as ScenarioStep;
+      currentStepIndex = stepIndex;
+      currentStep = step;
       last = await runStep({
         step,
         stepIndex,
@@ -144,9 +148,15 @@ export async function runScenario(
     return { ok: true, artifactsDir };
   } catch (error) {
     try {
-      if (last) {
-        writeFileSync(join(artifactsDir, "failure.last.txt"), `${last.text}\n`, "utf8");
-      }
+      await writeFailureArtifacts({
+        session,
+        artifactsDir,
+        scenarioName,
+        stepIndex: currentStepIndex,
+        step: currentStep,
+        last,
+        error,
+      });
       await writeTraceArtifacts({
         session,
         saveCast,
@@ -186,131 +196,135 @@ async function runStep(args: {
 }): Promise<SnapshotRecord | null> {
   const { step } = args;
 
-  if (step.type === "sendText") {
-    args.session.sendText(step.text, { enter: step.enter });
-    return args.last;
-  }
-
-  if (step.type === "pressKey") {
-    args.session.pressKey(step.key);
-    return args.last;
-  }
-
-  if (step.type === "resize") {
-    args.session.resize(step.cols, step.rows);
-    return args.last;
-  }
-
-  if (step.type === "mark") {
-    args.session.mark(step.label);
-    return args.last;
-  }
-
-  if (step.type === "waitForText") {
-    const regex = step.regex ? new RegExp(step.regex) : undefined;
-    const result = await args.session.waitForText({
-      scope: step.scope,
-      text: step.text,
-      regex,
-      timeoutMs: step.timeoutMs ?? 10_000,
-      intervalMs: step.intervalMs ?? 100,
-    });
-    if (!result.found) {
-      throw new Error(
-        `step ${args.stepIndex + 1} waitForText not found: ${step.text ?? step.regex ?? ""}`,
-      );
-    }
-    return args.last;
-  }
-
-  if (step.type === "waitForStableScreen") {
-    const result = await args.session.waitForStableScreen({
-      timeoutMs: step.timeoutMs ?? 10_000,
-      quietMs: step.quietMs ?? 400,
-      intervalMs: step.intervalMs ?? 80,
-    });
-    if (!result.stable) {
-      throw new Error(`step ${args.stepIndex + 1} waitForStableScreen timed out`);
-    }
-    return args.last;
-  }
-
-  if (step.type === "snapshot") {
-    const record = await snapshotStep(args.session, step);
-    persistSnapshotRecord({
-      record,
-      saveAs: step.saveAs,
-      saveTo: step.saveTo,
-      snapshots: args.snapshots,
-      resolveArtifactPath: args.resolveArtifactPath,
-    });
-    return record;
-  }
-
-  if (step.type === "expect") {
-    const record = selectSnapshot(args.last, args.snapshots, step.from);
-    assertRecordMatches(record, step, args.stepIndex);
-    return args.last;
-  }
-
-  if (step.type === "expectGolden") {
-    const record = selectSnapshot(args.last, args.snapshots, step.from);
-    const goldenPath = args.resolveGoldenPath(step.path);
-    assertGoldenText(goldenPath, `${record.text}\n`, args.updateGoldens);
-    return args.last;
-  }
-
-  if (step.type === "custom") {
-    const handler = args.stepHandlers?.[step.name];
-    if (!handler) {
-      throw new Error(`step ${args.stepIndex + 1} custom handler not found: ${step.name}`);
+  try {
+    if (step.type === "sendText") {
+      args.session.sendText(step.text, { enter: step.enter });
+      return args.last;
     }
 
-    const ctx: ScenarioRunnerContext = {
-      session: args.session,
-      stepIndex: args.stepIndex,
-      last: args.last,
-      snapshots: args.snapshots,
-      artifactsDir: args.artifactsDir,
-      resolveArtifactPath: args.resolveArtifactPath,
-      resolveGoldenPath: args.resolveGoldenPath,
-      updateGoldens: args.updateGoldens,
-      captureSnapshot: async (
-        snapshotConfig: Omit<Extract<ScenarioStep, { type: "snapshot" }>, "type">,
-      ) => {
-        const record = await snapshotStep(args.session, {
-          type: "snapshot",
-          ...snapshotConfig,
-        } as Extract<ScenarioStep, { type: "snapshot" }>);
+    if (step.type === "pressKey") {
+      args.session.pressKey(step.key);
+      return args.last;
+    }
 
-        persistSnapshotRecord({
-          record,
-          saveAs: snapshotConfig.saveAs,
-          saveTo: snapshotConfig.saveTo,
-          snapshots: args.snapshots,
-          resolveArtifactPath: args.resolveArtifactPath,
-        });
+    if (step.type === "resize") {
+      args.session.resize(step.cols, step.rows);
+      return args.last;
+    }
 
-        return record;
-      },
-      getSnapshot: (from?: string) => selectSnapshot(args.last, args.snapshots, from),
-      writeArtifactText: (path: string, text: string) => {
-        const resolved = args.resolveArtifactPath(path);
-        mkdirSync(dirname(resolved), { recursive: true });
-        writeFileSync(resolved, text, "utf8");
-      },
-      assertGoldenText: (path: string, text: string) => {
-        const goldenPath = args.resolveGoldenPath(path);
-        assertGoldenText(goldenPath, text, args.updateGoldens);
-      },
-    };
+    if (step.type === "mark") {
+      args.session.mark(step.label);
+      return args.last;
+    }
 
-    const result = await handler(ctx, step as ScenarioCustomStep);
-    if (!result) return args.last;
-    return result;
+    if (step.type === "waitForText") {
+      const regex = step.regex ? new RegExp(step.regex) : undefined;
+      const result = await args.session.waitForText({
+        scope: step.scope,
+        text: step.text,
+        regex,
+        timeoutMs: step.timeoutMs ?? 10_000,
+        intervalMs: step.intervalMs ?? 100,
+      });
+      if (!result.found) {
+        throw new Error(
+          `step ${args.stepIndex + 1} waitForText not found: ${step.text ?? step.regex ?? ""}`,
+        );
+      }
+      return args.last;
+    }
+
+    if (step.type === "waitForStableScreen") {
+      const result = await args.session.waitForStableScreen({
+        timeoutMs: step.timeoutMs ?? 10_000,
+        quietMs: step.quietMs ?? 400,
+        intervalMs: step.intervalMs ?? 80,
+      });
+      if (!result.stable) {
+        throw new Error(`step ${args.stepIndex + 1} waitForStableScreen timed out`);
+      }
+      return args.last;
+    }
+
+    if (step.type === "snapshot") {
+      const record = await snapshotStep(args.session, step);
+      persistSnapshotRecord({
+        record,
+        saveAs: step.saveAs,
+        saveTo: step.saveTo,
+        snapshots: args.snapshots,
+        resolveArtifactPath: args.resolveArtifactPath,
+      });
+      return record;
+    }
+
+    if (step.type === "expect") {
+      const record = selectSnapshot(args.last, args.snapshots, step.from);
+      assertRecordMatches(record, step, args.stepIndex);
+      return args.last;
+    }
+
+    if (step.type === "expectGolden") {
+      const record = selectSnapshot(args.last, args.snapshots, step.from);
+      const goldenPath = args.resolveGoldenPath(step.path);
+      assertGoldenText(goldenPath, `${record.text}\n`, args.updateGoldens);
+      return args.last;
+    }
+
+    if (step.type === "custom") {
+      const handler = args.stepHandlers?.[step.name];
+      if (!handler) {
+        throw new Error(`custom handler not found: ${step.name}`);
+      }
+
+      const ctx: ScenarioRunnerContext = {
+        session: args.session,
+        stepIndex: args.stepIndex,
+        last: args.last,
+        snapshots: args.snapshots,
+        artifactsDir: args.artifactsDir,
+        resolveArtifactPath: args.resolveArtifactPath,
+        resolveGoldenPath: args.resolveGoldenPath,
+        updateGoldens: args.updateGoldens,
+        captureSnapshot: async (
+          snapshotConfig: Omit<Extract<ScenarioStep, { type: "snapshot" }>, "type">,
+        ) => {
+          const record = await snapshotStep(args.session, {
+            type: "snapshot",
+            ...snapshotConfig,
+          } as Extract<ScenarioStep, { type: "snapshot" }>);
+
+          persistSnapshotRecord({
+            record,
+            saveAs: snapshotConfig.saveAs,
+            saveTo: snapshotConfig.saveTo,
+            snapshots: args.snapshots,
+            resolveArtifactPath: args.resolveArtifactPath,
+          });
+
+          return record;
+        },
+        getSnapshot: (from?: string) => selectSnapshot(args.last, args.snapshots, from),
+        writeArtifactText: (path: string, text: string) => {
+          const resolved = args.resolveArtifactPath(path);
+          mkdirSync(dirname(resolved), { recursive: true });
+          writeFileSync(resolved, text, "utf8");
+        },
+        assertGoldenText: (path: string, text: string) => {
+          const goldenPath = args.resolveGoldenPath(path);
+          assertGoldenText(goldenPath, text, args.updateGoldens);
+        },
+      };
+
+      const result = await handler(ctx, step as ScenarioCustomStep);
+      if (!result) return args.last;
+      return result;
+    }
+
+    throw new Error(`unknown type: ${(step as ScenarioStep).type}`);
+  } catch (error) {
+    throw annotateStepError(error, args.stepIndex, step);
   }
-
-  throw new Error(`step ${args.stepIndex + 1} unknown type: ${(step as ScenarioStep).type}`);
 }
 
 function persistSnapshotRecord(args: {
@@ -331,6 +345,23 @@ function persistSnapshotRecord(args: {
   const path = args.resolveArtifactPath(saveTo);
   mkdirSync(dirname(path), { recursive: true });
   writeFileSync(path, `${args.record.text}\n`, "utf8");
+}
+
+function annotateStepError(error: unknown, stepIndex: number, step: ScenarioStep): Error {
+  const label =
+    step.type === "custom"
+      ? `custom(${(step as Extract<ScenarioStep, { type: "custom" }>).name})`
+      : step.type;
+  const prefix = `step ${stepIndex + 1} ${label}`;
+
+  if (error instanceof Error) {
+    if (!error.message.startsWith("step ")) {
+      error.message = `${prefix}: ${error.message}`;
+    }
+    return error;
+  }
+
+  return new Error(`${prefix}: ${String(error)}`);
 }
 
 function selectSnapshot(
@@ -394,6 +425,66 @@ function assertGoldenText(path: string, text: string, update: boolean): void {
   const expected = readFileSync(path, "utf8");
   if (text !== expected) {
     throw new Error(`golden mismatch: ${path}`);
+  }
+}
+
+async function writeFailureArtifacts(args: {
+  session: ReturnType<SessionManager["launchSession"]>;
+  artifactsDir: string;
+  scenarioName: string;
+  stepIndex: number;
+  step: ScenarioStep | null;
+  last: SnapshotRecord | null;
+  error: unknown;
+}): Promise<void> {
+  const { session, artifactsDir, scenarioName, stepIndex, step, last, error } = args;
+
+  const err = error instanceof Error ? error : new Error(String(error));
+  const errorText = err.stack ?? err.message;
+  writeFileSync(join(artifactsDir, "failure.error.txt"), `${errorText}\n`, "utf8");
+
+  const stepPayload = {
+    scenario: scenarioName,
+    stepIndex: stepIndex >= 0 ? stepIndex + 1 : null,
+    step: step ?? null,
+    last: last ? { kind: last.kind, hash: last.hash } : null,
+  };
+  writeFileSync(
+    join(artifactsDir, "failure.step.json"),
+    `${JSON.stringify(stepPayload, null, 2)}\n`,
+    "utf8",
+  );
+
+  let capturedText: string | undefined = undefined;
+  let capturedHash: string | undefined = undefined;
+  try {
+    const captured = await session.snapshotText({
+      scope: "visible",
+      trimRight: true,
+      trimBottom: true,
+      captureFrame: true,
+    });
+    capturedText = captured.text;
+    capturedHash = captured.hash;
+  } catch {
+    // ignore best-effort snapshot on failure
+  }
+
+  const text = capturedText ?? last?.text;
+  const hash = capturedHash ?? last?.hash ?? "unknown";
+
+  if (text !== undefined) {
+    writeFileSync(join(artifactsDir, "failure.last.txt"), `${text}\n`, "utf8");
+
+    const view = formatSnapshotView({
+      sessionId: session.id,
+      scope: "visible",
+      hash,
+      lines: text.split("\n"),
+      meta: session.getMeta(),
+      lineNumbers: true,
+    });
+    writeFileSync(join(artifactsDir, "failure.last.view.txt"), `${view}\n`, "utf8");
   }
 }
 
