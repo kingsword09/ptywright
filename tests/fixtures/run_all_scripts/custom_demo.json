@@ -1,0 +1,15 @@
+{
+  "$schema": "../../../schemas/ptywright-script.schema.json",
+  "launch": {
+    "command": "bun",
+    "args": ["-e", "process.stdout.write('demo\\n')"],
+    "cols": 80,
+    "rows": 20
+  },
+  "trace": { "saveCast": false, "saveReport": false },
+  "steps": [
+    { "type": "waitForExit", "timeoutMs": 10000, "exitCode": 0 },
+    { "type": "custom", "name": "hello" },
+    { "type": "expect", "contains": ["custom-ok"] }
+  ]
+}

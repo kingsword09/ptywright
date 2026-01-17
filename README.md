@@ -121,6 +121,28 @@ bun run script:m5-mask-demo
 bun run script:run-all
 ```
 
+### Codex CLI Smoke Scripts（可选）
+
+如果你想用 ptywright 回归 Codex CLI 自身（最小但覆盖面广），可以跑这些脚本：
+
+- `scripts/codex_cli/help.json`
+- `scripts/codex_cli/mcp_help.json`
+- `scripts/codex_cli/features_list.json`
+- `scripts/codex_cli/onboarding_welcome.json`
+
+运行：
+
+```bash
+bun run script:run-all scripts/codex_cli
+```
+
+约定（降低 flaky/污染）：
+- 通过 `HOME/USERPROFILE=.tmp/ptywright-codex-home` 隔离 Codex 的默认 `~/.codex` 数据
+- onboarding 脚本使用 `--no-alt-screen` + `-c tui.animations=false -c tui.show_tooltips=false`
+
+在 Codex 交互式模式里让 Agent 全量跑一遍，可以直接这样描述：
+- “使用 ptywright MCP，依次 `run_script` 运行 `scripts/codex_cli/*`；失败时输出对应 artifacts 目录下的 `failure.last.view.txt` 与 `failure.error.txt` 摘要，并指出失败 step。”
+
 如果 JSON 里用到了 `type:"custom"`，用 `--steps <module.ts>` 注入 handlers（模块导出 `steps` 对象即可）：
 
 ```bash

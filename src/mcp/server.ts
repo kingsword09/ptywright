@@ -31,6 +31,7 @@ export function createPtywrightServer(options?: PtywrightServerOptions): {
 
   server.tool(
     "launch_session",
+    "Launch a new PTY session running a command (returns sessionId).",
     {
       command: z.string().min(1),
       args: z.array(z.string()).optional(),
@@ -65,6 +66,7 @@ export function createPtywrightServer(options?: PtywrightServerOptions): {
 
   server.tool(
     "send_text",
+    "Send text input to a session (optionally press Enter).",
     {
       sessionId: z.string().min(1),
       text: z.string(),
@@ -83,6 +85,7 @@ export function createPtywrightServer(options?: PtywrightServerOptions): {
 
   server.tool(
     "press_key",
+    "Send a key or key chord to a session (e.g. Enter, Ctrl+C, Shift+Tab).",
     {
       sessionId: z.string().min(1),
       key: z.string().min(1),
@@ -104,6 +107,7 @@ export function createPtywrightServer(options?: PtywrightServerOptions): {
 
   server.tool(
     "send_mouse",
+    "Send an SGR mouse event (click/move/scroll) to a session.",
     {
       sessionId: z.string().min(1),
       action: z.enum(["down", "up", "move", "click", "scroll_up", "scroll_down"]),
@@ -150,6 +154,7 @@ export function createPtywrightServer(options?: PtywrightServerOptions): {
 
   server.tool(
     "resize",
+    "Resize the session terminal (cols/rows).",
     {
       sessionId: z.string().min(1),
       cols: z.number().int(),
@@ -168,6 +173,7 @@ export function createPtywrightServer(options?: PtywrightServerOptions): {
 
   server.tool(
     "snapshot_text",
+    "Capture plain text from the visible screen or full buffer (best for stable assertions/goldens).",
     {
       sessionId: z.string().min(1),
       scope: z.enum(["visible", "buffer"]).optional(),
@@ -208,6 +214,7 @@ export function createPtywrightServer(options?: PtywrightServerOptions): {
 
   server.tool(
     "snapshot_ansi",
+    "Capture ANSI-rendered snapshot (debug/human inspection; less stable than plain text).",
     {
       sessionId: z.string().min(1),
       scope: z.enum(["visible", "buffer"]).optional(),
@@ -251,6 +258,7 @@ export function createPtywrightServer(options?: PtywrightServerOptions): {
 
   server.tool(
     "snapshot_grid",
+    "Capture a structured grid snapshot (rows/cols/cursor/lines).",
     {
       sessionId: z.string().min(1),
       trimRight: z.boolean().optional(),
@@ -274,6 +282,7 @@ export function createPtywrightServer(options?: PtywrightServerOptions): {
 
   server.tool(
     "snapshot_cast",
+    "Export the asciicast v2 trace (useful for debugging/report playback).",
     {
       sessionId: z.string().min(1),
       tailEvents: z.number().int().positive().optional(),
@@ -303,6 +312,7 @@ export function createPtywrightServer(options?: PtywrightServerOptions): {
 
   server.tool(
     "mark",
+    "Add a marker to the session trace (used for recording/checkpoints).",
     {
       sessionId: z.string().min(1),
       label: z.string().optional(),
@@ -322,6 +332,7 @@ export function createPtywrightServer(options?: PtywrightServerOptions): {
 
   server.tool(
     "wait_for_text",
+    "Wait until a text/regex appears in the session (polling).",
     {
       sessionId: z.string().min(1),
       scope: z.enum(["visible", "buffer"]).optional(),
@@ -376,6 +387,7 @@ export function createPtywrightServer(options?: PtywrightServerOptions): {
 
   server.tool(
     "wait_for_stable_screen",
+    "Wait until consecutive text snapshots remain unchanged for a quiet window (reduce flakiness).",
     {
       sessionId: z.string().min(1),
       timeoutMs: z.number().int().optional(),
@@ -419,6 +431,7 @@ export function createPtywrightServer(options?: PtywrightServerOptions): {
 
   server.tool(
     "snapshot_view",
+    "Capture a formatted, human-readable snapshot view (includes meta + optional line numbers).",
     {
       sessionId: z.string().min(1),
       scope: z.enum(["visible", "buffer"]).optional(),
@@ -471,6 +484,7 @@ export function createPtywrightServer(options?: PtywrightServerOptions): {
 
   server.tool(
     "snapshot_view_ansi",
+    "Capture a formatted ANSI snapshot view (includes meta + optional line numbers).",
     {
       sessionId: z.string().min(1),
       scope: z.enum(["visible", "buffer"]).optional(),
@@ -524,6 +538,7 @@ export function createPtywrightServer(options?: PtywrightServerOptions): {
   function registerRunScriptTool(name: "run_scenario" | "run_script"): void {
     server.tool(
       name,
+      "Run a JSON/TS script via the runner and return artifact paths (prefer this for regression runs).",
       {
         scenarioPath: z.string().min(1),
         artifactsDir: z.string().optional(),
@@ -560,6 +575,7 @@ export function createPtywrightServer(options?: PtywrightServerOptions): {
 
   server.tool(
     "start_script_recording",
+    "Start recording MCP tool calls into a replayable script (with optional golden checkpoints via mark()).",
     {
       name: z.string().min(1),
       outPath: z.string().optional(),
@@ -593,6 +609,7 @@ export function createPtywrightServer(options?: PtywrightServerOptions): {
 
   server.tool(
     "stop_script_recording",
+    "Stop recording and optionally write the script + goldens to disk.",
     {
       recordingId: z.string().min(1),
       writeFiles: z.boolean().optional(),
@@ -618,6 +635,7 @@ export function createPtywrightServer(options?: PtywrightServerOptions): {
 
   server.tool(
     "close_session",
+    "Close a running session.",
     {
       sessionId: z.string().min(1),
     },
@@ -630,7 +648,7 @@ export function createPtywrightServer(options?: PtywrightServerOptions): {
     },
   );
 
-  server.tool("list_sessions", {}, async () => {
+  server.tool("list_sessions", "List active session IDs.", {}, async () => {
     const sessionIds = sessions.listSessionIds();
     return {
       content: [{ type: "text", text: sessionIds.join("\n") }],
