@@ -125,15 +125,15 @@ bun run script:run-all
 
 如果你想用 ptywright 回归 Codex CLI 自身（最小但覆盖面广），可以跑这些脚本：
 
-- `scripts/codex_cli/help.json`
-- `scripts/codex_cli/mcp_help.json`
-- `scripts/codex_cli/features_list.json`
-- `scripts/codex_cli/onboarding_welcome.json`
+- `examples/codex_cli/help.json`
+- `examples/codex_cli/mcp_help.json`
+- `examples/codex_cli/features_list.json`
+- `examples/codex_cli/onboarding_welcome.json`
 
 运行：
 
 ```bash
-bun run script:run-all scripts/codex_cli
+bun run script:run-all examples/codex_cli
 ```
 
 约定（降低 flaky/污染）：
