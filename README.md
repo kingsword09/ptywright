@@ -161,11 +161,12 @@ bun run script:run scripts/m6_dsl_demo.ts
 - module 默认导出（`export default`），或导出 `script`/`scenario`。
 - 可选导出 `steps`（custom step handlers），用于执行 `type:"custom"` 的步骤。
 - 常用 handlers 可复用：`src/scenario/steps/*`。
+- 需要测试“粘贴”时可用 `pasteText("...", { bracketed: true })`（bracketed paste）。
 
 ## Cast -> SVG/GIF (可选)
 
 录像类产物建议只用于失败诊断或人工验收；稳定回归优先用 `snapshot_grid` 做 diff。
 
 - SVG: `svg-term`（例如：`bunx svg-term --in .tmp/trace_demo.cast --out .tmp/trace_demo.svg`）
-- TXT: `asciinema convert -f txt .tmp/trace_demo.cast .tmp/trace_demo.txt`
+- TXT: `bun run src/trace/cast_to_txt.ts --in .tmp/trace_demo.cast --out .tmp/trace_demo.txt`
 - GIF: `asciinema/agg`（例如：`agg --fps 30 .tmp/trace_demo.cast .tmp/trace_demo.gif`）

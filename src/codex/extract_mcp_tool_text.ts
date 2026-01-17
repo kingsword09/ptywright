@@ -9,6 +9,8 @@ type ExtractArgs = {
   stderrPath?: string;
   codexBin?: string;
   timeoutMs?: number;
+  print?: boolean;
+  printTailLines?: number;
 };
 
 type ToolCallEvent = {
@@ -24,6 +26,8 @@ type ToolCallEvent = {
     error?: unknown;
   };
 };
+
+type WriteStreamLike = ReturnType<typeof createWriteStream>;
 
 function parseArgs(argv: string[]): ExtractArgs {
   const out: Partial<ExtractArgs> = {};
@@ -70,6 +74,17 @@ function parseArgs(argv: string[]): ExtractArgs {
 
     if (arg === "--timeout-ms" && next) {
       out.timeoutMs = Number(next);
+      i += 1;
+      continue;
+    }
+
+    if (arg === "--print") {
+      out.print = true;
+      continue;
+    }
+
+    if (arg === "--print-tail-lines" && next) {
+      out.printTailLines = Number(next);
       i += 1;
       continue;
     }
@@ -157,6 +172,50 @@ function ensureParentDir(path: string): void {
   mkdirSync(dir, { recursive: true });
 }
 
+async function captureToolText(args: {
+  stream: ReadableStream<Uint8Array>;
+  tool: string;
+  tee?: WriteStreamLike | null;
+}): Promise<string | null> {
+  let extracted: string | null = null;
+
+  await readLines(args.stream, (line) => {
+    args.tee?.write(`${line}\n`);
+
+    const trimmed = line.trim();
+    if (!trimmed.startsWith("{")) return;
+
+    let event: unknown;
+    try {
+      event = JSON.parse(trimmed);
+    } catch {
+      return;
+    }
+
+    const typed = event as Partial<ToolCallEvent>;
+    if (typed.type !== "item.completed") return;
+    if (typed.item?.type !== "mcp_tool_call") return;
+    if (typed.item.tool !== args.tool) return;
+
+    extracted = firstTextContent(typed.item.result);
+  });
+
+  return extracted;
+}
+
+async function captureStderr(args: {
+  stream: ReadableStream<Uint8Array>;
+  tee?: WriteStreamLike | null;
+}) {
+  await readLines(args.stream, (line) => {
+    // Codex sometimes logs `needs_follow_up` at ERROR level even on success;
+    // it is noisy and not actionable for our harness scripts.
+    if (/needs_follow_up: (true|false)\s*$/.test(line)) return;
+
+    args.tee?.write(`${line}\n`);
+  });
+}
+
 async function run(args: ExtractArgs): Promise<void> {
   const codex = resolveCodexCommand(args.codexBin);
   const promptText = await Bun.file(args.promptPath).text();
@@ -187,38 +246,11 @@ async function run(args: ExtractArgs): Promise<void> {
     }
   }, timeoutMs);
 
-  let extracted: string | null = null;
-
-  void readLines(proc.stdout, (line) => {
-    stdoutTee?.write(`${line}\n`);
-
-    const trimmed = line.trim();
-    if (!trimmed.startsWith("{")) return;
-
-    let event: unknown;
-    try {
-      event = JSON.parse(trimmed);
-    } catch {
-      return;
-    }
-
-    const typed = event as Partial<ToolCallEvent>;
-    if (typed.type !== "item.completed") return;
-    if (typed.item?.type !== "mcp_tool_call") return;
-    if (typed.item.tool !== args.tool) return;
-
-    extracted = firstTextContent(typed.item.result);
-  });
-
-  void readLines(proc.stderr, (line) => {
-    // Codex sometimes logs `needs_follow_up` at ERROR level even on success;
-    // it is noisy and not actionable for our harness scripts.
-    if (/needs_follow_up: (true|false)\s*$/.test(line)) return;
-
-    stderrTee?.write(`${line}\n`);
-  });
+  const stdoutTask = captureToolText({ stream: proc.stdout, tool: args.tool, tee: stdoutTee });
+  const stderrTask = captureStderr({ stream: proc.stderr, tee: stderrTee });
 
   const exitCode = await proc.exited;
+  const [extracted] = await Promise.all([stdoutTask, stderrTask]);
   clearTimeout(timeout);
 
   stdoutTee?.end();
@@ -233,6 +265,24 @@ async function run(args: ExtractArgs): Promise<void> {
   }
 
   await Bun.write(args.outPath, extracted);
+
+  const printTailLines = args.printTailLines ?? null;
+  if (printTailLines !== null) {
+    if (!Number.isFinite(printTailLines) || printTailLines <= 0) {
+      throw new Error(`invalid --print-tail-lines value: ${args.printTailLines ?? ""}`);
+    }
+    const lines = extracted.split("\n");
+    const start = Math.max(0, lines.length - Math.trunc(printTailLines));
+    const sliced = lines.slice(start).join("\n");
+    process.stdout.write(sliced);
+    if (!sliced.endsWith("\n")) process.stdout.write("\n");
+    return;
+  }
+
+  if (args.print) {
+    process.stdout.write(extracted);
+    if (!extracted.endsWith("\n")) process.stdout.write("\n");
+  }
 }
 
 if (import.meta.main) {

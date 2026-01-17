@@ -75,6 +75,12 @@ export class ScriptBuilder<K extends SnapshotKey = never, Steps extends CustomSt
     return this.step({ type: "sendText", text, enter: options?.enter });
   }
 
+  pasteText(text: string, options?: { bracketed?: boolean }): this {
+    const bracketed = options?.bracketed ?? false;
+    const payload = bracketed ? `\x1b[200~${text}\x1b[201~` : text;
+    return this.sendText(payload);
+  }
+
   pressKey(key: string): this {
     return this.step({ type: "pressKey", key });
   }
