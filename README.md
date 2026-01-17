@@ -24,7 +24,8 @@ bun run src/index.ts
 
 ### core（默认）
 
-- `launch_session`：启动 PTY 会话
+- `launch_session`：启动 PTY 会话（会自动成为默认会话）
+- `select_session`：选择默认会话（之后多数 tools 可省略 `sessionId`）
 - `send_text` / `press_key`：发送输入
 - `send_mouse`：发送 SGR 鼠标事件（click/move/scroll）
 - `resize`：调整终端尺寸
@@ -44,7 +45,7 @@ bun run src/index.ts
 ### script（可选）
 
 - `run_script`：运行 `scriptPath=file.json|file.ts` 并产出 artifacts（cast/report/失败快照）
-- `run_all_scripts`：批量运行目录内脚本（递归）
+- `run_all_scripts`：批量运行目录内脚本（递归；支持 `includeEntries/maxEntries` 控制输出）
 
 ### recording（可选）
 
