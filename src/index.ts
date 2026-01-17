@@ -1,8 +1,8 @@
 import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js";
 
-import { createTerminalDriverServer } from "./mcp/server";
+import { createPtywrightServer } from "./mcp/server";
 
-const { server, sessions } = createTerminalDriverServer();
+const { server, sessions } = createPtywrightServer();
 
 const transport = new StdioServerTransport();
 await server.connect(transport);

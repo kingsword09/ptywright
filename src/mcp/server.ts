@@ -5,7 +5,7 @@ import { SessionManager } from "../session/session_manager";
 import { formatSnapshotView } from "../terminal/view";
 import { runScenarioPath } from "../scenario/path";
 
-export type TerminalDriverServerOptions = {
+export type PtywrightServerOptions = {
   sessionManager?: SessionManager;
 };
 
@@ -16,7 +16,7 @@ const textMaskRuleSchema = z.object({
   preserveLength: z.boolean().optional(),
 });
 
-export function createTerminalDriverServer(options?: TerminalDriverServerOptions): {
+export function createPtywrightServer(options?: PtywrightServerOptions): {
   server: McpServer;
   sessions: SessionManager;
 } {

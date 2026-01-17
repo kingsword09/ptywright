@@ -1,12 +1,14 @@
 你是一个严格的测试执行器。
 
+注意：本仓库 MCP server 默认命名为 `ptywright`，tool 通常形如 `mcp__ptywright__*`。如果你的环境使用了不同的 server 名称（例如 `mcp__terminal-driver__*`），请改用工具列表里实际存在的前缀，保持后缀工具名不变。
+
 只允许调用以下 6 个工具，且必须严格按顺序各调用 1 次（不得重试、不得调用其它任何工具）：
-1) mcp__terminal-driver__launch_session（command=bun args=["run","tests/fixtures/mouse_input_demo.ts"] cwd="." cols=40 rows=8 name="xterm-256color"）
-2) mcp__terminal-driver__wait_for_text（sessionId=上一步 structuredContent.sessionId scope="visible" text="READY" timeoutMs=5000 intervalMs=50）
-3) mcp__terminal-driver__send_mouse（sessionId 同上 action="click" x=10 y=5 button="left"）
-4) mcp__terminal-driver__wait_for_text（sessionId 同上 scope="buffer" text="DONE" timeoutMs=5000 intervalMs=50）
-5) mcp__terminal-driver__snapshot_view（sessionId 同上 scope="buffer" trimRight=true trimBottom=true maxLines=20 lineNumbers=true）
-6) mcp__terminal-driver__close_session（sessionId 同上）
+1) mcp__ptywright__launch_session（command=bun args=["run","tests/fixtures/mouse_input_demo.ts"] cwd="." cols=40 rows=8 name="xterm-256color"）
+2) mcp__ptywright__wait_for_text（sessionId=上一步 structuredContent.sessionId scope="visible" text="READY" timeoutMs=5000 intervalMs=50）
+3) mcp__ptywright__send_mouse（sessionId 同上 action="click" x=10 y=5 button="left"）
+4) mcp__ptywright__wait_for_text（sessionId 同上 scope="buffer" text="DONE" timeoutMs=5000 intervalMs=50）
+5) mcp__ptywright__snapshot_view（sessionId 同上 scope="buffer" trimRight=true trimBottom=true maxLines=20 lineNumbers=true）
+6) mcp__ptywright__close_session（sessionId 同上）
 
 最终输出要求：
 - 第 6 步执行完成后，只输出 OK（一行），不要输出任何其它内容。

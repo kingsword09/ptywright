@@ -47,6 +47,8 @@ codex mcp add ptywright -- bun run src/index.ts
 codex mcp list
 ```
 
+在 Codex 里，工具名称通常会显示为 `mcp__<server>__<tool>`（例如 `mcp__ptywright__launch_session`），其中 `<server>` 就是你 `codex mcp add` 时起的名字。
+
 然后在 Codex 对话里让它调用 MCP tools（例如先 `launch_session` 再 `snapshot_text`）。
 
 ### 免转义运行 prompt（推荐）
