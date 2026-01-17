@@ -1,0 +1,49 @@
+{
+  "name": "m6_json_custom_demo",
+  "launch": {
+    "command": "bun",
+    "args": ["run", "tests/fixtures/random_token_demo.ts"],
+    "cwd": ".",
+    "cols": 60,
+    "rows": 8,
+    "name": "xterm-256color"
+  },
+  "trace": {
+    "saveCast": true,
+    "saveReport": true,
+    "reportScope": "visible",
+    "reportMaxFrames": 80
+  },
+  "steps": [
+    {
+      "type": "waitForText",
+      "scope": "visible",
+      "text": "DONE",
+      "timeoutMs": 5000,
+      "intervalMs": 50
+    },
+    {
+      "type": "snapshot",
+      "kind": "text",
+      "scope": "visible",
+      "trimRight": true,
+      "trimBottom": true,
+      "mask": [
+        {
+          "regex": "TOKEN: [0-9a-f-]+",
+          "flags": "i",
+          "replacement": "TOKEN: <id>"
+        }
+      ],
+      "saveAs": "masked",
+      "saveTo": "masked.txt"
+    },
+    {
+      "type": "custom",
+      "name": "assertMaskedEquals",
+      "payload": {
+        "expected": "TOKEN: <id>\nDONE"
+      }
+    }
+  ]
+}

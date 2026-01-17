@@ -9,15 +9,48 @@ import type { TextMaskRule } from "../terminal/mask";
 import { scenarioSchema } from "./schema";
 import type { Scenario, ScenarioStep } from "./schema";
 
-type RunScenarioOptions = {
-  artifactsDir?: string;
-  updateGoldens?: boolean;
-};
-
-type SnapshotRecord = {
+export type SnapshotRecord = {
   kind: string;
   hash: string;
   text: string;
+};
+
+export type ScenarioCustomStep<Name extends string = string, Payload = unknown> = {
+  type: "custom";
+  name: Name;
+  payload?: Payload;
+};
+
+export type ScenarioRunnerContext = {
+  session: ReturnType<SessionManager["launchSession"]>;
+  stepIndex: number;
+  last: SnapshotRecord | null;
+  snapshots: Map<string, SnapshotRecord>;
+  artifactsDir: string;
+  resolveArtifactPath: (path: string) => string;
+  resolveGoldenPath: (path: string) => string;
+  updateGoldens: boolean;
+  captureSnapshot: (
+    step: Omit<Extract<ScenarioStep, { type: "snapshot" }>, "type">,
+  ) => Promise<SnapshotRecord>;
+  getSnapshot: (from?: string) => SnapshotRecord;
+  writeArtifactText: (path: string, text: string) => void;
+  assertGoldenText: (path: string, text: string) => void;
+};
+
+type CustomStepHandlerImpl<Payload> = {
+  bivarianceHack(
+    ctx: ScenarioRunnerContext,
+    step: ScenarioCustomStep<string, Payload>,
+  ): Promise<SnapshotRecord | void> | SnapshotRecord | void;
+}["bivarianceHack"];
+
+export type CustomStepHandler<Payload = unknown> = CustomStepHandlerImpl<Payload>;
+
+type RunScenarioOptions = {
+  artifactsDir?: string;
+  updateGoldens?: boolean;
+  steps?: Record<string, CustomStepHandler>;
 };
 
 export async function runScenarioFile(
@@ -25,9 +58,26 @@ export async function runScenarioFile(
   options?: RunScenarioOptions,
 ): Promise<{ ok: true; artifactsDir: string }> {
   const raw = await Bun.file(scenarioPath).text();
-  const parsed = scenarioSchema.parse(JSON.parse(raw)) as Scenario;
+  const parsedJson = JSON.parse(raw) as unknown;
+  const baseName = basename(scenarioPath, extname(scenarioPath));
+  const withName =
+    parsedJson &&
+    typeof parsedJson === "object" &&
+    !Array.isArray(parsedJson) &&
+    !("name" in parsedJson)
+      ? { ...parsedJson, name: baseName }
+      : parsedJson;
 
-  const scenarioName = parsed.name ?? basename(scenarioPath, extname(scenarioPath));
+  return runScenario(withName, options);
+}
+
+export async function runScenario(
+  scenario: unknown,
+  options?: RunScenarioOptions,
+): Promise<{ ok: true; artifactsDir: string }> {
+  const parsed = scenarioSchema.parse(scenario) as Scenario;
+
+  const scenarioName = parsed.name ?? "scenario";
   const artifactsDir = resolveArtifactsDir(parsed, scenarioName, options?.artifactsDir);
 
   mkdirSync(artifactsDir, { recursive: true });
@@ -61,6 +111,8 @@ export async function runScenarioFile(
   const castPath = resolveArtifactPath(trace.castPath ?? `${scenarioName}.cast`);
   const reportPath = resolveArtifactPath(trace.reportPath ?? `${scenarioName}.report.html`);
 
+  const stepHandlers = options?.steps;
+
   try {
     for (let stepIndex = 0; stepIndex < parsed.steps.length; stepIndex += 1) {
       const step = parsed.steps[stepIndex] as ScenarioStep;
@@ -73,6 +125,8 @@ export async function runScenarioFile(
         resolveGoldenPath,
         resolveArtifactPath,
         updateGoldens: options?.updateGoldens ?? envTruthy(process.env.UPDATE_GOLDENS),
+        stepHandlers,
+        artifactsDir,
       });
     }
 
@@ -127,6 +181,8 @@ async function runStep(args: {
   resolveGoldenPath: (path: string) => string;
   resolveArtifactPath: (path: string) => string;
   updateGoldens: boolean;
+  stepHandlers?: Record<string, CustomStepHandler>;
+  artifactsDir: string;
 }): Promise<SnapshotRecord | null> {
   const { step } = args;
 
@@ -181,16 +237,13 @@ async function runStep(args: {
 
   if (step.type === "snapshot") {
     const record = await snapshotStep(args.session, step);
-    const saveAs = step.saveAs?.trim();
-    if (saveAs) {
-      args.snapshots.set(saveAs, record);
-    }
-    const saveTo = step.saveTo?.trim();
-    if (saveTo) {
-      const path = args.resolveArtifactPath(saveTo);
-      mkdirSync(dirname(path), { recursive: true });
-      writeFileSync(path, `${record.text}\n`, "utf8");
-    }
+    persistSnapshotRecord({
+      record,
+      saveAs: step.saveAs,
+      saveTo: step.saveTo,
+      snapshots: args.snapshots,
+      resolveArtifactPath: args.resolveArtifactPath,
+    });
     return record;
   }
 
@@ -207,7 +260,77 @@ async function runStep(args: {
     return args.last;
   }
 
-  return args.last;
+  if (step.type === "custom") {
+    const handler = args.stepHandlers?.[step.name];
+    if (!handler) {
+      throw new Error(`step ${args.stepIndex + 1} custom handler not found: ${step.name}`);
+    }
+
+    const ctx: ScenarioRunnerContext = {
+      session: args.session,
+      stepIndex: args.stepIndex,
+      last: args.last,
+      snapshots: args.snapshots,
+      artifactsDir: args.artifactsDir,
+      resolveArtifactPath: args.resolveArtifactPath,
+      resolveGoldenPath: args.resolveGoldenPath,
+      updateGoldens: args.updateGoldens,
+      captureSnapshot: async (
+        snapshotConfig: Omit<Extract<ScenarioStep, { type: "snapshot" }>, "type">,
+      ) => {
+        const record = await snapshotStep(args.session, {
+          type: "snapshot",
+          ...snapshotConfig,
+        } as Extract<ScenarioStep, { type: "snapshot" }>);
+
+        persistSnapshotRecord({
+          record,
+          saveAs: snapshotConfig.saveAs,
+          saveTo: snapshotConfig.saveTo,
+          snapshots: args.snapshots,
+          resolveArtifactPath: args.resolveArtifactPath,
+        });
+
+        return record;
+      },
+      getSnapshot: (from?: string) => selectSnapshot(args.last, args.snapshots, from),
+      writeArtifactText: (path: string, text: string) => {
+        const resolved = args.resolveArtifactPath(path);
+        mkdirSync(dirname(resolved), { recursive: true });
+        writeFileSync(resolved, text, "utf8");
+      },
+      assertGoldenText: (path: string, text: string) => {
+        const goldenPath = args.resolveGoldenPath(path);
+        assertGoldenText(goldenPath, text, args.updateGoldens);
+      },
+    };
+
+    const result = await handler(ctx, step as ScenarioCustomStep);
+    if (!result) return args.last;
+    return result;
+  }
+
+  throw new Error(`step ${args.stepIndex + 1} unknown type: ${(step as ScenarioStep).type}`);
+}
+
+function persistSnapshotRecord(args: {
+  record: SnapshotRecord;
+  saveAs?: string;
+  saveTo?: string;
+  snapshots: Map<string, SnapshotRecord>;
+  resolveArtifactPath: (path: string) => string;
+}): void {
+  const saveAs = args.saveAs?.trim();
+  if (saveAs) {
+    args.snapshots.set(saveAs, args.record);
+  }
+
+  const saveTo = args.saveTo?.trim();
+  if (!saveTo) return;
+
+  const path = args.resolveArtifactPath(saveTo);
+  mkdirSync(dirname(path), { recursive: true });
+  writeFileSync(path, `${args.record.text}\n`, "utf8");
 }
 
 function selectSnapshot(

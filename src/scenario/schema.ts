@@ -126,6 +126,12 @@ const expectGoldenStepSchema = z.object({
   path: z.string().min(1),
 });
 
+const customStepSchema = z.object({
+  type: z.literal("custom"),
+  name: z.string().min(1),
+  payload: z.unknown().optional(),
+});
+
 export const scenarioStepSchema = z.union([
   sendTextStepSchema,
   pressKeyStepSchema,
@@ -136,6 +142,7 @@ export const scenarioStepSchema = z.union([
   snapshotStepSchema,
   expectStepSchema,
   expectGoldenStepSchema,
+  customStepSchema,
 ]);
 
 export const scenarioSchema = z.object({

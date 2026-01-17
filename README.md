@@ -96,7 +96,25 @@ bun run scenario:run scenarios/m5_mask_demo.json
 bun run scenario:m5-mask-demo
 ```
 
+如果 JSON 里用到了 `type:"custom"`，用 `--steps <module.ts>` 注入 handlers（模块导出 `steps` 对象即可）：
+
+```bash
+bun run scenario:run scenarios/m6_json_custom_demo.json --steps scenarios/m6_json_custom_steps.ts
+```
+
 产物默认写到 `.tmp/scenarios/<name>/`（可用 `--artifacts-dir` 覆盖）。
+
+## Scenario DSL (TypeScript)
+
+用 TS builder 写 scenario（类型安全，可组合，支持自定义 step），底层仍复用同一个 runner：
+
+```bash
+bun run scenario:run scenarios/m6_dsl_demo.ts
+```
+
+约定：
+- module 默认导出 scenario（或导出 `scenario`）。
+- 可选导出 `steps`（custom step handlers），用于执行 `type:"custom"` 的步骤。
 
 ## Cast -> SVG/GIF (可选)
 
