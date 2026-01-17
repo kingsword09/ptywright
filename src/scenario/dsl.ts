@@ -183,6 +183,3 @@ export function defineScript<K extends SnapshotKey, Steps extends CustomStepMap>
       : value;
   return scenarioSchema.parse(scenario) as Scenario;
 }
-
-export const defineScenario = defineScript;
-export { ScriptBuilder as ScenarioBuilder };
