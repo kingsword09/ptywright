@@ -208,6 +208,23 @@ async function runStep(args: {
       return args.last;
     }
 
+    if (step.type === "sendMouse") {
+      const modifiers =
+        step.shift || step.alt || step.ctrl
+          ? { shift: step.shift, alt: step.alt, ctrl: step.ctrl }
+          : undefined;
+
+      args.session.sendMouse({
+        action: step.action,
+        x: step.x,
+        y: step.y,
+        button: step.button,
+        modifiers,
+      });
+
+      return args.last;
+    }
+
     if (step.type === "resize") {
       args.session.resize(step.cols, step.rows);
       return args.last;

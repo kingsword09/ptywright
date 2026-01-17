@@ -61,6 +61,7 @@
       "oneOf": [
         { "$ref": "#/$defs/stepSendText" },
         { "$ref": "#/$defs/stepPressKey" },
+        { "$ref": "#/$defs/stepSendMouse" },
         { "$ref": "#/$defs/stepResize" },
         { "$ref": "#/$defs/stepMark" },
         { "$ref": "#/$defs/stepSleep" },
@@ -91,6 +92,24 @@
       "properties": {
         "type": { "const": "pressKey" },
         "key": { "type": "string", "minLength": 1 }
+      }
+    },
+    "stepSendMouse": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["type", "action", "x", "y"],
+      "properties": {
+        "type": { "const": "sendMouse" },
+        "action": {
+          "type": "string",
+          "enum": ["down", "up", "move", "click", "scroll_up", "scroll_down"]
+        },
+        "x": { "type": "integer" },
+        "y": { "type": "integer" },
+        "button": { "type": "string", "enum": ["left", "middle", "right"] },
+        "shift": { "type": "boolean" },
+        "alt": { "type": "boolean" },
+        "ctrl": { "type": "boolean" }
       }
     },
     "stepResize": {

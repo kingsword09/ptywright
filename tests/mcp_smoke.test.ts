@@ -41,6 +41,8 @@ test("MCP server smoke test", async () => {
   expect(list.tools.some((t) => t.name === "mark")).toBe(true);
   expect(list.tools.some((t) => t.name === "run_scenario")).toBe(true);
   expect(list.tools.some((t) => t.name === "run_script")).toBe(true);
+  expect(list.tools.some((t) => t.name === "start_script_recording")).toBe(true);
+  expect(list.tools.some((t) => t.name === "stop_script_recording")).toBe(true);
 
   const scenarioRun = await client.callTool({
     name: "run_script",

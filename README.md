@@ -26,6 +26,7 @@ bun run src/index.ts
 - `wait_for_text`：等待文本/正则出现
 - `wait_for_stable_screen`：等待屏幕在 quiet window 内稳定（降低 flaky）
 - `run_script` / `run_scenario`：运行 `file.json|file.ts` 并产出 artifacts（cast/report/失败快照）
+- `start_script_recording` / `stop_script_recording`：录制 MCP 工具调用并导出可复跑脚本（JSON + goldens）
 - `list_sessions` / `close_session`
 
 ## Tests
@@ -105,6 +106,12 @@ bun run script:run scripts/m5_mask_demo.json
 bun run script:m5-mask-demo
 ```
 
+批量执行（本地/CI）：
+
+```bash
+bun run script:run-all
+```
+
 如果 JSON 里用到了 `type:"custom"`，用 `--steps <module.ts>` 注入 handlers（模块导出 `steps` 对象即可）：
 
 ```bash
@@ -122,6 +129,16 @@ bun run script:run scripts/m6_json_custom_demo.json --steps scripts/m6_json_cust
 - `sleep`：固定等待（尽量优先用 `waitForText` / `waitForStableScreen`）
 - `expectMeta`：断言终端 meta（bufferType/cols/rows/cursor）
 - `waitForExit`：等待进程退出并可断言 exitCode/signal
+- `sendMouse`：发送 SGR 鼠标事件（down/up/move/click/scroll）
+
+## Script Recording (MCP)
+
+在 Codex/Agent 通过 MCP tools 驱动时，可以一键把工具调用“录成脚本”，并在 `mark` 处自动落盘 golden：
+
+1) `mcp__ptywright__start_script_recording(name="my_flow")`
+2) 正常执行：`launch_session/send_text/press_key/wait_for_*`
+3) 关键节点打点：`mark(label="checkpoint")`（会自动生成 `snapshot + expectGolden`）
+4) `mcp__ptywright__stop_script_recording(recordingId=...)`（写入 `scripts/my_flow.json` + `tests/golden/scripts/my_flow/*.txt`）
 
 ## Script DSL (TypeScript)
 

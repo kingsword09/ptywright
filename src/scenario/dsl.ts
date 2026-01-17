@@ -12,6 +12,7 @@ type ExpectStep = StepOf<"expect">;
 type ExpectGoldenStep = StepOf<"expectGolden">;
 type ExpectMetaStep = StepOf<"expectMeta">;
 type WaitForExitStep = StepOf<"waitForExit">;
+type SendMouseStep = StepOf<"sendMouse">;
 
 type CustomStepMap = Record<string, unknown>;
 
@@ -73,6 +74,10 @@ export class ScenarioBuilder<K extends SnapshotKey = never, Steps extends Custom
 
   pressKey(key: string): this {
     return this.step({ type: "pressKey", key });
+  }
+
+  sendMouse(step: Omit<SendMouseStep, "type">): this {
+    return this.step({ type: "sendMouse", ...step });
   }
 
   resize(cols: number, rows: number): this {

@@ -4,6 +4,7 @@ import { z } from "zod";
 import { SessionManager } from "../session/session_manager";
 import { formatSnapshotView } from "../terminal/view";
 import { runScenarioPath } from "../scenario/path";
+import { ScriptRecordingManager } from "./script_recording";
 
 export type PtywrightServerOptions = {
   sessionManager?: SessionManager;
@@ -21,6 +22,7 @@ export function createPtywrightServer(options?: PtywrightServerOptions): {
   sessions: SessionManager;
 } {
   const sessions = options?.sessionManager ?? new SessionManager();
+  const recordings = new ScriptRecordingManager();
 
   const server = new McpServer({
     name: "ptywright",
@@ -40,6 +42,18 @@ export function createPtywrightServer(options?: PtywrightServerOptions): {
     },
     async (args) => {
       const session = sessions.launchSession(args);
+      recordings.recordLaunch(
+        {
+          command: args.command,
+          args: args.args,
+          cwd: args.cwd,
+          env: args.env,
+          cols: args.cols,
+          rows: args.rows,
+          name: args.name,
+        },
+        session.id,
+      );
       return {
         content: [{ type: "text", text: `launched ${session.id}` }],
         structuredContent: {
@@ -62,6 +76,7 @@ export function createPtywrightServer(options?: PtywrightServerOptions): {
         return toolError(`session not found: ${args.sessionId}`);
       }
       session.sendText(args.text, { enter: args.enter });
+      recordings.recordStep({ type: "sendText", text: args.text, enter: args.enter });
       return { content: [{ type: "text", text: "ok" }] };
     },
   );
@@ -79,6 +94,7 @@ export function createPtywrightServer(options?: PtywrightServerOptions): {
       }
       try {
         session.pressKey(args.key);
+        recordings.recordStep({ type: "pressKey", key: args.key });
         return { content: [{ type: "text", text: "ok" }] };
       } catch (error) {
         return toolError((error as Error).message);
@@ -117,6 +133,17 @@ export function createPtywrightServer(options?: PtywrightServerOptions): {
         modifiers,
       });
 
+      recordings.recordStep({
+        type: "sendMouse",
+        action: args.action,
+        x: args.x,
+        y: args.y,
+        button: args.button,
+        shift: args.shift,
+        alt: args.alt,
+        ctrl: args.ctrl,
+      });
+
       return { content: [{ type: "text", text: "ok" }] };
     },
   );
@@ -134,6 +161,7 @@ export function createPtywrightServer(options?: PtywrightServerOptions): {
         return toolError(`session not found: ${args.sessionId}`);
       }
       session.resize(args.cols, args.rows);
+      recordings.recordStep({ type: "resize", cols: args.cols, rows: args.rows });
       return { content: [{ type: "text", text: "ok" }] };
     },
   );
@@ -286,6 +314,8 @@ export function createPtywrightServer(options?: PtywrightServerOptions): {
       }
 
       session.mark(args.label);
+      recordings.recordStep({ type: "mark", label: args.label });
+      await recordings.recordCheckpoint({ session, label: args.label });
       return { content: [{ type: "text", text: "ok" }] };
     },
   );
@@ -318,6 +348,14 @@ export function createPtywrightServer(options?: PtywrightServerOptions): {
         regex,
         timeoutMs: args.timeoutMs ?? 10_000,
         intervalMs: args.intervalMs ?? 100,
+      });
+      recordings.recordStep({
+        type: "waitForText",
+        scope: args.scope,
+        text: args.text,
+        regex: args.regex,
+        timeoutMs: args.timeoutMs,
+        intervalMs: args.intervalMs,
       });
 
       const structuredContent: Record<string, unknown> = {
@@ -355,6 +393,12 @@ export function createPtywrightServer(options?: PtywrightServerOptions): {
         timeoutMs: args.timeoutMs ?? 10_000,
         quietMs: args.quietMs ?? 400,
         intervalMs: args.intervalMs ?? 80,
+      });
+      recordings.recordStep({
+        type: "waitForStableScreen",
+        timeoutMs: args.timeoutMs,
+        quietMs: args.quietMs,
+        intervalMs: args.intervalMs,
       });
 
       const structuredContent: Record<string, unknown> = {
@@ -513,6 +557,64 @@ export function createPtywrightServer(options?: PtywrightServerOptions): {
 
   registerRunScriptTool("run_scenario");
   registerRunScriptTool("run_script");
+
+  server.tool(
+    "start_script_recording",
+    {
+      name: z.string().min(1),
+      outPath: z.string().optional(),
+      goldenDir: z.string().optional(),
+      overwrite: z.boolean().optional(),
+      mask: z.array(textMaskRuleSchema).optional(),
+    },
+    async (args) => {
+      try {
+        const status = recordings.start({
+          name: args.name,
+          outPath: args.outPath,
+          goldenDir: args.goldenDir,
+          overwrite: args.overwrite,
+          checkpoint: {
+            scope: "visible",
+            trimRight: true,
+            trimBottom: true,
+            mask: args.mask,
+          },
+        });
+        return {
+          content: [{ type: "text", text: `recording ${status.recordingId}` }],
+          structuredContent: status,
+        };
+      } catch (error) {
+        return toolError((error as Error).message);
+      }
+    },
+  );
+
+  server.tool(
+    "stop_script_recording",
+    {
+      recordingId: z.string().min(1),
+      writeFiles: z.boolean().optional(),
+    },
+    async (args) => {
+      try {
+        const result = recordings.stop({
+          recordingId: args.recordingId,
+          writeFiles: args.writeFiles,
+        });
+        return {
+          content: [{ type: "text", text: `ok script=${result.scriptPath ?? ""}` }],
+          structuredContent: {
+            scriptPath: result.scriptPath,
+            goldenPaths: result.goldenPaths,
+          },
+        };
+      } catch (error) {
+        return toolError((error as Error).message);
+      }
+    },
+  );
 
   server.tool(
     "close_session",
