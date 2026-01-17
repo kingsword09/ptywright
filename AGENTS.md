@@ -47,6 +47,7 @@
 
 ## Script Runner（JSON）
 - 用 JSON/TS 脚本文件驱动 TUI：`bun run script:run <file.json|file.ts>`（默认产物在 `.tmp/runs/<name>/`）
+- JSON 可选加 `$schema: "../schemas/ptywright-script.schema.json"`，获得编辑器补全/校验。
 
 ## 跨平台与换行
 - `.gitattributes` 强制仓库存储为 LF；`.editorconfig` 统一编辑器行为。

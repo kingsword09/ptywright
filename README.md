@@ -91,6 +91,12 @@ bun run codex:m5-mask-demo
 
 把一次 TUI 测试写成 JSON：启动 → 输入 → 等待 → 快照（可 mask）→ 断言，并自动产出 `.cast` + `report.html`。
 
+可选：在 JSON 顶部加上 schema（编辑器补全/校验更友好）：
+
+```json
+{ "$schema": "../schemas/ptywright-script.schema.json" }
+```
+
 ```bash
 bun run script:run scripts/m5_mask_demo.json
 # 或
@@ -109,6 +115,11 @@ bun run script:run scripts/m6_json_custom_demo.json --steps scripts/m6_json_cust
 - `failure.error.txt`（错误堆栈）
 - `failure.step.json`（失败的 step 信息）
 - `failure.last.txt` / `failure.last.view.txt`（最后一帧快照）
+
+内置 steps（无需 `--steps`）：
+- `sleep`：固定等待（尽量优先用 `waitForText` / `waitForStableScreen`）
+- `expectMeta`：断言终端 meta（bufferType/cols/rows/cursor）
+- `waitForExit`：等待进程退出并可断言 exitCode/signal
 
 ## Script DSL (TypeScript)
 

@@ -1,4 +1,5 @@
 {
+  "$schema": "../schemas/ptywright-script.schema.json",
   "name": "m6_json_custom_demo",
   "launch": {
     "command": "bun",

@@ -1,0 +1,253 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "ptywright Script",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["launch", "steps"],
+  "properties": {
+    "$schema": { "type": "string" },
+    "name": { "type": "string" },
+    "artifactsDir": { "type": "string" },
+    "launch": { "$ref": "#/$defs/launch" },
+    "trace": { "$ref": "#/$defs/trace" },
+    "steps": {
+      "type": "array",
+      "minItems": 1,
+      "items": { "$ref": "#/$defs/step" }
+    }
+  },
+  "$defs": {
+    "textMaskRule": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["regex"],
+      "properties": {
+        "regex": { "type": "string", "minLength": 1 },
+        "flags": { "type": "string" },
+        "replacement": { "type": "string" },
+        "preserveLength": { "type": "boolean" }
+      }
+    },
+    "launch": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["command"],
+      "properties": {
+        "command": { "type": "string", "minLength": 1 },
+        "args": { "type": "array", "items": { "type": "string" } },
+        "cwd": { "type": "string" },
+        "env": {
+          "type": "object",
+          "additionalProperties": { "type": "string" }
+        },
+        "cols": { "type": "integer", "minimum": 1 },
+        "rows": { "type": "integer", "minimum": 1 },
+        "name": { "type": "string" }
+      }
+    },
+    "trace": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "saveCast": { "type": "boolean" },
+        "saveReport": { "type": "boolean" },
+        "castPath": { "type": "string" },
+        "reportPath": { "type": "string" },
+        "reportScope": { "type": "string", "enum": ["visible", "buffer"] },
+        "reportMaxFrames": { "type": "integer", "minimum": 1 }
+      }
+    },
+    "step": {
+      "oneOf": [
+        { "$ref": "#/$defs/stepSendText" },
+        { "$ref": "#/$defs/stepPressKey" },
+        { "$ref": "#/$defs/stepResize" },
+        { "$ref": "#/$defs/stepMark" },
+        { "$ref": "#/$defs/stepSleep" },
+        { "$ref": "#/$defs/stepWaitForText" },
+        { "$ref": "#/$defs/stepWaitForStableScreen" },
+        { "$ref": "#/$defs/stepWaitForExit" },
+        { "$ref": "#/$defs/stepExpectMeta" },
+        { "$ref": "#/$defs/stepSnapshot" },
+        { "$ref": "#/$defs/stepExpect" },
+        { "$ref": "#/$defs/stepExpectGolden" },
+        { "$ref": "#/$defs/stepCustom" }
+      ]
+    },
+    "stepSendText": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["type", "text"],
+      "properties": {
+        "type": { "const": "sendText" },
+        "text": { "type": "string" },
+        "enter": { "type": "boolean" }
+      }
+    },
+    "stepPressKey": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["type", "key"],
+      "properties": {
+        "type": { "const": "pressKey" },
+        "key": { "type": "string", "minLength": 1 }
+      }
+    },
+    "stepResize": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["type", "cols", "rows"],
+      "properties": {
+        "type": { "const": "resize" },
+        "cols": { "type": "integer", "minimum": 1 },
+        "rows": { "type": "integer", "minimum": 1 }
+      }
+    },
+    "stepMark": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["type"],
+      "properties": {
+        "type": { "const": "mark" },
+        "label": { "type": "string" }
+      }
+    },
+    "stepSleep": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["type", "ms"],
+      "properties": {
+        "type": { "const": "sleep" },
+        "ms": { "type": "integer", "minimum": 0 }
+      }
+    },
+    "stepWaitForText": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["type"],
+      "properties": {
+        "type": { "const": "waitForText" },
+        "scope": { "type": "string", "enum": ["visible", "buffer"] },
+        "text": { "type": "string" },
+        "regex": { "type": "string" },
+        "timeoutMs": { "type": "integer", "minimum": 1 },
+        "intervalMs": { "type": "integer", "minimum": 1 }
+      },
+      "anyOf": [{ "required": ["text"] }, { "required": ["regex"] }]
+    },
+    "stepWaitForStableScreen": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["type"],
+      "properties": {
+        "type": { "const": "waitForStableScreen" },
+        "timeoutMs": { "type": "integer", "minimum": 1 },
+        "quietMs": { "type": "integer", "minimum": 1 },
+        "intervalMs": { "type": "integer", "minimum": 1 }
+      }
+    },
+    "stepWaitForExit": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["type"],
+      "properties": {
+        "type": { "const": "waitForExit" },
+        "timeoutMs": { "type": "integer", "minimum": 1 },
+        "intervalMs": { "type": "integer", "minimum": 1 },
+        "exitCode": { "type": "integer" },
+        "signal": { "oneOf": [{ "type": "integer" }, { "type": "string" }] }
+      }
+    },
+    "stepExpectMeta": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["type"],
+      "properties": {
+        "type": { "const": "expectMeta" },
+        "bufferType": { "type": "string", "enum": ["normal", "alternate"] },
+        "cols": { "type": "integer", "minimum": 1 },
+        "rows": { "type": "integer", "minimum": 1 },
+        "cursor": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["x", "y"],
+          "properties": {
+            "x": { "type": "integer", "minimum": 1 },
+            "y": { "type": "integer", "minimum": 1 }
+          }
+        }
+      },
+      "anyOf": [
+        { "required": ["bufferType"] },
+        { "required": ["cols"] },
+        { "required": ["rows"] },
+        { "required": ["cursor"] }
+      ]
+    },
+    "stepSnapshot": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["type", "kind"],
+      "properties": {
+        "type": { "const": "snapshot" },
+        "kind": { "type": "string", "enum": ["text", "view", "ansi", "view_ansi", "grid"] },
+        "scope": { "type": "string", "enum": ["visible", "buffer"] },
+        "trimRight": { "type": "boolean" },
+        "trimBottom": { "type": "boolean" },
+        "maxLines": { "type": "integer", "minimum": 1 },
+        "tailLines": { "type": "integer", "minimum": 1 },
+        "lineNumbers": { "type": "boolean" },
+        "includeStyles": { "type": "boolean" },
+        "mask": { "type": "array", "items": { "$ref": "#/$defs/textMaskRule" } },
+        "saveAs": { "type": "string" },
+        "saveTo": { "type": "string" }
+      },
+      "allOf": [
+        { "not": { "required": ["maxLines", "tailLines"] } },
+        {
+          "if": { "properties": { "kind": { "const": "grid" } } },
+          "then": { "not": { "required": ["mask"] } }
+        }
+      ]
+    },
+    "stepExpect": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["type"],
+      "properties": {
+        "type": { "const": "expect" },
+        "from": { "type": "string" },
+        "equals": { "type": "string" },
+        "contains": { "type": "array", "items": { "type": "string" } },
+        "notContains": { "type": "array", "items": { "type": "string" } },
+        "regex": { "type": "string" }
+      },
+      "anyOf": [
+        { "required": ["equals"] },
+        { "required": ["contains"] },
+        { "required": ["notContains"] },
+        { "required": ["regex"] }
+      ]
+    },
+    "stepExpectGolden": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["type", "path"],
+      "properties": {
+        "type": { "const": "expectGolden" },
+        "from": { "type": "string" },
+        "path": { "type": "string", "minLength": 1 }
+      }
+    },
+    "stepCustom": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["type", "name"],
+      "properties": {
+        "type": { "const": "custom" },
+        "name": { "type": "string", "minLength": 1 },
+        "payload": {}
+      }
+    }
+  }
+}

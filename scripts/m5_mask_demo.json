@@ -1,4 +1,5 @@
 {
+  "$schema": "../schemas/ptywright-script.schema.json",
   "name": "m5_mask_demo",
   "launch": {
     "command": "bun",

@@ -10,6 +10,8 @@ type StepOf<T extends ScenarioStep["type"]> = Extract<ScenarioStep, { type: T }>
 type SnapshotStep = StepOf<"snapshot">;
 type ExpectStep = StepOf<"expect">;
 type ExpectGoldenStep = StepOf<"expectGolden">;
+type ExpectMetaStep = StepOf<"expectMeta">;
+type WaitForExitStep = StepOf<"waitForExit">;
 
 type CustomStepMap = Record<string, unknown>;
 
@@ -81,12 +83,24 @@ export class ScenarioBuilder<K extends SnapshotKey = never, Steps extends Custom
     return this.step({ type: "mark", label });
   }
 
+  sleep(ms: number): this {
+    return this.step({ type: "sleep", ms });
+  }
+
   waitForText(step: Omit<StepOf<"waitForText">, "type">): this {
     return this.step({ type: "waitForText", ...step });
   }
 
   waitForStableScreen(step: Omit<StepOf<"waitForStableScreen">, "type"> = {}): this {
     return this.step({ type: "waitForStableScreen", ...step });
+  }
+
+  waitForExit(step: Omit<WaitForExitStep, "type"> = {}): this {
+    return this.step({ type: "waitForExit", ...step });
+  }
+
+  expectMeta(step: Omit<ExpectMetaStep, "type">): this {
+    return this.step({ type: "expectMeta", ...step });
   }
 
   snapshot<K2 extends string>(

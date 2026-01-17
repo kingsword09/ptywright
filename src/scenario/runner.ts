@@ -4,6 +4,7 @@ import { basename, dirname, extname, isAbsolute, join, resolve } from "node:path
 import { SessionManager } from "../session/session_manager";
 import { formatSnapshotView } from "../terminal/view";
 import { generateTraceReportHtml } from "../trace/report";
+import { sleep } from "../util/sleep";
 
 import type { TextMaskRule } from "../terminal/mask";
 import { scenarioSchema } from "./schema";
@@ -217,6 +218,11 @@ async function runStep(args: {
       return args.last;
     }
 
+    if (step.type === "sleep") {
+      await sleep(step.ms);
+      return args.last;
+    }
+
     if (step.type === "waitForText") {
       const regex = step.regex ? new RegExp(step.regex) : undefined;
       const result = await args.session.waitForText({
@@ -243,6 +249,59 @@ async function runStep(args: {
       if (!result.stable) {
         throw new Error(`step ${args.stepIndex + 1} waitForStableScreen timed out`);
       }
+      return args.last;
+    }
+
+    if (step.type === "waitForExit") {
+      const startedAt = Date.now();
+      const timeoutMs = step.timeoutMs ?? 10_000;
+      const intervalMs = step.intervalMs ?? 50;
+
+      while (Date.now() - startedAt <= timeoutMs) {
+        if (args.session.isClosed()) break;
+        await sleep(intervalMs);
+      }
+
+      const reason = args.session.getCloseReason();
+      if (!reason) {
+        throw new Error("waitForExit timed out");
+      }
+      if (reason.type !== "process_exit") {
+        throw new Error("waitForExit: session was closed by user");
+      }
+      if (step.exitCode !== undefined && reason.exitCode !== step.exitCode) {
+        throw new Error(`waitForExit: exitCode mismatch (got ${reason.exitCode})`);
+      }
+      if (step.signal !== undefined && reason.signal !== step.signal) {
+        throw new Error(`waitForExit: signal mismatch (got ${String(reason.signal ?? "")})`);
+      }
+      return args.last;
+    }
+
+    if (step.type === "expectMeta") {
+      await args.session.flush();
+      const meta = args.session.getMeta();
+
+      if (step.bufferType !== undefined && meta.bufferType !== step.bufferType) {
+        throw new Error(`expectMeta.bufferType mismatch (got ${meta.bufferType})`);
+      }
+      if (step.cols !== undefined && meta.cols !== step.cols) {
+        throw new Error(`expectMeta.cols mismatch (got ${meta.cols})`);
+      }
+      if (step.rows !== undefined && meta.rows !== step.rows) {
+        throw new Error(`expectMeta.rows mismatch (got ${meta.rows})`);
+      }
+
+      if (step.cursor) {
+        const cursorAbsY = meta.baseY + meta.cursorY;
+        const cursorViewportRow = cursorAbsY - meta.viewportY;
+        const cursorViewportCol = meta.cursorX;
+        const actual = { x: cursorViewportCol + 1, y: cursorViewportRow + 1 };
+        if (actual.x !== step.cursor.x || actual.y !== step.cursor.y) {
+          throw new Error(`expectMeta.cursor mismatch (got ${actual.x},${actual.y})`);
+        }
+      }
+
       return args.last;
     }
 

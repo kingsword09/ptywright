@@ -48,6 +48,11 @@ const markStepSchema = z.object({
   label: z.string().optional(),
 });
 
+const sleepStepSchema = z.object({
+  type: z.literal("sleep"),
+  ms: z.number().int().nonnegative(),
+});
+
 const waitForTextStepSchema = z
   .object({
     type: z.literal("waitForText"),
@@ -72,6 +77,41 @@ const waitForStableScreenStepSchema = z.object({
   quietMs: z.number().int().positive().optional(),
   intervalMs: z.number().int().positive().optional(),
 });
+
+const waitForExitStepSchema = z.object({
+  type: z.literal("waitForExit"),
+  timeoutMs: z.number().int().positive().optional(),
+  intervalMs: z.number().int().positive().optional(),
+  exitCode: z.number().int().optional(),
+  signal: z.union([z.number().int(), z.string()]).optional(),
+});
+
+const expectMetaStepSchema = z
+  .object({
+    type: z.literal("expectMeta"),
+    bufferType: z.enum(["normal", "alternate"]).optional(),
+    cols: z.number().int().positive().optional(),
+    rows: z.number().int().positive().optional(),
+    cursor: z
+      .object({
+        x: z.number().int().positive(),
+        y: z.number().int().positive(),
+      })
+      .optional(),
+  })
+  .superRefine((value, ctx) => {
+    if (
+      value.bufferType === undefined &&
+      value.cols === undefined &&
+      value.rows === undefined &&
+      value.cursor === undefined
+    ) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        message: "expectMeta requires at least one assertion (bufferType/cols/rows/cursor)",
+      });
+    }
+  });
 
 const snapshotStepSchema = z
   .object({
@@ -137,8 +177,11 @@ export const scenarioStepSchema = z.union([
   pressKeyStepSchema,
   resizeStepSchema,
   markStepSchema,
+  sleepStepSchema,
   waitForTextStepSchema,
   waitForStableScreenStepSchema,
+  waitForExitStepSchema,
+  expectMetaStepSchema,
   snapshotStepSchema,
   expectStepSchema,
   expectGoldenStepSchema,
