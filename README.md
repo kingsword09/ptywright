@@ -29,6 +29,15 @@ bun run src/index.ts
 - `start_script_recording` / `stop_script_recording`：录制 MCP 工具调用并导出可复跑脚本（JSON + goldens）
 - `list_sessions` / `close_session`
 
+### `press_key` Key Spec
+
+支持单键与“修饰键 + 单键”的组合写法（大小写不敏感，`+`/`-` 都可作为分隔符）：
+- 单字符：`"a"` / `"?"`（原样写入 PTY）
+- 特殊键：`Enter|Return`、`Esc|Escape`、`Backspace`、`Space`、`Tab`、`BackTab`
+- 组合键：`Ctrl+C`、`Ctrl+Shift+R`、`Alt+X`/`Meta+X`、`Shift+Tab`、`Ctrl+Up`
+- 导航键：`Up/Down/Left/Right`、`Home/End`、`PageUp/PageDown`、`Insert/Delete`、`F1..F12`
+- 兼容：`c-x`（等价 `Ctrl+X`）
+
 ## Tests
 
 ```bash
