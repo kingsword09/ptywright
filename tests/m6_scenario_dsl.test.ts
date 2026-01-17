@@ -3,7 +3,7 @@ import { expect, test } from "bun:test";
 import { existsSync, readFileSync } from "node:fs";
 import { join, resolve } from "node:path";
 
-import { defineScenario, ScenarioBuilder } from "../src/scenario/dsl";
+import { defineScript, ScriptBuilder } from "../src/scenario/dsl";
 import { loadScenarioModule } from "../src/scenario/module";
 import { runScenario } from "../src/scenario/runner";
 import { createAssertSnapshotEqualsStep } from "../src/scenario/steps";
@@ -20,8 +20,8 @@ test("scenario DSL supports custom steps (direct runner)", async () => {
     >,
   } satisfies Record<string, CustomStepHandler>;
 
-  const scenario = defineScenario(() =>
-    new ScenarioBuilder<never, CustomSteps>({
+  const scenario = defineScript(() =>
+    new ScriptBuilder<never, CustomSteps>({
       name: "m6_dsl_test",
       launch: {
         command: "bun",

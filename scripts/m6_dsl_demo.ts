@@ -1,4 +1,4 @@
-import { defineScenario, ScenarioBuilder } from "../src/scenario/dsl";
+import { defineScript, ScriptBuilder } from "../src/scenario/dsl";
 import { createAssertSnapshotEqualsStep } from "../src/scenario/steps";
 import type { CustomStepHandler } from "../src/scenario/runner";
 
@@ -12,8 +12,8 @@ export const steps = {
   >,
 } satisfies Record<string, CustomStepHandler>;
 
-export default defineScenario(() =>
-  new ScenarioBuilder<never, CustomSteps>({
+export default defineScript(() =>
+  new ScriptBuilder<never, CustomSteps>({
     name: "m6_dsl_demo",
     launch: {
       command: "bun",

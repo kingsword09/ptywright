@@ -16,7 +16,10 @@ type SendMouseStep = StepOf<"sendMouse">;
 
 type CustomStepMap = Record<string, unknown>;
 
-export class ScenarioBuilder<K extends SnapshotKey = never, Steps extends CustomStepMap = {}> {
+export type Script = Scenario;
+export type ScriptStep = ScenarioStep;
+
+export class ScriptBuilder<K extends SnapshotKey = never, Steps extends CustomStepMap = {}> {
   private readonly scenario: Scenario;
 
   constructor(init: {
@@ -48,8 +51,8 @@ export class ScenarioBuilder<K extends SnapshotKey = never, Steps extends Custom
   }
 
   use<NextK extends SnapshotKey, NextSteps extends CustomStepMap = Steps>(
-    fn: (s: ScenarioBuilder<K, Steps>) => ScenarioBuilder<NextK, NextSteps>,
-  ): ScenarioBuilder<NextK, NextSteps> {
+    fn: (s: ScriptBuilder<K, Steps>) => ScriptBuilder<NextK, NextSteps>,
+  ): ScriptBuilder<NextK, NextSteps> {
     return fn(this);
   }
 
@@ -110,50 +113,50 @@ export class ScenarioBuilder<K extends SnapshotKey = never, Steps extends Custom
 
   snapshot<K2 extends string>(
     step: Omit<SnapshotStep, "type"> & { saveAs: K2 },
-  ): ScenarioBuilder<K | K2, Steps>;
-  snapshot(step: Omit<SnapshotStep, "type">): ScenarioBuilder<K, Steps>;
-  snapshot(step: Omit<SnapshotStep, "type">): ScenarioBuilder<any, Steps> {
+  ): ScriptBuilder<K | K2, Steps>;
+  snapshot(step: Omit<SnapshotStep, "type">): ScriptBuilder<K, Steps>;
+  snapshot(step: Omit<SnapshotStep, "type">): ScriptBuilder<any, Steps> {
     this.step({ type: "snapshot", ...step });
     return this as any;
   }
 
   snapshotText<K2 extends string>(
     step: Omit<SnapshotStep, "type" | "kind"> & { saveAs: K2 },
-  ): ScenarioBuilder<K | K2, Steps>;
-  snapshotText(step?: Omit<SnapshotStep, "type" | "kind">): ScenarioBuilder<K, Steps>;
-  snapshotText(step: Omit<SnapshotStep, "type" | "kind"> = {}): ScenarioBuilder<any, Steps> {
+  ): ScriptBuilder<K | K2, Steps>;
+  snapshotText(step?: Omit<SnapshotStep, "type" | "kind">): ScriptBuilder<K, Steps>;
+  snapshotText(step: Omit<SnapshotStep, "type" | "kind"> = {}): ScriptBuilder<any, Steps> {
     return this.snapshot({ ...step, kind: "text" } as Omit<SnapshotStep, "type">);
   }
 
   snapshotView<K2 extends string>(
     step: Omit<SnapshotStep, "type" | "kind"> & { saveAs: K2 },
-  ): ScenarioBuilder<K | K2, Steps>;
-  snapshotView(step?: Omit<SnapshotStep, "type" | "kind">): ScenarioBuilder<K, Steps>;
-  snapshotView(step: Omit<SnapshotStep, "type" | "kind"> = {}): ScenarioBuilder<any, Steps> {
+  ): ScriptBuilder<K | K2, Steps>;
+  snapshotView(step?: Omit<SnapshotStep, "type" | "kind">): ScriptBuilder<K, Steps>;
+  snapshotView(step: Omit<SnapshotStep, "type" | "kind"> = {}): ScriptBuilder<any, Steps> {
     return this.snapshot({ ...step, kind: "view" } as Omit<SnapshotStep, "type">);
   }
 
   snapshotAnsi<K2 extends string>(
     step: Omit<SnapshotStep, "type" | "kind"> & { saveAs: K2 },
-  ): ScenarioBuilder<K | K2, Steps>;
-  snapshotAnsi(step?: Omit<SnapshotStep, "type" | "kind">): ScenarioBuilder<K, Steps>;
-  snapshotAnsi(step: Omit<SnapshotStep, "type" | "kind"> = {}): ScenarioBuilder<any, Steps> {
+  ): ScriptBuilder<K | K2, Steps>;
+  snapshotAnsi(step?: Omit<SnapshotStep, "type" | "kind">): ScriptBuilder<K, Steps>;
+  snapshotAnsi(step: Omit<SnapshotStep, "type" | "kind"> = {}): ScriptBuilder<any, Steps> {
     return this.snapshot({ ...step, kind: "ansi" } as Omit<SnapshotStep, "type">);
   }
 
   snapshotViewAnsi<K2 extends string>(
     step: Omit<SnapshotStep, "type" | "kind"> & { saveAs: K2 },
-  ): ScenarioBuilder<K | K2, Steps>;
-  snapshotViewAnsi(step?: Omit<SnapshotStep, "type" | "kind">): ScenarioBuilder<K, Steps>;
-  snapshotViewAnsi(step: Omit<SnapshotStep, "type" | "kind"> = {}): ScenarioBuilder<any, Steps> {
+  ): ScriptBuilder<K | K2, Steps>;
+  snapshotViewAnsi(step?: Omit<SnapshotStep, "type" | "kind">): ScriptBuilder<K, Steps>;
+  snapshotViewAnsi(step: Omit<SnapshotStep, "type" | "kind"> = {}): ScriptBuilder<any, Steps> {
     return this.snapshot({ ...step, kind: "view_ansi" } as Omit<SnapshotStep, "type">);
   }
 
   snapshotGrid<K2 extends string>(
     step: Omit<SnapshotStep, "type" | "kind"> & { saveAs: K2 },
-  ): ScenarioBuilder<K | K2, Steps>;
-  snapshotGrid(step?: Omit<SnapshotStep, "type" | "kind">): ScenarioBuilder<K, Steps>;
-  snapshotGrid(step: Omit<SnapshotStep, "type" | "kind"> = {}): ScenarioBuilder<any, Steps> {
+  ): ScriptBuilder<K | K2, Steps>;
+  snapshotGrid(step?: Omit<SnapshotStep, "type" | "kind">): ScriptBuilder<K, Steps>;
+  snapshotGrid(step: Omit<SnapshotStep, "type" | "kind"> = {}): ScriptBuilder<any, Steps> {
     return this.snapshot({ ...step, kind: "grid" } as Omit<SnapshotStep, "type">);
   }
 
@@ -170,13 +173,16 @@ export class ScenarioBuilder<K extends SnapshotKey = never, Steps extends Custom
   }
 }
 
-export function defineScenario<K extends SnapshotKey, Steps extends CustomStepMap>(
-  build: () => ScenarioBuilder<K, Steps> | Scenario,
+export function defineScript<K extends SnapshotKey, Steps extends CustomStepMap>(
+  build: () => ScriptBuilder<K, Steps> | Scenario,
 ): Scenario {
   const value = build();
   const scenario =
     typeof value === "object" && value && "build" in value
-      ? (value as ScenarioBuilder<any, any>).build()
+      ? (value as ScriptBuilder<any, any>).build()
       : value;
   return scenarioSchema.parse(scenario) as Scenario;
 }
+
+export const defineScenario = defineScript;
+export { ScriptBuilder as ScenarioBuilder };
