@@ -32,11 +32,8 @@
     "format:check": "oxfmt --check src tests package.json tsconfig.json .oxlintrc.json .oxfmtrc.json",
     "trace:report": "bun run src/trace/report.ts",
     "trace:cast-to-txt": "bun run src/trace/cast_to_txt.ts",
-    "scenario:run": "bun run src/scenario/run.ts",
     "script:run": "bun run src/scenario/run.ts",
-    "scenario:run-all": "bun run src/scenario/run_all.ts",
     "script:run-all": "bun run src/scenario/run_all.ts",
-    "scenario:m5-mask-demo": "bun run src/scenario/run.ts scripts/m5_mask_demo.json",
     "script:m5-mask-demo": "bun run src/scenario/run.ts scripts/m5_mask_demo.json"
   },
   "dependencies": {

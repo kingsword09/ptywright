@@ -22,6 +22,9 @@ test("MCP server smoke test", async () => {
     command: process.execPath,
     args: ["src/index.ts"],
     cwd: process.cwd(),
+    env: {
+      PTYWRIGHT_CAPS: "all",
+    },
     stderr: "pipe",
   });
 
@@ -39,15 +42,15 @@ test("MCP server smoke test", async () => {
   expect(list.tools.some((t) => t.name === "send_mouse")).toBe(true);
   expect(list.tools.some((t) => t.name === "snapshot_cast")).toBe(true);
   expect(list.tools.some((t) => t.name === "mark")).toBe(true);
-  expect(list.tools.some((t) => t.name === "run_scenario")).toBe(true);
   expect(list.tools.some((t) => t.name === "run_script")).toBe(true);
+  expect(list.tools.some((t) => t.name === "run_all_scripts")).toBe(true);
   expect(list.tools.some((t) => t.name === "start_script_recording")).toBe(true);
   expect(list.tools.some((t) => t.name === "stop_script_recording")).toBe(true);
 
   const scenarioRun = await client.callTool({
     name: "run_script",
     arguments: {
-      scenarioPath: "scripts/m6_json_custom_demo.json",
+      scriptPath: "scripts/m6_json_custom_demo.json",
       stepsPath: "scripts/m6_json_custom_steps.ts",
       artifactsDir: ".tmp/test_scenarios/mcp_run_script",
     },

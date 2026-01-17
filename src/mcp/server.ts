@@ -1,13 +1,18 @@
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
+import type { ToolAnnotations } from "@modelcontextprotocol/sdk/types.js";
 import { z } from "zod";
 
 import { SessionManager } from "../session/session_manager";
 import { formatSnapshotView } from "../terminal/view";
 import { runScenarioPath } from "../scenario/path";
+import { runAllScripts } from "../scenario/run_all";
 import { ScriptRecordingManager } from "./script_recording";
+
+export type PtywrightCapability = "core" | "debug" | "script" | "recording" | "all";
 
 export type PtywrightServerOptions = {
   sessionManager?: SessionManager;
+  capabilities?: PtywrightCapability[];
 };
 
 const textMaskRuleSchema = z.object({
@@ -29,7 +34,39 @@ export function createPtywrightServer(options?: PtywrightServerOptions): {
     version: "0.1.0",
   });
 
-  server.tool(
+  const caps = resolveCapabilities(options?.capabilities, process.env.PTYWRIGHT_CAPS);
+
+  function isEnabled(category: Exclude<PtywrightCapability, "all">): boolean {
+    return caps.all || caps.enabled.has(category);
+  }
+
+  function tool<Shape extends z.ZodRawShape>(
+    category: Exclude<PtywrightCapability, "all">,
+    name: string,
+    description: string,
+    schema: Shape,
+    annotations: ToolAnnotations | undefined,
+    handler: (args: z.infer<z.ZodObject<Shape>>) => unknown,
+  ): void {
+    if (!isEnabled(category)) return;
+    const { title, ...rest } = annotations ?? {};
+    const cleanedAnnotations = Object.keys(rest).length ? (rest as ToolAnnotations) : undefined;
+
+    server.registerTool(
+      name,
+      {
+        title,
+        description,
+        inputSchema: schema,
+        annotations: cleanedAnnotations,
+        _meta: { category },
+      },
+      handler as any,
+    );
+  }
+
+  tool(
+    "core",
     "launch_session",
     "Launch a new PTY session running a command (returns sessionId).",
     {
@@ -40,6 +77,10 @@ export function createPtywrightServer(options?: PtywrightServerOptions): {
       cols: z.number().int().optional(),
       rows: z.number().int().optional(),
       name: z.string().optional(),
+    },
+    {
+      title: "Launch Session",
+      openWorldHint: true,
     },
     async (args) => {
       const session = sessions.launchSession(args);
@@ -64,7 +105,8 @@ export function createPtywrightServer(options?: PtywrightServerOptions): {
     },
   );
 
-  server.tool(
+  tool(
+    "core",
     "send_text",
     "Send text input to a session (optionally press Enter).",
     {
@@ -72,6 +114,7 @@ export function createPtywrightServer(options?: PtywrightServerOptions): {
       text: z.string(),
       enter: z.boolean().optional(),
     },
+    { title: "Send Text" },
     async (args) => {
       const session = sessions.getSession(args.sessionId);
       if (!session) {
@@ -83,13 +126,15 @@ export function createPtywrightServer(options?: PtywrightServerOptions): {
     },
   );
 
-  server.tool(
+  tool(
+    "core",
     "press_key",
     "Send a key or key chord to a session (e.g. Enter, Ctrl+C, Shift+Tab).",
     {
       sessionId: z.string().min(1),
       key: z.string().min(1),
     },
+    { title: "Press Key" },
     async (args) => {
       const session = sessions.getSession(args.sessionId);
       if (!session) {
@@ -105,7 +150,8 @@ export function createPtywrightServer(options?: PtywrightServerOptions): {
     },
   );
 
-  server.tool(
+  tool(
+    "core",
     "send_mouse",
     "Send an SGR mouse event (click/move/scroll) to a session.",
     {
@@ -118,6 +164,7 @@ export function createPtywrightServer(options?: PtywrightServerOptions): {
       alt: z.boolean().optional(),
       ctrl: z.boolean().optional(),
     },
+    { title: "Send Mouse Event" },
     async (args) => {
       const session = sessions.getSession(args.sessionId);
       if (!session) {
@@ -152,7 +199,8 @@ export function createPtywrightServer(options?: PtywrightServerOptions): {
     },
   );
 
-  server.tool(
+  tool(
+    "core",
     "resize",
     "Resize the session terminal (cols/rows).",
     {
@@ -160,6 +208,7 @@ export function createPtywrightServer(options?: PtywrightServerOptions): {
       cols: z.number().int(),
       rows: z.number().int(),
     },
+    { title: "Resize Terminal" },
     async (args) => {
       const session = sessions.getSession(args.sessionId);
       if (!session) {
@@ -171,7 +220,8 @@ export function createPtywrightServer(options?: PtywrightServerOptions): {
     },
   );
 
-  server.tool(
+  tool(
+    "core",
     "snapshot_text",
     "Capture plain text from the visible screen or full buffer (best for stable assertions/goldens).",
     {
@@ -182,6 +232,11 @@ export function createPtywrightServer(options?: PtywrightServerOptions): {
       maxLines: z.number().int().positive().optional(),
       tailLines: z.number().int().positive().optional(),
       mask: z.array(textMaskRuleSchema).optional(),
+    },
+    {
+      title: "Snapshot Text",
+      readOnlyHint: true,
+      idempotentHint: true,
     },
     async (args) => {
       const session = sessions.getSession(args.sessionId);
@@ -196,8 +251,8 @@ export function createPtywrightServer(options?: PtywrightServerOptions): {
       try {
         ({ text, hash } = await session.snapshotText({
           scope: args.scope,
-          trimRight: args.trimRight,
-          trimBottom: args.trimBottom,
+          trimRight: args.trimRight ?? true,
+          trimBottom: args.trimBottom ?? true,
           maxLines: args.maxLines,
           tailLines: args.tailLines,
           mask: args.mask,
@@ -207,12 +262,13 @@ export function createPtywrightServer(options?: PtywrightServerOptions): {
       }
       return {
         content: [{ type: "text", text }],
-        structuredContent: { sessionId: args.sessionId, hash, text },
+        structuredContent: { sessionId: args.sessionId, hash },
       };
     },
   );
 
-  server.tool(
+  tool(
+    "debug",
     "snapshot_ansi",
     "Capture ANSI-rendered snapshot (debug/human inspection; less stable than plain text).",
     {
@@ -223,6 +279,11 @@ export function createPtywrightServer(options?: PtywrightServerOptions): {
       maxLines: z.number().int().positive().optional(),
       tailLines: z.number().int().positive().optional(),
       mask: z.array(textMaskRuleSchema).optional(),
+    },
+    {
+      title: "Snapshot ANSI",
+      readOnlyHint: true,
+      idempotentHint: true,
     },
     async (args) => {
       const session = sessions.getSession(args.sessionId);
@@ -239,8 +300,8 @@ export function createPtywrightServer(options?: PtywrightServerOptions): {
       try {
         ({ ansi, plain, hash } = await session.snapshotAnsi({
           scope: args.scope,
-          trimRight: args.trimRight,
-          trimBottom: args.trimBottom,
+          trimRight: args.trimRight ?? true,
+          trimBottom: args.trimBottom ?? true,
           maxLines: args.maxLines,
           tailLines: args.tailLines,
           mask: args.mask,
@@ -256,13 +317,19 @@ export function createPtywrightServer(options?: PtywrightServerOptions): {
     },
   );
 
-  server.tool(
+  tool(
+    "debug",
     "snapshot_grid",
     "Capture a structured grid snapshot (rows/cols/cursor/lines).",
     {
       sessionId: z.string().min(1),
       trimRight: z.boolean().optional(),
       includeStyles: z.boolean().optional(),
+    },
+    {
+      title: "Snapshot Grid",
+      readOnlyHint: true,
+      idempotentHint: true,
     },
     async (args) => {
       const session = sessions.getSession(args.sessionId);
@@ -280,12 +347,18 @@ export function createPtywrightServer(options?: PtywrightServerOptions): {
     },
   );
 
-  server.tool(
+  tool(
+    "debug",
     "snapshot_cast",
     "Export the asciicast v2 trace (useful for debugging/report playback).",
     {
       sessionId: z.string().min(1),
       tailEvents: z.number().int().positive().optional(),
+    },
+    {
+      title: "Snapshot Asciicast",
+      readOnlyHint: true,
+      idempotentHint: true,
     },
     async (args) => {
       const session = sessions.getSession(args.sessionId);
@@ -310,13 +383,15 @@ export function createPtywrightServer(options?: PtywrightServerOptions): {
     },
   );
 
-  server.tool(
+  tool(
+    "recording",
     "mark",
     "Add a marker to the session trace (used for recording/checkpoints).",
     {
       sessionId: z.string().min(1),
       label: z.string().optional(),
     },
+    { title: "Mark Trace" },
     async (args) => {
       const session = sessions.getSession(args.sessionId);
       if (!session) {
@@ -330,7 +405,8 @@ export function createPtywrightServer(options?: PtywrightServerOptions): {
     },
   );
 
-  server.tool(
+  tool(
+    "core",
     "wait_for_text",
     "Wait until a text/regex appears in the session (polling).",
     {
@@ -341,6 +417,11 @@ export function createPtywrightServer(options?: PtywrightServerOptions): {
       timeoutMs: z.number().int().optional(),
       intervalMs: z.number().int().optional(),
       includeText: z.boolean().optional(),
+    },
+    {
+      title: "Wait For Text",
+      readOnlyHint: true,
+      idempotentHint: true,
     },
     async (args) => {
       const session = sessions.getSession(args.sessionId);
@@ -385,7 +466,8 @@ export function createPtywrightServer(options?: PtywrightServerOptions): {
     },
   );
 
-  server.tool(
+  tool(
+    "core",
     "wait_for_stable_screen",
     "Wait until consecutive text snapshots remain unchanged for a quiet window (reduce flakiness).",
     {
@@ -394,6 +476,11 @@ export function createPtywrightServer(options?: PtywrightServerOptions): {
       quietMs: z.number().int().optional(),
       intervalMs: z.number().int().optional(),
       includeText: z.boolean().optional(),
+    },
+    {
+      title: "Wait For Stable Screen",
+      readOnlyHint: true,
+      idempotentHint: true,
     },
     async (args) => {
       const session = sessions.getSession(args.sessionId);
@@ -429,7 +516,8 @@ export function createPtywrightServer(options?: PtywrightServerOptions): {
     },
   );
 
-  server.tool(
+  tool(
+    "core",
     "snapshot_view",
     "Capture a formatted, human-readable snapshot view (includes meta + optional line numbers).",
     {
@@ -441,6 +529,11 @@ export function createPtywrightServer(options?: PtywrightServerOptions): {
       tailLines: z.number().int().positive().optional(),
       lineNumbers: z.boolean().optional(),
       mask: z.array(textMaskRuleSchema).optional(),
+    },
+    {
+      title: "Snapshot View",
+      readOnlyHint: true,
+      idempotentHint: true,
     },
     async (args) => {
       const session = sessions.getSession(args.sessionId);
@@ -482,7 +575,8 @@ export function createPtywrightServer(options?: PtywrightServerOptions): {
     },
   );
 
-  server.tool(
+  tool(
+    "debug",
     "snapshot_view_ansi",
     "Capture a formatted ANSI snapshot view (includes meta + optional line numbers).",
     {
@@ -494,6 +588,11 @@ export function createPtywrightServer(options?: PtywrightServerOptions): {
       tailLines: z.number().int().positive().optional(),
       lineNumbers: z.boolean().optional(),
       mask: z.array(textMaskRuleSchema).optional(),
+    },
+    {
+      title: "Snapshot View (ANSI)",
+      readOnlyHint: true,
+      idempotentHint: true,
     },
     async (args) => {
       const session = sessions.getSession(args.sessionId);
@@ -535,45 +634,96 @@ export function createPtywrightServer(options?: PtywrightServerOptions): {
     },
   );
 
-  function registerRunScriptTool(name: "run_scenario" | "run_script"): void {
-    server.tool(
-      name,
-      "Run a JSON/TS script via the runner and return artifact paths (prefer this for regression runs).",
-      {
-        scenarioPath: z.string().min(1),
-        artifactsDir: z.string().optional(),
-        stepsPath: z.string().optional(),
-        updateGoldens: z.boolean().optional(),
-      },
-      async (args) => {
-        const result = await runScenarioPath(args.scenarioPath, {
-          artifactsDir: args.artifactsDir,
+  tool(
+    "script",
+    "run_script",
+    "Run a JSON/TS script via the runner and return artifact paths (prefer this for regression runs).",
+    {
+      scriptPath: z.string().min(1),
+      artifactsDir: z.string().optional(),
+      stepsPath: z.string().optional(),
+      updateGoldens: z.boolean().optional(),
+    },
+    {
+      title: "Run Script",
+      openWorldHint: true,
+      destructiveHint: true,
+    },
+    async (args) => {
+      const result = await runScenarioPath(args.scriptPath, {
+        artifactsDir: args.artifactsDir,
+        stepsPath: args.stepsPath,
+        updateGoldens: args.updateGoldens,
+      });
+
+      if (!result.ok) {
+        return toolError(result.error, {
+          scenarioName: result.scenarioName,
+          artifactsDir: result.artifactsDir,
+          castPath: result.castPath,
+          reportPath: result.reportPath,
+          failureArtifacts: result.failureArtifacts,
+        });
+      }
+
+      return {
+        content: [{ type: "text", text: `ok artifacts=${result.artifactsDir}` }],
+        structuredContent: result,
+      };
+    },
+  );
+
+  tool(
+    "script",
+    "run_all_scripts",
+    "Run all JSON/TS scripts in a directory (recursive) and return a summary + artifact paths.",
+    {
+      dir: z.string().optional(),
+      artifactsRoot: z.string().optional(),
+      stepsPath: z.string().optional(),
+      updateGoldens: z.boolean().optional(),
+    },
+    {
+      title: "Run All Scripts",
+      openWorldHint: true,
+      destructiveHint: true,
+    },
+    async (args) => {
+      try {
+        const result = await runAllScripts({
+          dir: args.dir,
+          artifactsRoot: args.artifactsRoot,
           stepsPath: args.stepsPath,
           updateGoldens: args.updateGoldens,
         });
 
-        if (!result.ok) {
-          return toolError(result.error, {
-            scenarioName: result.scenarioName,
-            artifactsDir: result.artifactsDir,
-            castPath: result.castPath,
-            reportPath: result.reportPath,
-            failureArtifacts: result.failureArtifacts,
-          });
+        const failures = result.entries.filter((e) => !e.result.ok);
+        const summaryLines = [
+          result.ok ? "ok" : "failed",
+          `count=${result.entries.length}`,
+          `failures=${failures.length}`,
+          `dir=${result.dir}`,
+        ];
+
+        if (failures.length > 0) {
+          for (const f of failures) {
+            if (f.result.ok) continue;
+            summaryLines.push(`- ${f.filePath}: ${f.result.error}`);
+          }
         }
 
         return {
-          content: [{ type: "text", text: `ok artifacts=${result.artifactsDir}` }],
+          content: [{ type: "text", text: summaryLines.join("\n") }],
           structuredContent: result,
         };
-      },
-    );
-  }
+      } catch (error) {
+        return toolError((error as Error).message);
+      }
+    },
+  );
 
-  registerRunScriptTool("run_scenario");
-  registerRunScriptTool("run_script");
-
-  server.tool(
+  tool(
+    "recording",
     "start_script_recording",
     "Start recording MCP tool calls into a replayable script (with optional golden checkpoints via mark()).",
     {
@@ -582,6 +732,10 @@ export function createPtywrightServer(options?: PtywrightServerOptions): {
       goldenDir: z.string().optional(),
       overwrite: z.boolean().optional(),
       mask: z.array(textMaskRuleSchema).optional(),
+    },
+    {
+      title: "Start Script Recording",
+      openWorldHint: true,
     },
     async (args) => {
       try {
@@ -607,12 +761,17 @@ export function createPtywrightServer(options?: PtywrightServerOptions): {
     },
   );
 
-  server.tool(
+  tool(
+    "recording",
     "stop_script_recording",
     "Stop recording and optionally write the script + goldens to disk.",
     {
       recordingId: z.string().min(1),
       writeFiles: z.boolean().optional(),
+    },
+    {
+      title: "Stop Script Recording",
+      destructiveHint: true,
     },
     async (args) => {
       try {
@@ -633,11 +792,16 @@ export function createPtywrightServer(options?: PtywrightServerOptions): {
     },
   );
 
-  server.tool(
+  tool(
+    "core",
     "close_session",
     "Close a running session.",
     {
       sessionId: z.string().min(1),
+    },
+    {
+      title: "Close Session",
+      destructiveHint: true,
     },
     async (args) => {
       const ok = sessions.closeSession(args.sessionId);
@@ -648,15 +812,70 @@ export function createPtywrightServer(options?: PtywrightServerOptions): {
     },
   );
 
-  server.tool("list_sessions", "List active session IDs.", {}, async () => {
-    const sessionIds = sessions.listSessionIds();
-    return {
-      content: [{ type: "text", text: sessionIds.join("\n") }],
-      structuredContent: { sessionIds },
-    };
-  });
+  tool(
+    "core",
+    "list_sessions",
+    "List active session IDs.",
+    {},
+    {
+      title: "List Sessions",
+      readOnlyHint: true,
+      idempotentHint: true,
+    },
+    async (_args) => {
+      const sessionIds = sessions.listSessionIds();
+      return {
+        content: [{ type: "text", text: sessionIds.join("\n") }],
+        structuredContent: { sessionIds },
+      };
+    },
+  );
 
   return { server, sessions };
+}
+
+function resolveCapabilities(
+  capabilities: PtywrightCapability[] | undefined,
+  envValue: string | undefined,
+): { all: boolean; enabled: Set<Exclude<PtywrightCapability, "all">> } {
+  const requested = capabilities?.length ? capabilities : parseCapabilitiesEnv(envValue);
+  const normalized = new Set<Exclude<PtywrightCapability, "all">>();
+  let all = false;
+
+  for (const cap of requested) {
+    if (cap === "all") {
+      all = true;
+      continue;
+    }
+    normalized.add(cap);
+  }
+
+  if (!all && normalized.size === 0) {
+    normalized.add("core");
+  }
+
+  return { all, enabled: normalized };
+}
+
+function parseCapabilitiesEnv(envValue: string | undefined): PtywrightCapability[] {
+  if (!envValue?.trim()) return [];
+  const parts = envValue
+    .split(/[,\s]+/g)
+    .map((p) => p.trim().toLowerCase())
+    .filter(Boolean);
+
+  const out: PtywrightCapability[] = [];
+
+  for (const p of parts) {
+    if (p === "all") out.push("all");
+    else if (p === "core") out.push("core");
+    else if (p === "debug") out.push("debug");
+    else if (p === "script" || p === "scripts" || p === "runner" || p === "run") out.push("script");
+    else if (p === "recording" || p === "record" || p === "rec") out.push("recording");
+    else throw new Error(`unknown PTYWRIGHT_CAPS capability: ${p}`);
+  }
+
+  return out;
 }
 
 function toolError(

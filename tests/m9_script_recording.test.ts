@@ -13,6 +13,9 @@ test("MCP script recording exports a runnable JSON script + goldens", async () =
     command: process.execPath,
     args: ["src/index.ts"],
     cwd: process.cwd(),
+    env: {
+      PTYWRIGHT_CAPS: "core,recording",
+    },
     stderr: "pipe",
   });
 

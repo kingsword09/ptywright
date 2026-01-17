@@ -6,28 +6,52 @@
 
 ```bash
 bun install
+
+# 默认仅加载 core tools（更省 token）
 bun run src/index.ts
+
+# 可选：加载全量 tools
+# PTYWRIGHT_CAPS=all bun run src/index.ts
 ```
 
 ## Tools (MVP)
+
+工具集按 capability 过滤（减少 MCP tool 体积/上下文压力）：
+
+- 默认：`PTYWRIGHT_CAPS=core`
+- 全量：`PTYWRIGHT_CAPS=all`
+- 组合：`PTYWRIGHT_CAPS=core,debug,script,recording`
+
+### core（默认）
 
 - `launch_session`：启动 PTY 会话
 - `send_text` / `press_key`：发送输入
 - `send_mouse`：发送 SGR 鼠标事件（click/move/scroll）
 - `resize`：调整终端尺寸
 - `snapshot_text`：返回可见屏幕文本（适合 Agent “看界面”与做 golden）
-- `snapshot_ansi`：返回带 ANSI/SGR 样式的可见屏幕（适合 debug/人眼验收）
 - `snapshot_view`：更适合人看的快照（带元信息+行号）
-- `snapshot_view_ansi`：带 ANSI/SGR 样式的 `snapshot_view`
-- `mask`（可选）：`snapshot_text/snapshot_ansi/snapshot_view/snapshot_view_ansi` 支持 `mask=[{regex,flags?,replacement?,preserveLength?}]`，用于把随机 id/时间戳等变成可 diff 的稳定快照
-- `snapshot_grid`：返回结构化屏幕网格（rows/cols/cursor/lines）
-- `snapshot_cast`：导出 asciicast 事件流（用于录像/回放/失败诊断）
-- `mark`：在 trace 中打点（asciicast marker event）
 - `wait_for_text`：等待文本/正则出现
 - `wait_for_stable_screen`：等待屏幕在 quiet window 内稳定（降低 flaky）
-- `run_script` / `run_scenario`：运行 `file.json|file.ts` 并产出 artifacts（cast/report/失败快照）
-- `start_script_recording` / `stop_script_recording`：录制 MCP 工具调用并导出可复跑脚本（JSON + goldens）
 - `list_sessions` / `close_session`
+
+### debug（可选）
+
+- `snapshot_ansi`：返回带 ANSI/SGR 样式的可见屏幕（适合 debug/人眼验收）
+- `snapshot_view_ansi`：带 ANSI/SGR 样式的 `snapshot_view`
+- `snapshot_grid`：返回结构化屏幕网格（rows/cols/cursor/lines）
+- `snapshot_cast`：导出 asciicast 事件流（用于录像/回放/失败诊断）
+
+### script（可选）
+
+- `run_script`：运行 `scriptPath=file.json|file.ts` 并产出 artifacts（cast/report/失败快照）
+- `run_all_scripts`：批量运行目录内脚本（递归）
+
+### recording（可选）
+
+- `start_script_recording` / `stop_script_recording`：录制 MCP 工具调用并导出可复跑脚本（JSON + goldens）
+- `mark`：在 trace 中打点（asciicast marker event）
+
+`mask`（可选）：`snapshot_text/snapshot_ansi/snapshot_view/snapshot_view_ansi` 支持 `mask=[{regex,flags?,replacement?,preserveLength?}]`，用于把随机 id/时间戳等变成可 diff 的稳定快照
 
 ### `press_key` Key Spec
 
@@ -100,6 +124,8 @@ bun run script:run scripts/m6_json_custom_demo.json --steps scripts/m6_json_cust
 - `sendMouse`：发送 SGR 鼠标事件（down/up/move/click/scroll）
 
 ## Script Recording (MCP)
+
+需要启用 `recording` capability（例如 `PTYWRIGHT_CAPS=core,recording` 或 `PTYWRIGHT_CAPS=all`）。
 
 在任意 MCP client/Agent 通过 MCP tools 驱动时，可以一键把工具调用“录成脚本”，并在 `mark` 处自动落盘 golden：
 
