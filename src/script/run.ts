@@ -58,6 +58,14 @@ function parseArgs(argv: string[]): {
   };
 }
 
+function logLines(lines: Array<string | null | undefined>, stderr: boolean): void {
+  const filtered = lines.map((l) => l?.trim()).filter(Boolean) as string[];
+  for (const line of filtered) {
+    // eslint-disable-next-line no-console
+    (stderr ? console.error : console.log)(line);
+  }
+}
+
 if (import.meta.main) {
   try {
     const args = parseArgs(process.argv.slice(2));
@@ -66,13 +74,31 @@ if (import.meta.main) {
       updateGoldens: args.updateGoldens,
       stepsPath: args.stepsPath,
     });
+
     if (!result.ok) {
-      // eslint-disable-next-line no-console
-      console.error(result.error);
+      logLines(
+        [
+          result.error,
+          result.artifactsDir ? `artifacts=${result.artifactsDir}` : null,
+          result.reportPath ? `report=${result.reportPath}` : null,
+          result.castPath ? `cast=${result.castPath}` : null,
+          result.failureArtifacts?.lastViewPath
+            ? `last=${result.failureArtifacts.lastViewPath}`
+            : null,
+          result.failureArtifacts?.errorPath ? `error=${result.failureArtifacts.errorPath}` : null,
+        ],
+        true,
+      );
       process.exitCode = 1;
     } else {
-      // eslint-disable-next-line no-console
-      console.log(`ok artifacts=${result.artifactsDir}`);
+      logLines(
+        [
+          `ok artifacts=${result.artifactsDir}`,
+          result.reportPath ? `report=${result.reportPath}` : null,
+          result.castPath ? `cast=${result.castPath}` : null,
+        ],
+        false,
+      );
     }
   } catch (error) {
     // eslint-disable-next-line no-console

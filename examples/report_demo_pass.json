@@ -1,0 +1,56 @@
+{
+  "$schema": "../schemas/ptywright-script.schema.json",
+  "name": "report_demo_pass",
+  "artifactsDir": ".tmp/examples/report_demo_pass",
+  "launch": {
+    "command": "bun",
+    "args": ["run", "tests/fixtures/trace_demo.ts"],
+    "cwd": ".",
+    "cols": 60,
+    "rows": 10,
+    "name": "xterm-256color"
+  },
+  "trace": {
+    "saveCast": true,
+    "saveReport": true,
+    "reportScope": "visible",
+    "reportMaxFrames": 80
+  },
+  "steps": [
+    {
+      "type": "waitForText",
+      "scope": "visible",
+      "text": "READY",
+      "timeoutMs": 5000,
+      "intervalMs": 50
+    },
+    { "type": "mark", "label": "ready" },
+
+    {
+      "type": "waitForText",
+      "scope": "visible",
+      "text": "DONE",
+      "timeoutMs": 5000,
+      "intervalMs": 50
+    },
+    { "type": "mark", "label": "done" },
+
+    { "type": "resize", "cols": 70, "rows": 12 },
+    { "type": "mark", "label": "after_resize" },
+
+    {
+      "type": "snapshot",
+      "kind": "view",
+      "scope": "visible",
+      "trimRight": true,
+      "trimBottom": true,
+      "saveTo": "screen.view.txt"
+    },
+
+    {
+      "type": "expect",
+      "from": "last",
+      "contains": ["READY", "DONE"]
+    }
+  ]
+}
