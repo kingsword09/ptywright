@@ -6,6 +6,7 @@ export type AsciicastHeader = {
   env?: Record<string, string>;
   title?: string;
   command?: string;
+  term?: string;
 };
 
 export type AsciicastEvent = [timeSeconds: number, type: "o" | "i" | "m" | "r", data: string];

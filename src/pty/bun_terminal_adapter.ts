@@ -49,21 +49,16 @@ export class BunTerminalAdapter implements PtyAdapter {
     const flushPendingDataTo = (listener: Listener<string>): void => {
       if (pendingData.length === 0) return;
       for (const chunk of pendingData) listener(chunk);
-      pendingData.length = 0;
     };
 
     const dispatchExit = (event: PtyExitEvent): void => {
-      if (exitListeners.size === 0) {
-        pendingExit = event;
-        return;
-      }
+      pendingExit = event;
       for (const listener of exitListeners) listener(event);
     };
 
     const flushExitTo = (listener: Listener<PtyExitEvent>): void => {
       if (!pendingExit) return;
       listener(pendingExit);
-      pendingExit = null;
     };
 
     const terminalOptions: TerminalOptions = {
@@ -131,9 +126,7 @@ export class BunTerminalAdapter implements PtyAdapter {
       },
       onData: (listener) => {
         dataListeners.add(listener);
-        if (dataListeners.size === 1) {
-          flushPendingDataTo(listener);
-        }
+        flushPendingDataTo(listener);
         return createDisposable(dataListeners, listener);
       },
       onExit: (listener) => {

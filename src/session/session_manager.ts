@@ -33,11 +33,11 @@ export class SessionManager {
     const cols = clampInt(args.cols ?? 80, 1, 500);
     const rows = clampInt(args.rows ?? 24, 1, 300);
     const cwd = args.cwd ?? process.cwd();
-    const name = args.name ?? "xterm-256color";
+    const term = args.env?.TERM ?? args.name ?? "xterm-256color";
 
     const env = mergeEnv(
       {
-        TERM: name,
+        TERM: term,
         COLORTERM: "truecolor",
       },
       args.env,
@@ -47,7 +47,7 @@ export class SessionManager {
       cols,
       rows,
       cwd,
-      name,
+      name: term,
       env,
     });
 

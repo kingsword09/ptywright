@@ -80,6 +80,7 @@ export class TerminalSession {
       env: options.trace?.env,
       title: options.trace?.title ?? options.id,
       command: options.trace?.command,
+      term: options.trace?.env?.TERM,
     });
 
     this.disposables.push(
@@ -172,7 +173,8 @@ export class TerminalSession {
       trimRight: options?.trimRight,
     });
 
-    if (options?.trimBottom) {
+    const trimBottom = options?.trimBottom ?? true;
+    if (trimBottom) {
       lines = trimBottomEmptyLines(lines);
     }
 
@@ -212,7 +214,8 @@ export class TerminalSession {
       trimRight: options?.trimRight,
     });
 
-    if (options?.trimBottom) {
+    const trimBottom = options?.trimBottom ?? true;
+    if (trimBottom) {
       lines = trimBottomEmptyAnsiLines(lines);
     }
 
@@ -383,13 +386,22 @@ export class TerminalSession {
     }
   }
 
+  private writePtySafely(data: string): void {
+    if (this.isClosed()) return;
+    try {
+      this.pty.write(data);
+    } catch {
+      // Ignore: PTY may have closed between trigger and response.
+    }
+  }
+
   private handleCsiDsr(params: (number | number[])[]): boolean {
     if (params.length !== 1) return false;
 
     const raw = params[0];
     const value = Array.isArray(raw) ? raw[0] : raw;
     if (value === 5) {
-      this.pty.write(`${ESC}[0n`);
+      this.writePtySafely(`${ESC}[0n`);
       return true;
     }
 
@@ -398,7 +410,7 @@ export class TerminalSession {
     const meta = this.getMeta();
     const row = meta.baseY + meta.cursorY - meta.viewportY + 1;
     const col = meta.cursorX + 1;
-    this.pty.write(`${ESC}[${row};${col}R`);
+    this.writePtySafely(`${ESC}[${row};${col}R`);
     return true;
   }
 
@@ -409,7 +421,7 @@ export class TerminalSession {
     const value = raw === undefined ? 0 : Array.isArray(raw) ? raw[0] : raw;
     if (value !== 0) return false;
 
-    this.pty.write(`${ESC}[?1;2c`);
+    this.writePtySafely(`${ESC}[?1;2c`);
     return true;
   }
 }
