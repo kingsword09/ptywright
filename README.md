@@ -7,11 +7,15 @@
 ```bash
 bun install
 
-# 默认加载全量 tools
-bun run src/index.ts
+# 默认：启动 MCP server（等价 `ptywright mcp`）
+bun run bin/ptywright
+
+# 显式写法：
+# bun run bin/ptywright mcp
 
 # 可选：减少 tool 数量（降低 Agent 上下文压力）
-# PTYWRIGHT_CAPS=core bun run src/index.ts
+# bun run bin/ptywright mcp --caps core
+# 或：PTYWRIGHT_CAPS=core bun run bin/ptywright
 ```
 
 ## Tools (MVP)
@@ -75,10 +79,13 @@ bun test
 
 ## Use With MCP Clients（可选）
 
+本仓库也提供了一个可选的 Codex skill：`skills/ptywright-testing/`，用于指导 Agent 如何用 ptywright MCP/CLI 跑回归并读取 `run.summary.json`（尽量不把超长报告塞进上下文）。
+
 本项目是一个 stdio transport 的 MCP server。直接启动：
 
 ```bash
-bun run src/index.ts
+# 默认等价 `ptywright mcp`
+bun run bin/ptywright
 ```
 
 然后在你使用的 MCP client 里把它作为一个 stdio server 配置进去即可（不同 client 的配置方式不同）。
@@ -95,6 +102,8 @@ bun run src/index.ts
 
 ```bash
 bun run script:run scripts/m5_mask_demo.json
+# 或（CLI）
+bun run bin/ptywright run scripts/m5_mask_demo.json
 # 或
 bun run script:m5-mask-demo
 ```
@@ -103,12 +112,18 @@ bun run script:m5-mask-demo
 
 ```bash
 bun run script:run-all
+# 或（CLI）
+bun run bin/ptywright run-all
 ```
+
+会生成一个总览报告（类似 Playwright report 首页）：
+- 默认：`.tmp/run-all/index.html` + `.tmp/run-all/run.summary.json`
+- 若传入 `--artifacts-root <dir>`：写到 `<dir>/index.html` + `<dir>/run.summary.json`
 
 如果 JSON 里用到了 `type:"custom"`，用 `--steps <module.ts>` 注入 handlers（模块导出 `steps` 对象即可）：
 
 ```bash
-bun run script:run scripts/m6_json_custom_demo.json --steps scripts/m6_json_custom_steps.ts
+bun run script:run examples/json_custom_steps_demo.json --steps scripts/m6_json_custom_steps.ts
 ```
 
 产物默认写到 `.tmp/runs/<name>/`（可用 `--artifacts-dir` 覆盖）。
@@ -117,6 +132,8 @@ bun run script:run scripts/m6_json_custom_demo.json --steps scripts/m6_json_cust
 - `failure.error.txt`（错误堆栈）
 - `failure.step.json`（失败的 step 信息）
 - `failure.last.txt` / `failure.last.view.txt`（最后一帧快照）
+
+`report.html` 默认以“终端截图”视图展示（隐藏行号/hash/diff 高亮）。点击顶部 `debug` badge 可切换到调试视图。
 
 内置 steps（无需 `--steps`）：
 - `sleep`：固定等待（尽量优先用 `waitForText` / `waitForStableScreen`）

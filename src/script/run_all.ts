@@ -1,8 +1,9 @@
-import { readdirSync, statSync } from "node:fs";
-import { basename, join, resolve } from "node:path";
+import { readdirSync, readFileSync, statSync } from "node:fs";
+import { join, relative, resolve } from "node:path";
 
 import { runScriptPath } from "./path";
 import type { RunScriptPathResult } from "./path";
+import { writeSuiteReportArtifacts } from "./suite_report";
 
 export type RunAllScriptsOptions = {
   dir?: string;
@@ -13,12 +14,17 @@ export type RunAllScriptsOptions = {
 
 export type RunAllScriptsEntry = {
   filePath: string;
+  durationMs: number;
   result: RunScriptPathResult;
 };
 
 export type RunAllScriptsResult = {
   ok: boolean;
   dir: string;
+  suiteDir: string;
+  durationMs: number;
+  reportPath: string;
+  summaryPath: string;
   entries: RunAllScriptsEntry[];
 };
 
@@ -29,21 +35,70 @@ export async function runAllScripts(options?: RunAllScriptsOptions): Promise<Run
     : null;
   const stepsPath = options?.stepsPath?.trim() ? options.stepsPath.trim() : undefined;
 
+  const suiteDir = artifactsRoot ?? resolve(".tmp", "run-all");
+
   const filePaths = listScriptFiles(dir);
   const entries: RunAllScriptsEntry[] = [];
 
+  const startedAt = Date.now();
+
   for (const filePath of filePaths) {
-    const base = basename(filePath).replace(/\.(json|ts)$/i, "");
-    const artifactsDir = artifactsRoot ? join(artifactsRoot, base) : undefined;
+    const artifactsDirName = safeArtifactsDirName(relative(dir, filePath));
+    const artifactsDir = artifactsRoot ? join(artifactsRoot, artifactsDirName) : undefined;
+
+    const entryStartedAt = Date.now();
     const result = await runScriptPath(filePath, {
       artifactsDir,
       stepsPath,
       updateGoldens: options?.updateGoldens,
     });
-    entries.push({ filePath, result });
+    const durationMs = Date.now() - entryStartedAt;
+
+    entries.push({ filePath, durationMs, result });
   }
 
-  return { ok: entries.every((e) => e.result.ok), dir, entries };
+  const durationMs = Date.now() - startedAt;
+
+  const { reportPath, summaryPath } = writeSuiteReportArtifacts({
+    dir,
+    suiteDir,
+    durationMs,
+    entries,
+  });
+
+  return {
+    ok: entries.every((e) => e.result.ok),
+    dir,
+    suiteDir,
+    durationMs,
+    reportPath,
+    summaryPath,
+    entries,
+  };
+}
+
+function safeArtifactsDirName(relPath: string): string {
+  return relPath.replace(/[/\\]/g, "__");
+}
+
+function shouldIncludeJsonScript(filePath: string): boolean {
+  try {
+    const raw = readFileSync(filePath, "utf8");
+    const parsed = JSON.parse(raw) as unknown;
+
+    if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) return false;
+
+    const obj = parsed as { launch?: unknown; steps?: unknown };
+    if (!obj.launch || typeof obj.launch !== "object" || Array.isArray(obj.launch)) return false;
+
+    const launch = obj.launch as { command?: unknown };
+    if (typeof launch.command !== "string" || !launch.command.trim()) return false;
+
+    return Array.isArray(obj.steps) && obj.steps.length > 0;
+  } catch {
+    // If a .json file is invalid JSON, keep legacy behavior: let it fail as a script.
+    return true;
+  }
 }
 
 function listScriptFiles(dir: string): string[] {
@@ -58,14 +113,13 @@ function listScriptFiles(dir: string): string[] {
     }
 
     if (entry.endsWith(".json")) {
-      out.push(abs);
+      if (shouldIncludeJsonScript(abs)) out.push(abs);
       continue;
     }
 
     if (!entry.endsWith(".ts")) continue;
     if (entry.endsWith(".d.ts")) continue;
     if (entry.endsWith("_steps.ts") || entry.endsWith(".steps.ts")) continue;
-    if (entry.endsWith(".test.ts")) continue;
 
     out.push(abs);
   }
@@ -140,13 +194,18 @@ if (import.meta.main) {
     });
 
     const failures = result.entries.filter((e) => !e.result.ok);
+
     if (failures.length === 0) {
       // eslint-disable-next-line no-console
-      console.log(`ok count=${result.entries.length} dir=${result.dir}`);
+      console.log(
+        `ok count=${result.entries.length} dir=${result.dir}\nreport=${result.reportPath}\nsummary=${result.summaryPath}`,
+      );
       process.exitCode = 0;
     } else {
       // eslint-disable-next-line no-console
-      console.error(`failed count=${failures.length}/${result.entries.length} dir=${result.dir}`);
+      console.error(
+        `failed count=${failures.length}/${result.entries.length} dir=${result.dir}\nreport=${result.reportPath}\nsummary=${result.summaryPath}`,
+      );
       for (const f of failures) {
         if (f.result.ok) continue;
         // eslint-disable-next-line no-console

@@ -1,0 +1,70 @@
+{
+  "$schema": "../schemas/ptywright-script.schema.json",
+  "name": "report_demo_tui",
+  "artifactsDir": ".tmp/examples/report_demo_tui",
+  "launch": {
+    "command": "bun",
+    "args": ["run", "tests/fixtures/tui_demo.ts"],
+    "cwd": ".",
+    "cols": 70,
+    "rows": 18,
+    "name": "xterm-256color"
+  },
+  "trace": {
+    "saveCast": true,
+    "saveReport": true,
+    "reportScope": "visible",
+    "reportMaxFrames": 120
+  },
+  "steps": [
+    {
+      "type": "waitForText",
+      "scope": "visible",
+      "text": "PTYWRIGHT TUI DEMO",
+      "timeoutMs": 5000,
+      "intervalMs": 50
+    },
+    { "type": "mark", "label": "start" },
+
+    {
+      "type": "waitForText",
+      "scope": "visible",
+      "text": "Screen: Dashboard",
+      "timeoutMs": 5000,
+      "intervalMs": 50
+    },
+
+    { "type": "pressKey", "key": "Down" },
+    {
+      "type": "waitForText",
+      "scope": "visible",
+      "text": "Screen: Permissions",
+      "timeoutMs": 5000,
+      "intervalMs": 50
+    },
+    { "type": "mark", "label": "permissions" },
+
+    { "type": "pressKey", "key": "Enter" },
+    {
+      "type": "waitForText",
+      "scope": "visible",
+      "text": "Mode: LOW",
+      "timeoutMs": 5000,
+      "intervalMs": 50
+    },
+    { "type": "mark", "label": "mode_low" },
+
+    { "type": "pressKey", "key": "Down" },
+    {
+      "type": "waitForText",
+      "scope": "visible",
+      "text": "Screen: Logs",
+      "timeoutMs": 5000,
+      "intervalMs": 50
+    },
+    { "type": "mark", "label": "logs" },
+
+    { "type": "pressKey", "key": "q" },
+    { "type": "waitForExit", "timeoutMs": 5000 }
+  ]
+}

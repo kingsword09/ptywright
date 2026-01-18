@@ -1,5 +1,7 @@
 import { expect, test } from "bun:test";
 
+import { existsSync } from "node:fs";
+
 import { Client } from "@modelcontextprotocol/sdk/client/index.js";
 import { StdioClientTransport } from "@modelcontextprotocol/sdk/client/stdio.js";
 
@@ -49,6 +51,8 @@ test("ptywright_run_all_scripts supports output controls", async () => {
         totalCount?: number;
         entries?: unknown[];
         truncatedCount?: number;
+        reportPath?: string;
+        summaryPath?: string;
       }
     | undefined;
 
@@ -56,6 +60,11 @@ test("ptywright_run_all_scripts supports output controls", async () => {
   expect(structured?.totalCount).toBeGreaterThan(1);
   expect((structured?.entries ?? []).length).toBe(1);
   expect(structured?.truncatedCount).toBeGreaterThan(0);
+
+  expect(typeof structured?.reportPath).toBe("string");
+  expect(typeof structured?.summaryPath).toBe("string");
+  expect(existsSync(structured?.reportPath ?? "")).toBe(true);
+  expect(existsSync(structured?.summaryPath ?? "")).toBe(true);
 
   await client.close();
   await transport.close();

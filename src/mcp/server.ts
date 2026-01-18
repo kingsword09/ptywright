@@ -811,7 +811,7 @@ export function createPtywrightServer(options?: PtywrightServerOptions): {
   tool(
     "script",
     "ptywright_run_all_scripts",
-    "Run all JSON/TS scripts in a directory (recursive) and return a summary + artifact paths.",
+    "Run all ptywright scripts (JSON/TS) recursively and generate a Playwright-like suite report: index.html + run.summary.json. 用于：一键批量回归 / 生成总览报告 / CI。Call with no args to use defaults (dir='scripts', suite report in .tmp/run-all/). Returns reportPath+summaryPath; open reportPath in a browser to view. Tip: keep includeEntries='failures' (default) and maxEntries to avoid context bloat.",
     {
       dir: z.string().optional(),
       artifactsRoot: z.string().optional(),
@@ -821,7 +821,7 @@ export function createPtywrightServer(options?: PtywrightServerOptions): {
       maxEntries: z.number().int().nonnegative().optional(),
     },
     {
-      title: "Run All Scripts",
+      title: "Run All Scripts (Suite Report)",
       openWorldHint: true,
       destructiveHint: true,
     },
@@ -854,6 +854,8 @@ export function createPtywrightServer(options?: PtywrightServerOptions): {
           `failures=${failures.length}`,
           `dir=${result.dir}`,
           `entries=${entries.length}`,
+          `report=${result.reportPath}`,
+          `summary=${result.summaryPath}`,
           truncatedCount > 0 ? `truncated=${truncatedCount}` : null,
         ];
 
@@ -869,6 +871,9 @@ export function createPtywrightServer(options?: PtywrightServerOptions): {
           structuredContent: {
             ok: result.ok,
             dir: result.dir,
+            suiteDir: result.suiteDir,
+            reportPath: result.reportPath,
+            summaryPath: result.summaryPath,
             totalCount: result.entries.length,
             failureCount: failures.length,
             includeEntries,

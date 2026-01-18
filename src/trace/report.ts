@@ -293,6 +293,13 @@ ${markFrames
         flex-wrap: wrap;
         margin: 6px 0 10px 0;
       }
+      .debug-toggle {
+        position: absolute;
+        left: -99999px;
+        width: 1px;
+        height: 1px;
+        overflow: hidden;
+      }
       .badge {
         display: inline-flex;
         align-items: center;
@@ -301,6 +308,14 @@ ${markFrames
         font-size: 12px;
         border: 1px solid color-mix(in oklab, currentColor 16%, transparent);
         background: color-mix(in oklab, currentColor 6%, transparent);
+      }
+      .badge.toggle {
+        cursor: pointer;
+        user-select: none;
+      }
+      #debugToggle:checked ~ header .badge.toggle {
+        background: color-mix(in oklab, #0ea5e9 18%, transparent);
+        border-color: color-mix(in oklab, #0ea5e9 45%, transparent);
       }
       .badge.pass {
         background: color-mix(in oklab, #16a34a 18%, transparent);
@@ -342,7 +357,21 @@ ${markFrames
         font-size: 12px;
         line-height: 1.35;
       }
-      .terminal .header {
+      pre.terminal {
+        background: #0b0f14;
+        border-color: color-mix(in oklab, #0b0f14 55%, currentColor);
+        color: #e6edf3;
+      }
+      #debugToggle:not(:checked) ~ main pre.terminal .headerblock {
+        display: none;
+      }
+      #debugToggle:not(:checked) ~ main pre.terminal .ln {
+        display: none;
+      }
+      #debugToggle:not(:checked) ~ main pre.terminal .row.changed {
+        background: transparent;
+      }
+      .terminal .headerblock {
         display: block;
         opacity: 0.75;
         margin-bottom: 6px;
@@ -387,12 +416,14 @@ ${markFrames
     </style>
   </head>
   <body>
+    <input id="debugToggle" class="debug-toggle" type="checkbox" />
     <header>
       <h1>${escapeHtml(title)}</h1>
       <div class="badges">
         <span class="badge ${resultClass}">result=${escapeHtml(resultLabel)}</span>
         <span class="badge">marks=${markFrames.length}</span>
         <span class="badge">duration=${durationSeconds.toFixed(3)}s</span>
+        <label class="badge toggle" for="debugToggle">debug</label>
       </div>
       <div class="meta">term=${escapeHtml(input.term.type)} ${input.term.cols}x${input.term.rows} scope=${escapeHtml(input.scope)} events=${input.eventCount}
 command=${escapeHtml(command)}
@@ -467,7 +498,7 @@ function renderSnapshotViewHtml(options: {
   });
 
   const digits = Math.max(2, String(options.lines.length).length);
-  const out: string[] = [`<span class="header">${escapeHtml(headerLine)}</span>`];
+  const out: string[] = [`<span class="headerblock">${escapeHtml(headerLine)}</span>`];
 
   if (options.scope === "visible") {
     for (let i = 0; i < options.lines.length; i += 1) {
@@ -480,7 +511,7 @@ function renderSnapshotViewHtml(options: {
       out.push(`<span class="${rowClass}">${prefixHtml}${contentHtml}</span>`);
     }
 
-    return out.join("\n");
+    return out.join("");
   }
 
   // buffer scope: currently renders plain text only
@@ -491,7 +522,7 @@ function renderSnapshotViewHtml(options: {
     out.push(`<span class="row">${prefixHtml}${escapeHtml(options.lines[i] ?? "")}</span>`);
   }
 
-  return out.join("\n");
+  return out.join("");
 }
 
 function renderVisibleRowHtml(terminal: Terminal, rowIndex: number, trimRight: boolean): string {

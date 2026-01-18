@@ -1,12 +1,10 @@
 {
   "$schema": "../schemas/ptywright-script.schema.json",
-  "name": "m6_json_custom_demo",
+  "name": "json_custom_steps_demo",
+  "artifactsDir": ".tmp/examples/json_custom_steps_demo",
   "launch": {
     "command": "bun",
-    "args": [
-      "run",
-      "tests/fixtures/random_token_demo.ts"
-    ],
+    "args": ["run", "tests/fixtures/random_token_demo.ts"],
     "cwd": ".",
     "cols": 60,
     "rows": 8,
@@ -43,9 +41,11 @@
       "saveTo": "masked.txt"
     },
     {
-      "type": "expect",
-      "from": "masked",
-      "equals": "TOKEN: <id>\nDONE"
+      "type": "custom",
+      "name": "assertMaskedEquals",
+      "payload": {
+        "expected": "TOKEN: <id>\nDONE"
+      }
     }
   ]
 }
