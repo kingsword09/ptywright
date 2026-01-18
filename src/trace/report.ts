@@ -17,8 +17,20 @@ type ParsedAsciicast = {
   events: AsciicastEvent[];
 };
 
+export type TraceReportResult = {
+  ok: boolean;
+  error?: string;
+  failureStep?: {
+    index: number;
+    type: string;
+  };
+};
+
 type ReportFrame = {
+  id: string;
   atSeconds: number;
+  kind: "mark" | "resize" | "final";
+  markLabel?: string;
   label: string;
   viewHtml: string;
 };
@@ -28,6 +40,8 @@ export async function generateTraceReportHtml(
   options?: {
     scope?: SnapshotScope;
     maxFrames?: number;
+    scenarioName?: string;
+    result?: TraceReportResult;
   },
 ): Promise<string> {
   const parsed = parseAsciicast(cast);
@@ -43,13 +57,20 @@ export async function generateTraceReportHtml(
 
   const scope = options?.scope ?? "visible";
   const maxFrames = options?.maxFrames ?? 200;
+  const scenarioName = options?.scenarioName?.trim() ? options.scenarioName.trim() : "";
+  const result = options?.result;
 
   let writeChain: Promise<void> = Promise.resolve();
 
   const frames: ReportFrame[] = [];
   let previousRowSignatures: string[] | null = null;
 
-  const capture = (atSeconds: number, label: string) => {
+  const capture = (args: {
+    atSeconds: number;
+    kind: ReportFrame["kind"];
+    label: string;
+    markLabel?: string;
+  }) => {
     if (frames.length >= maxFrames) return;
 
     let lines: string[];
@@ -86,7 +107,14 @@ export async function generateTraceReportHtml(
       trimRight: true,
     });
 
-    frames.push({ atSeconds, label, viewHtml });
+    frames.push({
+      id: `frame-${frames.length + 1}`,
+      atSeconds: args.atSeconds,
+      kind: args.kind,
+      label: args.label,
+      markLabel: args.markLabel,
+      viewHtml,
+    });
   };
 
   for (const event of parsed.events) {
@@ -100,11 +128,13 @@ export async function generateTraceReportHtml(
         if (resized) {
           terminal.resize(resized.cols, resized.rows);
         }
-        capture(time, `resize ${data}`);
+        capture({ atSeconds: time, kind: "resize", label: `resize ${data}` });
       });
     } else if (type === "m") {
       void writeChain.then(() => {
-        capture(time, data ? `mark ${data}` : "mark");
+        const markLabel = (data ?? "").trim();
+        const label = markLabel ? `mark ${markLabel}` : "mark";
+        capture({ atSeconds: time, kind: "mark", label, markLabel });
       });
     } else {
       // input or unknown: no-op
@@ -112,7 +142,7 @@ export async function generateTraceReportHtml(
   }
 
   await writeChain;
-  capture(parsed.events.at(-1)?.[0] ?? 0, "final");
+  capture({ atSeconds: parsed.events.at(-1)?.[0] ?? 0, kind: "final", label: "final" });
 
   terminal.dispose();
 
@@ -120,6 +150,8 @@ export async function generateTraceReportHtml(
     header: parsed.header,
     term: termInfo,
     scope,
+    scenarioName,
+    result,
     frames,
     eventCount: parsed.events.length,
   });
@@ -135,20 +167,43 @@ function renderHtml(input: {
   header: Record<string, unknown>;
   term: { cols: number; rows: number; type: string };
   scope: SnapshotScope;
+  scenarioName: string;
+  result?: TraceReportResult;
   frames: ReportFrame[];
   eventCount: number;
 }): string {
-  const title = coerceDisplayString(input.header.title) || "ptywright trace report";
+  const title =
+    input.scenarioName || coerceDisplayString(input.header.title) || "ptywright trace report";
   const command = coerceDisplayString(input.header.command);
   const timestamp = input.header.timestamp;
 
   const headerJson = JSON.stringify(input.header, null, 2);
 
+  const durationSeconds = input.frames.at(-1)?.atSeconds ?? 0;
+  const markFrames = input.frames.filter((f) => f.kind === "mark");
+
+  const resultLabel =
+    input.result?.ok === true ? "PASS" : input.result?.ok === false ? "FAIL" : "UNKNOWN";
+  const resultClass =
+    input.result?.ok === true ? "pass" : input.result?.ok === false ? "fail" : "unknown";
+
+  const markListHtml =
+    markFrames.length === 0
+      ? `<p class="muted">No marks recorded.</p>`
+      : `<ol class="marks">
+${markFrames
+  .map((f) => {
+    const label = f.markLabel?.trim() || "(unnamed)";
+    return `<li><a href="#${escapeHtml(f.id)}">t=${f.atSeconds.toFixed(3)}s — ${escapeHtml(label)}</a></li>`;
+  })
+  .join("\n")}
+</ol>`;
+
   const framesHtml = input.frames
     .map((frame, idx) => {
       const safeLabel = escapeHtml(frame.label);
       return `
-<section class="frame">
+<section class="frame" id="${escapeHtml(frame.id)}">
   <h2>${idx + 1}. t=${frame.atSeconds.toFixed(3)}s — ${safeLabel}</h2>
   <pre class="terminal">${frame.viewHtml}</pre>
 </section>`;
@@ -179,6 +234,33 @@ function renderHtml(input: {
         margin: 0 0 8px 0;
         font-size: 18px;
       }
+      header .badges {
+        display: flex;
+        gap: 8px;
+        flex-wrap: wrap;
+        margin: 6px 0 10px 0;
+      }
+      .badge {
+        display: inline-flex;
+        align-items: center;
+        border-radius: 999px;
+        padding: 2px 10px;
+        font-size: 12px;
+        border: 1px solid color-mix(in oklab, currentColor 16%, transparent);
+        background: color-mix(in oklab, currentColor 6%, transparent);
+      }
+      .badge.pass {
+        background: color-mix(in oklab, #16a34a 18%, transparent);
+        border-color: color-mix(in oklab, #16a34a 45%, transparent);
+      }
+      .badge.fail {
+        background: color-mix(in oklab, #ef4444 18%, transparent);
+        border-color: color-mix(in oklab, #ef4444 45%, transparent);
+      }
+      .badge.unknown {
+        background: color-mix(in oklab, #64748b 18%, transparent);
+        border-color: color-mix(in oklab, #64748b 45%, transparent);
+      }
       header .meta {
         font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas,
           "Liberation Mono", "Courier New", monospace;
@@ -191,6 +273,9 @@ function renderHtml(input: {
       }
       details {
         margin: 12px 0;
+      }
+      .section {
+        margin: 0 0 18px 0;
       }
       pre {
         margin: 8px 0 0 0;
@@ -224,11 +309,28 @@ function renderHtml(input: {
         font-size: 14px;
         font-weight: 600;
       }
+      .marks {
+        margin: 8px 0 0 18px;
+        padding: 0;
+      }
+      .muted {
+        opacity: 0.75;
+      }
+      .summary {
+        margin-top: 18px;
+        padding-top: 18px;
+        border-top: 1px solid color-mix(in oklab, currentColor 20%, transparent);
+      }
     </style>
   </head>
   <body>
     <header>
       <h1>${escapeHtml(title)}</h1>
+      <div class="badges">
+        <span class="badge ${resultClass}">result=${escapeHtml(resultLabel)}</span>
+        <span class="badge">marks=${markFrames.length}</span>
+        <span class="badge">duration=${durationSeconds.toFixed(3)}s</span>
+      </div>
       <div class="meta">term=${escapeHtml(input.term.type)} ${input.term.cols}x${input.term.rows} scope=${escapeHtml(input.scope)} events=${input.eventCount}
 command=${escapeHtml(command)}
 timestamp=${escapeHtml(coerceDisplayString(timestamp))}</div>
@@ -238,7 +340,41 @@ timestamp=${escapeHtml(coerceDisplayString(timestamp))}</div>
       </details>
     </header>
     <main>
+      <section class="section">
+        <h2>Task</h2>
+        <pre>${escapeHtml(
+          [
+            input.scenarioName ? `scenario=${input.scenarioName}` : null,
+            command ? `command=${command}` : null,
+            `term=${input.term.type} ${input.term.cols}x${input.term.rows}`,
+            `scope=${input.scope}`,
+          ]
+            .filter(Boolean)
+            .join("\n"),
+        )}</pre>
+      </section>
+      <section class="section">
+        <h2>Marks</h2>
+        ${markListHtml}
+      </section>
       ${framesHtml}
+      <section class="summary">
+        <h2>Summary</h2>
+        <pre>${escapeHtml(
+          [
+            `result=${resultLabel}`,
+            `marks=${markFrames.length}`,
+            `frames=${input.frames.length}`,
+            `duration=${durationSeconds.toFixed(3)}s`,
+            input.result?.ok === false && input.result.error ? `error=${input.result.error}` : null,
+            input.result?.ok === false && input.result.failureStep
+              ? `failedStep=${input.result.failureStep.index} ${input.result.failureStep.type}`
+              : null,
+          ]
+            .filter(Boolean)
+            .join("\n"),
+        )}</pre>
+      </section>
     </main>
   </body>
 </html>`;

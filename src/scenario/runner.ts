@@ -4,6 +4,7 @@ import { basename, dirname, extname, isAbsolute, join, resolve } from "node:path
 import { SessionManager } from "../session/session_manager";
 import { formatSnapshotView } from "../terminal/view";
 import { generateTraceReportHtml } from "../trace/report";
+import type { TraceReportResult } from "../trace/report";
 import { sleep } from "../util/sleep";
 
 import type { TextMaskRule } from "../terminal/mask";
@@ -143,6 +144,8 @@ export async function runScenario(
       reportPath,
       reportScope: trace.reportScope,
       reportMaxFrames: trace.reportMaxFrames,
+      scenarioName,
+      result: { ok: true },
     });
 
     sessions.closeAll();
@@ -166,6 +169,14 @@ export async function runScenario(
         reportPath,
         reportScope: trace.reportScope,
         reportMaxFrames: trace.reportMaxFrames,
+        scenarioName,
+        result: {
+          ok: false,
+          error: (error as Error).message,
+          failureStep: currentStep
+            ? { index: currentStepIndex + 1, type: formatStepLabel(currentStep) }
+            : undefined,
+        },
       });
     } catch {
       // ignore best-effort artifact writing
@@ -640,6 +651,8 @@ async function writeTraceArtifacts(args: {
   reportPath: string;
   reportScope?: "visible" | "buffer";
   reportMaxFrames?: number;
+  scenarioName?: string;
+  result?: TraceReportResult;
 }): Promise<void> {
   if (!args.saveCast && !args.saveReport) return;
 
@@ -654,10 +667,18 @@ async function writeTraceArtifacts(args: {
     const html = await generateTraceReportHtml(snapshot.cast, {
       scope: args.reportScope,
       maxFrames: args.reportMaxFrames,
+      scenarioName: args.scenarioName,
+      result: args.result,
     });
     mkdirSync(dirname(args.reportPath), { recursive: true });
     writeFileSync(args.reportPath, html, "utf8");
   }
+}
+
+function formatStepLabel(step: ScenarioStep): string {
+  return step.type === "custom"
+    ? `custom(${(step as ScenarioCustomStep).name})`
+    : (step as ScenarioStep).type;
 }
 
 function envTruthy(value: string | undefined): boolean {
