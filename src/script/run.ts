@@ -1,13 +1,13 @@
-import { runScenarioPath } from "./path";
+import { runScriptPath } from "./path";
 
 function parseArgs(argv: string[]): {
-  scenarioPath: string;
+  scriptPath: string;
   artifactsDir?: string;
   stepsPath?: string;
   updateGoldens: boolean;
 } {
   const out: {
-    scenarioPath?: string;
+    scriptPath?: string;
     artifactsDir?: string;
     stepsPath?: string;
     updateGoldens: boolean;
@@ -19,8 +19,8 @@ function parseArgs(argv: string[]): {
     const arg = argv[i];
     const next = argv[i + 1];
 
-    if (!out.scenarioPath && arg && !arg.startsWith("-")) {
-      out.scenarioPath = arg;
+    if (!out.scriptPath && arg && !arg.startsWith("-")) {
+      out.scriptPath = arg;
       continue;
     }
 
@@ -44,14 +44,14 @@ function parseArgs(argv: string[]): {
     throw new Error(`unknown arg: ${arg ?? ""}`);
   }
 
-  if (!out.scenarioPath) {
+  if (!out.scriptPath) {
     throw new Error(
-      "Usage: bun run src/scenario/run.ts <file> [--artifacts-dir <dir>] [--steps <module.ts>] [--update-goldens]",
+      "Usage: bun run src/script/run.ts <file> [--artifacts-dir <dir>] [--steps <module.ts>] [--update-goldens]",
     );
   }
 
   return out as {
-    scenarioPath: string;
+    scriptPath: string;
     artifactsDir?: string;
     stepsPath?: string;
     updateGoldens: boolean;
@@ -61,7 +61,7 @@ function parseArgs(argv: string[]): {
 if (import.meta.main) {
   try {
     const args = parseArgs(process.argv.slice(2));
-    const result = await runScenarioPath(args.scenarioPath, {
+    const result = await runScriptPath(args.scriptPath, {
       artifactsDir: args.artifactsDir,
       updateGoldens: args.updateGoldens,
       stepsPath: args.stepsPath,

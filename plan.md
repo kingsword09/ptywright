@@ -40,7 +40,7 @@
 目标：在保持通用 PTY 路径的同时，给 ratatui/ink 等提供更快更确定的“框架内测试”。
 - ratatui：TestBackend 快照（insta 风格），不依赖 PTY。
 - ink：frame/lastFrame 断言（不依赖 PTY）。
-- 统一断言接口：同一套 scenario 可以选择 backend（pty vs in-process）。
+- 统一断言接口：同一套 script 可以选择 backend（pty vs in-process）。
 验收：同一 UI 用例既能走 PTY 端到端，也能走框架内快速回归。
 
 ### M5：Agent（LLM）测试分层（可选）
@@ -57,7 +57,7 @@
 - [ ] M4：框架特化加速（ratatui/ink adapters）
 - [ ] M5：Agent/LLM 测试分层（stub/record-replay + live smoke）
   - [x] M5.1：快照 mask/normalize（避免断言不稳定文案）
-  - [x] M5.2：Scenario runner（JSON 脚本化用例 + report/golden）
+  - [x] M5.2：Script runner（JSON 脚本化用例 + report/golden）
   - [ ] M5.3：LLM cassette（record/replay + live smoke）
 
 ## Surprises & Discoveries

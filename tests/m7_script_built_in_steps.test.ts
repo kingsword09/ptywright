@@ -3,7 +3,7 @@ import { expect, test } from "bun:test";
 import { existsSync, readFileSync } from "node:fs";
 import { join, resolve } from "node:path";
 
-import { runScenario } from "../src/scenario/runner";
+import { runScript } from "../src/script/runner";
 
 test("script JSON schema is valid JSON", () => {
   const raw = readFileSync(resolve("schemas/ptywright-script.schema.json"), "utf8");
@@ -11,9 +11,9 @@ test("script JSON schema is valid JSON", () => {
 });
 
 test("runner supports built-in steps: sleep/expectMeta/waitForExit", async () => {
-  const artifactsDir = resolve(".tmp/test_scenarios/m7_script_built_in_steps");
+  const artifactsDir = resolve(".tmp/test_scripts/m7_script_built_in_steps");
 
-  const result = await runScenario(
+  const result = await runScript(
     {
       name: "m7_script_built_in_steps",
       launch: {

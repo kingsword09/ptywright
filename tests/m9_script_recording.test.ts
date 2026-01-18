@@ -6,7 +6,7 @@ import { resolve } from "node:path";
 import { Client } from "@modelcontextprotocol/sdk/client/index.js";
 import { StdioClientTransport } from "@modelcontextprotocol/sdk/client/stdio.js";
 
-import { runScenarioFile } from "../src/scenario/runner";
+import { runScriptFile } from "../src/script/runner";
 
 test("MCP script recording exports a runnable JSON script + goldens", async () => {
   const transport = new StdioClientTransport({
@@ -23,8 +23,8 @@ test("MCP script recording exports a runnable JSON script + goldens", async () =
 
   await client.connect(transport);
 
-  const outPath = ".tmp/test_scenarios/m9_script_recording/recorded.json";
-  const goldenDir = ".tmp/test_scenarios/m9_script_recording/goldens";
+  const outPath = ".tmp/test_scripts/m9_script_recording/recorded.json";
+  const goldenDir = ".tmp/test_scripts/m9_script_recording/goldens";
 
   const started = await client.callTool({
     name: "start_script_recording",
@@ -90,8 +90,8 @@ test("MCP script recording exports a runnable JSON script + goldens", async () =
     true,
   );
 
-  const result = await runScenarioFile(resolve(outPath), {
-    artifactsDir: resolve(".tmp/test_scenarios/m9_script_recording/run"),
+  const result = await runScriptFile(resolve(outPath), {
+    artifactsDir: resolve(".tmp/test_scripts/m9_script_recording/run"),
   });
   expect(result.ok).toBe(true);
 });

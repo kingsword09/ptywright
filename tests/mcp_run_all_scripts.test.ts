@@ -33,7 +33,7 @@ test("run_all_scripts supports output controls", async () => {
     name: "run_all_scripts",
     arguments: {
       dir: "tests/fixtures/run_all_scripts",
-      artifactsRoot: ".tmp/test_scenarios/mcp_run_all_scripts",
+      artifactsRoot: ".tmp/test_scripts/mcp_run_all_scripts",
       stepsPath: "tests/fixtures/run_all_scripts/custom_steps.ts",
       includeEntries: "all",
       maxEntries: 1,

@@ -3,13 +3,13 @@ import { expect, test } from "bun:test";
 import { existsSync, readFileSync } from "node:fs";
 import { join, resolve } from "node:path";
 
-import { defineScript, ScriptBuilder } from "../src/scenario/dsl";
-import { loadScenarioModule } from "../src/scenario/module";
-import { runScenario } from "../src/scenario/runner";
-import { createAssertSnapshotEqualsStep } from "../src/scenario/steps";
-import type { CustomStepHandler } from "../src/scenario/runner";
+import { defineScript, ScriptBuilder } from "../src/script/dsl";
+import { loadScriptModule } from "../src/script/module";
+import { runScript } from "../src/script/runner";
+import { createAssertSnapshotEqualsStep } from "../src/script/steps";
+import type { CustomStepHandler } from "../src/script/runner";
 
-test("scenario DSL supports custom steps (direct runner)", async () => {
+test("script DSL supports custom steps (direct runner)", async () => {
   type CustomSteps = {
     assertMaskedEquals: { expected: string };
   };
@@ -20,7 +20,7 @@ test("scenario DSL supports custom steps (direct runner)", async () => {
     >,
   } satisfies Record<string, CustomStepHandler>;
 
-  const scenario = defineScript(() =>
+  const script = defineScript(() =>
     new ScriptBuilder<never, CustomSteps>({
       name: "m6_dsl_test",
       launch: {
@@ -56,8 +56,8 @@ test("scenario DSL supports custom steps (direct runner)", async () => {
       .custom("assertMaskedEquals", { expected: "TOKEN: <id>\nDONE" }),
   );
 
-  const artifactsDir = resolve(".tmp/test_scenarios/m6_dsl_test");
-  const result = await runScenario(scenario, { artifactsDir, steps });
+  const artifactsDir = resolve(".tmp/test_scripts/m6_dsl_test");
+  const result = await runScript(script, { artifactsDir, steps });
   expect(result.ok).toBe(true);
 
   const maskedPath = join(artifactsDir, "masked.txt");
@@ -72,11 +72,11 @@ test("scenario DSL supports custom steps (direct runner)", async () => {
   expect(masked).toBe("TOKEN: <id>\nDONE");
 });
 
-test("scenario module loader runs a TS DSL scenario", async () => {
-  const loaded = await loadScenarioModule("scripts/m6_dsl_demo.ts");
-  const artifactsDir = resolve(".tmp/test_scenarios/m6_dsl_module_demo");
+test("script module loader runs a TS DSL script", async () => {
+  const loaded = await loadScriptModule("scripts/m6_dsl_demo.ts");
+  const artifactsDir = resolve(".tmp/test_scripts/m6_dsl_module_demo");
 
-  const result = await runScenario(loaded.scenario, { artifactsDir, steps: loaded.steps });
+  const result = await runScript(loaded.script, { artifactsDir, steps: loaded.steps });
   expect(result.ok).toBe(true);
 
   const maskedPath = join(artifactsDir, "masked.txt");

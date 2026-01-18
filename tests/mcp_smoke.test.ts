@@ -44,20 +44,19 @@ test("MCP server smoke test", async () => {
   expect(list.tools.some((t) => t.name === "start_script_recording")).toBe(true);
   expect(list.tools.some((t) => t.name === "stop_script_recording")).toBe(true);
 
-  const scenarioRun = await client.callTool({
+  const scriptRun = await client.callTool({
     name: "run_script",
     arguments: {
       scriptPath: "scripts/m6_json_custom_demo.json",
       stepsPath: "scripts/m6_json_custom_steps.ts",
-      artifactsDir: ".tmp/test_scenarios/mcp_run_script",
+      artifactsDir: ".tmp/test_scripts/mcp_run_script",
     },
   });
-  expect(scenarioRun.isError ?? false).toBe(false);
-  const scenarioArtifactsDir = (
-    scenarioRun.structuredContent as { artifactsDir?: string } | undefined
-  )?.artifactsDir;
-  expect(typeof scenarioArtifactsDir).toBe("string");
-  const maskedPath = join(resolve(scenarioArtifactsDir ?? ""), "masked.txt");
+  expect(scriptRun.isError ?? false).toBe(false);
+  const scriptArtifactsDir = (scriptRun.structuredContent as { artifactsDir?: string } | undefined)
+    ?.artifactsDir;
+  expect(typeof scriptArtifactsDir).toBe("string");
+  const maskedPath = join(resolve(scriptArtifactsDir ?? ""), "masked.txt");
   expect(existsSync(maskedPath)).toBe(true);
   expect(readFileSync(maskedPath, "utf8").trimEnd()).toBe("TOKEN: <id>\nDONE");
 

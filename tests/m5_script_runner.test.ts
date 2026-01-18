@@ -3,13 +3,13 @@ import { expect, test } from "bun:test";
 import { existsSync, readFileSync } from "node:fs";
 import { join, resolve } from "node:path";
 
-import { runScenarioFile } from "../src/scenario/runner";
+import { runScriptFile } from "../src/script/runner";
 
-test("scenario runner executes JSON scenario and writes artifacts", async () => {
-  const scenarioPath = resolve("scripts/m5_mask_demo.json");
-  const artifactsDir = resolve(".tmp/test_scenarios/m5_mask_demo");
+test("script runner executes JSON script and writes artifacts", async () => {
+  const scriptPath = resolve("scripts/m5_mask_demo.json");
+  const artifactsDir = resolve(".tmp/test_scripts/m5_mask_demo");
 
-  const result = await runScenarioFile(scenarioPath, { artifactsDir });
+  const result = await runScriptFile(scriptPath, { artifactsDir });
   expect(result.ok).toBe(true);
 
   const maskedPath = join(artifactsDir, "masked.txt");

@@ -40,7 +40,7 @@ export async function generateTraceReportHtml(
   options?: {
     scope?: SnapshotScope;
     maxFrames?: number;
-    scenarioName?: string;
+    scriptName?: string;
     result?: TraceReportResult;
   },
 ): Promise<string> {
@@ -57,7 +57,7 @@ export async function generateTraceReportHtml(
 
   const scope = options?.scope ?? "visible";
   const maxFrames = options?.maxFrames ?? 200;
-  const scenarioName = options?.scenarioName?.trim() ? options.scenarioName.trim() : "";
+  const scriptName = options?.scriptName?.trim() ? options.scriptName.trim() : "";
   const result = options?.result;
 
   let writeChain: Promise<void> = Promise.resolve();
@@ -150,7 +150,7 @@ export async function generateTraceReportHtml(
     header: parsed.header,
     term: termInfo,
     scope,
-    scenarioName,
+    scriptName,
     result,
     frames,
     eventCount: parsed.events.length,
@@ -167,13 +167,13 @@ function renderHtml(input: {
   header: Record<string, unknown>;
   term: { cols: number; rows: number; type: string };
   scope: SnapshotScope;
-  scenarioName: string;
+  scriptName: string;
   result?: TraceReportResult;
   frames: ReportFrame[];
   eventCount: number;
 }): string {
   const title =
-    input.scenarioName || coerceDisplayString(input.header.title) || "ptywright trace report";
+    input.scriptName || coerceDisplayString(input.header.title) || "ptywright trace report";
   const command = coerceDisplayString(input.header.command);
   const timestamp = input.header.timestamp;
 
@@ -344,7 +344,7 @@ timestamp=${escapeHtml(coerceDisplayString(timestamp))}</div>
         <h2>Task</h2>
         <pre>${escapeHtml(
           [
-            input.scenarioName ? `scenario=${input.scenarioName}` : null,
+            input.scriptName ? `script=${input.scriptName}` : null,
             command ? `command=${command}` : null,
             `term=${input.term.type} ${input.term.cols}x${input.term.rows}`,
             `scope=${input.scope}`,

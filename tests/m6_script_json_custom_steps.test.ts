@@ -3,16 +3,16 @@ import { expect, test } from "bun:test";
 import { existsSync, readFileSync } from "node:fs";
 import { join, resolve } from "node:path";
 
-import { loadStepHandlersModule } from "../src/scenario/module";
-import { runScenarioFile } from "../src/scenario/runner";
+import { loadStepHandlersModule } from "../src/script/module";
+import { runScriptFile } from "../src/script/runner";
 
-test("JSON scenario supports custom steps (handlers injected)", async () => {
-  const scenarioPath = resolve("scripts/m6_json_custom_demo.json");
-  const artifactsDir = resolve(".tmp/test_scenarios/m6_json_custom_demo");
+test("JSON script supports custom steps (handlers injected)", async () => {
+  const scriptPath = resolve("scripts/m6_json_custom_demo.json");
+  const artifactsDir = resolve(".tmp/test_scripts/m6_json_custom_demo");
 
   const loaded = await loadStepHandlersModule("scripts/m6_json_custom_steps.ts");
 
-  const result = await runScenarioFile(scenarioPath, { artifactsDir, steps: loaded.steps });
+  const result = await runScriptFile(scriptPath, { artifactsDir, steps: loaded.steps });
   expect(result.ok).toBe(true);
 
   const maskedPath = join(artifactsDir, "masked.txt");

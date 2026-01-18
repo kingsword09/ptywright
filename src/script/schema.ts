@@ -17,7 +17,7 @@ export const launchConfigSchema = z.object({
   name: z.string().optional(),
 });
 
-export const scenarioTraceSchema = z.object({
+export const scriptTraceSchema = z.object({
   saveCast: z.boolean().optional(),
   saveReport: z.boolean().optional(),
   castPath: z.string().optional(),
@@ -183,7 +183,7 @@ const customStepSchema = z.object({
   payload: z.unknown().optional(),
 });
 
-export const scenarioStepSchema = z.union([
+export const scriptStepSchema = z.union([
   sendTextStepSchema,
   pressKeyStepSchema,
   sendMouseStepSchema,
@@ -200,13 +200,13 @@ export const scenarioStepSchema = z.union([
   customStepSchema,
 ]);
 
-export const scenarioSchema = z.object({
+export const scriptSchema = z.object({
   name: z.string().optional(),
   artifactsDir: z.string().optional(),
   launch: launchConfigSchema,
-  trace: scenarioTraceSchema.optional(),
-  steps: z.array(scenarioStepSchema).min(1),
+  trace: scriptTraceSchema.optional(),
+  steps: z.array(scriptStepSchema).min(1),
 });
 
-export type Scenario = z.infer<typeof scenarioSchema>;
-export type ScenarioStep = z.infer<typeof scenarioStepSchema>;
+export type Script = z.infer<typeof scriptSchema>;
+export type ScriptStep = z.infer<typeof scriptStepSchema>;

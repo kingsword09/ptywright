@@ -1,11 +1,11 @@
-import { scenarioSchema } from "./schema";
-import type { Scenario, ScenarioStep } from "./schema";
+import { scriptSchema } from "./schema";
+import type { Script, ScriptStep } from "./schema";
 
 type SnapshotKey = string;
 
 type SnapshotRef<K extends SnapshotKey> = K | "last";
 
-type StepOf<T extends ScenarioStep["type"]> = Extract<ScenarioStep, { type: T }>;
+type StepOf<T extends ScriptStep["type"]> = Extract<ScriptStep, { type: T }>;
 
 type SnapshotStep = StepOf<"snapshot">;
 type ExpectStep = StepOf<"expect">;
@@ -16,19 +16,16 @@ type SendMouseStep = StepOf<"sendMouse">;
 
 type CustomStepMap = Record<string, unknown>;
 
-export type Script = Scenario;
-export type ScriptStep = ScenarioStep;
-
 export class ScriptBuilder<K extends SnapshotKey = never, Steps extends CustomStepMap = {}> {
-  private readonly scenario: Scenario;
+  private readonly script: Script;
 
   constructor(init: {
     name?: string;
     artifactsDir?: string;
-    launch: Scenario["launch"];
-    trace?: Scenario["trace"];
+    launch: Script["launch"];
+    trace?: Script["trace"];
   }) {
-    this.scenario = {
+    this.script = {
       name: init.name,
       artifactsDir: init.artifactsDir,
       launch: init.launch,
@@ -38,15 +35,15 @@ export class ScriptBuilder<K extends SnapshotKey = never, Steps extends CustomSt
   }
 
   getName(): string | undefined {
-    return this.scenario.name;
+    return this.script.name;
   }
 
-  getLaunch(): Scenario["launch"] {
-    return this.scenario.launch;
+  getLaunch(): Script["launch"] {
+    return this.script.launch;
   }
 
-  step(step: ScenarioStep): this {
-    this.scenario.steps.push(step);
+  step(step: ScriptStep): this {
+    this.script.steps.push(step);
     return this;
   }
 
@@ -174,18 +171,18 @@ export class ScriptBuilder<K extends SnapshotKey = never, Steps extends CustomSt
     return this.step({ type: "expectGolden", ...(step as Omit<ExpectGoldenStep, "type">) });
   }
 
-  build(): Scenario {
-    return scenarioSchema.parse(this.scenario) as Scenario;
+  build(): Script {
+    return scriptSchema.parse(this.script) as Script;
   }
 }
 
 export function defineScript<K extends SnapshotKey, Steps extends CustomStepMap>(
-  build: () => ScriptBuilder<K, Steps> | Scenario,
-): Scenario {
+  build: () => ScriptBuilder<K, Steps> | Script,
+): Script {
   const value = build();
-  const scenario =
+  const script =
     typeof value === "object" && value && "build" in value
       ? (value as ScriptBuilder<any, any>).build()
       : value;
-  return scenarioSchema.parse(scenario) as Scenario;
+  return scriptSchema.parse(script) as Script;
 }

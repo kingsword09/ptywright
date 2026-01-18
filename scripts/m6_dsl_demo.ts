@@ -1,6 +1,6 @@
-import { defineScript, ScriptBuilder } from "../src/scenario/dsl";
-import { createAssertSnapshotEqualsStep } from "../src/scenario/steps";
-import type { CustomStepHandler } from "../src/scenario/runner";
+import { defineScript, ScriptBuilder } from "../src/script/dsl";
+import { createAssertSnapshotEqualsStep } from "../src/script/steps";
+import type { CustomStepHandler } from "../src/script/runner";
 
 type CustomSteps = {
   assertMaskedEquals: { expected: string };

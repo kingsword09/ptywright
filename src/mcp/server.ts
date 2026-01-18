@@ -4,8 +4,8 @@ import { z } from "zod";
 
 import { SessionManager } from "../session/session_manager";
 import { formatSnapshotView } from "../terminal/view";
-import { runScenarioPath } from "../scenario/path";
-import { runAllScripts } from "../scenario/run_all";
+import { runScriptPath } from "../script/path";
+import { runAllScripts } from "../script/run_all";
 import { ScriptRecordingManager } from "./script_recording";
 
 export type PtywrightCapability = "core" | "debug" | "script" | "recording" | "all";
@@ -757,7 +757,7 @@ export function createPtywrightServer(options?: PtywrightServerOptions): {
       destructiveHint: true,
     },
     async (args) => {
-      const result = await runScenarioPath(args.scriptPath, {
+      const result = await runScriptPath(args.scriptPath, {
         artifactsDir: args.artifactsDir,
         stepsPath: args.stepsPath,
         updateGoldens: args.updateGoldens,
@@ -765,7 +765,7 @@ export function createPtywrightServer(options?: PtywrightServerOptions): {
 
       if (!result.ok) {
         return toolError(result.error, {
-          scenarioName: result.scenarioName,
+          scriptName: result.scriptName,
           artifactsDir: result.artifactsDir,
           castPath: result.castPath,
           reportPath: result.reportPath,

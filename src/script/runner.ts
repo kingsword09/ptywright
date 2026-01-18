@@ -8,8 +8,8 @@ import type { TraceReportResult } from "../trace/report";
 import { sleep } from "../util/sleep";
 
 import type { TextMaskRule } from "../terminal/mask";
-import { scenarioSchema } from "./schema";
-import type { Scenario, ScenarioStep } from "./schema";
+import { scriptSchema } from "./schema";
+import type { Script, ScriptStep } from "./schema";
 
 export type SnapshotRecord = {
   kind: string;
@@ -17,13 +17,13 @@ export type SnapshotRecord = {
   text: string;
 };
 
-export type ScenarioCustomStep<Name extends string = string, Payload = unknown> = {
+export type ScriptCustomStep<Name extends string = string, Payload = unknown> = {
   type: "custom";
   name: Name;
   payload?: Payload;
 };
 
-export type ScenarioRunnerContext = {
+export type ScriptRunnerContext = {
   session: ReturnType<SessionManager["launchSession"]>;
   stepIndex: number;
   last: SnapshotRecord | null;
@@ -33,7 +33,7 @@ export type ScenarioRunnerContext = {
   resolveGoldenPath: (path: string) => string;
   updateGoldens: boolean;
   captureSnapshot: (
-    step: Omit<Extract<ScenarioStep, { type: "snapshot" }>, "type">,
+    step: Omit<Extract<ScriptStep, { type: "snapshot" }>, "type">,
   ) => Promise<SnapshotRecord>;
   getSnapshot: (from?: string) => SnapshotRecord;
   writeArtifactText: (path: string, text: string) => void;
@@ -42,26 +42,26 @@ export type ScenarioRunnerContext = {
 
 type CustomStepHandlerImpl<Payload> = {
   bivarianceHack(
-    ctx: ScenarioRunnerContext,
-    step: ScenarioCustomStep<string, Payload>,
+    ctx: ScriptRunnerContext,
+    step: ScriptCustomStep<string, Payload>,
   ): Promise<SnapshotRecord | void> | SnapshotRecord | void;
 }["bivarianceHack"];
 
 export type CustomStepHandler<Payload = unknown> = CustomStepHandlerImpl<Payload>;
 
-type RunScenarioOptions = {
+type RunScriptOptions = {
   artifactsDir?: string;
   updateGoldens?: boolean;
   steps?: Record<string, CustomStepHandler>;
 };
 
-export async function runScenarioFile(
-  scenarioPath: string,
-  options?: RunScenarioOptions,
+export async function runScriptFile(
+  scriptPath: string,
+  options?: RunScriptOptions,
 ): Promise<{ ok: true; artifactsDir: string }> {
-  const raw = await Bun.file(scenarioPath).text();
+  const raw = await Bun.file(scriptPath).text();
   const parsedJson = JSON.parse(raw) as unknown;
-  const baseName = basename(scenarioPath, extname(scenarioPath));
+  const baseName = basename(scriptPath, extname(scriptPath));
   const withName =
     parsedJson &&
     typeof parsedJson === "object" &&
@@ -70,23 +70,23 @@ export async function runScenarioFile(
       ? { ...parsedJson, name: baseName }
       : parsedJson;
 
-  return runScenario(withName, options);
+  return runScript(withName, options);
 }
 
-export async function runScenario(
-  scenario: unknown,
-  options?: RunScenarioOptions,
+export async function runScript(
+  script: unknown,
+  options?: RunScriptOptions,
 ): Promise<{ ok: true; artifactsDir: string }> {
-  const parsed = scenarioSchema.parse(scenario) as Scenario;
+  const parsed = scriptSchema.parse(script) as Script;
 
-  const scenarioName = parsed.name ?? "scenario";
-  const artifactsDir = resolveArtifactsDir(parsed, scenarioName, options?.artifactsDir);
+  const scriptName = parsed.name ?? "script";
+  const artifactsDir = resolveArtifactsDir(parsed, scriptName, options?.artifactsDir);
 
   mkdirSync(artifactsDir, { recursive: true });
 
   const sessions = new SessionManager({ snapshotRingSize: 50 });
   const launch = parsed.launch;
-  // Resolve relative paths from the runner's working directory (not the scenario file).
+  // Resolve relative paths from the runner's working directory (not the script file).
   const cwd = launch.cwd ? resolve(process.cwd(), launch.cwd) : process.cwd();
 
   const session = sessions.launchSession({
@@ -102,7 +102,7 @@ export async function runScenario(
   const snapshots = new Map<string, SnapshotRecord>();
   let last: SnapshotRecord | null = null;
   let currentStepIndex = -1;
-  let currentStep: ScenarioStep | null = null;
+  let currentStep: ScriptStep | null = null;
 
   const resolveGoldenPath = (path: string) =>
     isAbsolute(path) ? path : resolve(process.cwd(), path);
@@ -112,14 +112,14 @@ export async function runScenario(
   const trace = parsed.trace ?? {};
   const saveCast = trace.saveCast ?? true;
   const saveReport = trace.saveReport ?? true;
-  const castPath = resolveArtifactPath(trace.castPath ?? `${scenarioName}.cast`);
-  const reportPath = resolveArtifactPath(trace.reportPath ?? `${scenarioName}.report.html`);
+  const castPath = resolveArtifactPath(trace.castPath ?? `${scriptName}.cast`);
+  const reportPath = resolveArtifactPath(trace.reportPath ?? `${scriptName}.report.html`);
 
   const stepHandlers = options?.steps;
 
   try {
     for (let stepIndex = 0; stepIndex < parsed.steps.length; stepIndex += 1) {
-      const step = parsed.steps[stepIndex] as ScenarioStep;
+      const step = parsed.steps[stepIndex] as ScriptStep;
       currentStepIndex = stepIndex;
       currentStep = step;
       last = await runStep({
@@ -144,7 +144,7 @@ export async function runScenario(
       reportPath,
       reportScope: trace.reportScope,
       reportMaxFrames: trace.reportMaxFrames,
-      scenarioName,
+      scriptName,
       result: { ok: true },
     });
 
@@ -155,7 +155,7 @@ export async function runScenario(
       await writeFailureArtifacts({
         session,
         artifactsDir,
-        scenarioName,
+        scriptName,
         stepIndex: currentStepIndex,
         step: currentStep,
         last,
@@ -169,7 +169,7 @@ export async function runScenario(
         reportPath,
         reportScope: trace.reportScope,
         reportMaxFrames: trace.reportMaxFrames,
-        scenarioName,
+        scriptName,
         result: {
           ok: false,
           error: (error as Error).message,
@@ -188,14 +188,14 @@ export async function runScenario(
   }
 }
 
-function resolveArtifactsDir(scenario: Scenario, scenarioName: string, override?: string): string {
+function resolveArtifactsDir(script: Script, scriptName: string, override?: string): string {
   if (override?.trim()) return resolve(override.trim());
-  if (scenario.artifactsDir?.trim()) return resolve(scenario.artifactsDir.trim());
-  return resolve(".tmp", "runs", scenarioName);
+  if (script.artifactsDir?.trim()) return resolve(script.artifactsDir.trim());
+  return resolve(".tmp", "runs", scriptName);
 }
 
 async function runStep(args: {
-  step: ScenarioStep;
+  step: ScriptStep;
   stepIndex: number;
   session: ReturnType<SessionManager["launchSession"]>;
   snapshots: Map<string, SnapshotRecord>;
@@ -364,7 +364,7 @@ async function runStep(args: {
         throw new Error(`custom handler not found: ${step.name}`);
       }
 
-      const ctx: ScenarioRunnerContext = {
+      const ctx: ScriptRunnerContext = {
         session: args.session,
         stepIndex: args.stepIndex,
         last: args.last,
@@ -374,12 +374,12 @@ async function runStep(args: {
         resolveGoldenPath: args.resolveGoldenPath,
         updateGoldens: args.updateGoldens,
         captureSnapshot: async (
-          snapshotConfig: Omit<Extract<ScenarioStep, { type: "snapshot" }>, "type">,
+          snapshotConfig: Omit<Extract<ScriptStep, { type: "snapshot" }>, "type">,
         ) => {
           const record = await snapshotStep(args.session, {
             type: "snapshot",
             ...snapshotConfig,
-          } as Extract<ScenarioStep, { type: "snapshot" }>);
+          } as Extract<ScriptStep, { type: "snapshot" }>);
 
           persistSnapshotRecord({
             record,
@@ -403,12 +403,12 @@ async function runStep(args: {
         },
       };
 
-      const result = await handler(ctx, step as ScenarioCustomStep);
+      const result = await handler(ctx, step as ScriptCustomStep);
       if (!result) return args.last;
       return result;
     }
 
-    throw new Error(`unknown type: ${(step as ScenarioStep).type}`);
+    throw new Error(`unknown type: ${(step as ScriptStep).type}`);
   } catch (error) {
     throw annotateStepError(error, args.stepIndex, step);
   }
@@ -434,10 +434,10 @@ function persistSnapshotRecord(args: {
   writeFileSync(path, `${args.record.text}\n`, "utf8");
 }
 
-function annotateStepError(error: unknown, stepIndex: number, step: ScenarioStep): Error {
+function annotateStepError(error: unknown, stepIndex: number, step: ScriptStep): Error {
   const label =
     step.type === "custom"
-      ? `custom(${(step as Extract<ScenarioStep, { type: "custom" }>).name})`
+      ? `custom(${(step as Extract<ScriptStep, { type: "custom" }>).name})`
       : step.type;
   const prefix = `step ${stepIndex + 1} ${label}`;
 
@@ -471,7 +471,7 @@ function selectSnapshot(
 
 function assertRecordMatches(
   record: SnapshotRecord,
-  step: Extract<ScenarioStep, { type: "expect" }>,
+  step: Extract<ScriptStep, { type: "expect" }>,
   stepIndex: number,
 ): void {
   if (step.equals !== undefined && record.text !== step.equals) {
@@ -518,20 +518,20 @@ function assertGoldenText(path: string, text: string, update: boolean): void {
 async function writeFailureArtifacts(args: {
   session: ReturnType<SessionManager["launchSession"]>;
   artifactsDir: string;
-  scenarioName: string;
+  scriptName: string;
   stepIndex: number;
-  step: ScenarioStep | null;
+  step: ScriptStep | null;
   last: SnapshotRecord | null;
   error: unknown;
 }): Promise<void> {
-  const { session, artifactsDir, scenarioName, stepIndex, step, last, error } = args;
+  const { session, artifactsDir, scriptName, stepIndex, step, last, error } = args;
 
   const err = error instanceof Error ? error : new Error(String(error));
   const errorText = err.stack ?? err.message;
   writeFileSync(join(artifactsDir, "failure.error.txt"), `${errorText}\n`, "utf8");
 
   const stepPayload = {
-    scenario: scenarioName,
+    script: scriptName,
     stepIndex: stepIndex >= 0 ? stepIndex + 1 : null,
     step: step ?? null,
     last: last ? { kind: last.kind, hash: last.hash } : null,
@@ -577,7 +577,7 @@ async function writeFailureArtifacts(args: {
 
 async function snapshotStep(
   session: ReturnType<SessionManager["launchSession"]>,
-  step: Extract<ScenarioStep, { type: "snapshot" }>,
+  step: Extract<ScriptStep, { type: "snapshot" }>,
 ): Promise<SnapshotRecord> {
   if (step.kind === "grid") {
     if (step.mask && step.mask.length > 0) {
@@ -651,7 +651,7 @@ async function writeTraceArtifacts(args: {
   reportPath: string;
   reportScope?: "visible" | "buffer";
   reportMaxFrames?: number;
-  scenarioName?: string;
+  scriptName?: string;
   result?: TraceReportResult;
 }): Promise<void> {
   if (!args.saveCast && !args.saveReport) return;
@@ -667,7 +667,7 @@ async function writeTraceArtifacts(args: {
     const html = await generateTraceReportHtml(snapshot.cast, {
       scope: args.reportScope,
       maxFrames: args.reportMaxFrames,
-      scenarioName: args.scenarioName,
+      scriptName: args.scriptName,
       result: args.result,
     });
     mkdirSync(dirname(args.reportPath), { recursive: true });
@@ -675,10 +675,10 @@ async function writeTraceArtifacts(args: {
   }
 }
 
-function formatStepLabel(step: ScenarioStep): string {
+function formatStepLabel(step: ScriptStep): string {
   return step.type === "custom"
-    ? `custom(${(step as ScenarioCustomStep).name})`
-    : (step as ScenarioStep).type;
+    ? `custom(${(step as ScriptCustomStep).name})`
+    : (step as ScriptStep).type;
 }
 
 function envTruthy(value: string | undefined): boolean {

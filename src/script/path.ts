@@ -1,29 +1,29 @@
 import { basename, extname, isAbsolute, resolve } from "node:path";
 
-import { loadScenarioModule, loadStepHandlersModule } from "./module";
-import { runScenario } from "./runner";
+import { loadScriptModule, loadStepHandlersModule } from "./module";
+import { runScript } from "./runner";
 import type { CustomStepHandler } from "./runner";
-import { scenarioSchema } from "./schema";
-import type { Scenario } from "./schema";
+import { scriptSchema } from "./schema";
+import type { Script } from "./schema";
 
-export type RunScenarioPathOptions = {
+export type RunScriptPathOptions = {
   artifactsDir?: string;
   updateGoldens?: boolean;
   stepsPath?: string;
 };
 
-export type RunScenarioPathSuccess = {
+export type RunScriptPathSuccess = {
   ok: true;
-  scenarioName: string;
+  scriptName: string;
   artifactsDir: string;
   castPath?: string;
   reportPath?: string;
 };
 
-export type RunScenarioPathFailure = {
+export type RunScriptPathFailure = {
   ok: false;
   error: string;
-  scenarioName?: string;
+  scriptName?: string;
   artifactsDir?: string;
   castPath?: string;
   reportPath?: string;
@@ -35,65 +35,65 @@ export type RunScenarioPathFailure = {
   };
 };
 
-export type RunScenarioPathResult = RunScenarioPathSuccess | RunScenarioPathFailure;
+export type RunScriptPathResult = RunScriptPathSuccess | RunScriptPathFailure;
 
-export async function runScenarioPath(
-  scenarioPath: string,
-  options?: RunScenarioPathOptions,
-): Promise<RunScenarioPathResult> {
-  let scenarioName: string | undefined;
+export async function runScriptPath(
+  scriptPath: string,
+  options?: RunScriptPathOptions,
+): Promise<RunScriptPathResult> {
+  let scriptName: string | undefined;
   let artifactsDir: string | undefined;
   let castPath: string | undefined;
   let reportPath: string | undefined;
 
   try {
-    const ext = extname(scenarioPath).toLowerCase();
-    const baseName = basename(scenarioPath, extname(scenarioPath));
+    const ext = extname(scriptPath).toLowerCase();
+    const baseName = basename(scriptPath, extname(scriptPath));
 
     const extraSteps = options?.stepsPath
       ? (await loadStepHandlersModule(options.stepsPath)).steps
       : undefined;
 
-    const loaded = await loadScenarioInput(scenarioPath, ext);
+    const loaded = await loadScriptInput(scriptPath, ext);
     const stepsFromModule = loaded.steps;
     const mergedSteps =
       stepsFromModule && extraSteps
         ? { ...stepsFromModule, ...extraSteps }
         : (stepsFromModule ?? extraSteps);
 
-    const built = loaded.scenario;
+    const built = loaded.script;
     const withName =
       built && typeof built === "object" && !Array.isArray(built) && !("name" in built)
         ? { ...built, name: baseName }
         : built;
 
-    const parsed = scenarioSchema.parse(withName) as Scenario;
-    scenarioName = parsed.name ?? baseName;
-    artifactsDir = resolveArtifactsDir(parsed, scenarioName, options?.artifactsDir);
+    const parsed = scriptSchema.parse(withName) as Script;
+    scriptName = parsed.name ?? baseName;
+    artifactsDir = resolveArtifactsDir(parsed, scriptName, options?.artifactsDir);
 
     const trace = parsed.trace ?? {};
     const saveCast = trace.saveCast ?? true;
     const saveReport = trace.saveReport ?? true;
     castPath = saveCast
-      ? resolveArtifactPath(artifactsDir, trace.castPath ?? `${scenarioName}.cast`)
+      ? resolveArtifactPath(artifactsDir, trace.castPath ?? `${scriptName}.cast`)
       : undefined;
     reportPath = saveReport
-      ? resolveArtifactPath(artifactsDir, trace.reportPath ?? `${scenarioName}.report.html`)
+      ? resolveArtifactPath(artifactsDir, trace.reportPath ?? `${scriptName}.report.html`)
       : undefined;
 
     try {
-      await runScenario(parsed, {
+      await runScript(parsed, {
         artifactsDir,
         updateGoldens: options?.updateGoldens,
         steps: mergedSteps,
       });
 
-      return { ok: true, scenarioName, artifactsDir, castPath, reportPath };
+      return { ok: true, scriptName, artifactsDir, castPath, reportPath };
     } catch (error) {
       return {
         ok: false,
         error: (error as Error).message,
-        scenarioName,
+        scriptName,
         artifactsDir,
         castPath,
         reportPath,
@@ -109,7 +109,7 @@ export async function runScenarioPath(
     return {
       ok: false,
       error: (error as Error).message,
-      scenarioName,
+      scriptName,
       artifactsDir,
       castPath,
       reportPath,
@@ -117,32 +117,32 @@ export async function runScenarioPath(
   }
 }
 
-async function loadScenarioInput(
-  scenarioPath: string,
+async function loadScriptInput(
+  scriptPath: string,
   ext: string,
-): Promise<{ scenario: unknown; steps?: Record<string, CustomStepHandler> }> {
+): Promise<{ script: unknown; steps?: Record<string, CustomStepHandler> }> {
   if (ext === ".json") {
-    const raw = await Bun.file(scenarioPath).text();
-    return { scenario: JSON.parse(raw) as unknown };
+    const raw = await Bun.file(scriptPath).text();
+    return { script: JSON.parse(raw) as unknown };
   }
 
-  const loaded = await loadScenarioModule(scenarioPath);
-  const scenario = loaded.scenario;
+  const loaded = await loadScriptModule(scriptPath);
+  const script = loaded.script;
   if (
-    scenario &&
-    typeof scenario === "object" &&
-    "build" in scenario &&
-    typeof (scenario as { build?: unknown }).build === "function"
+    script &&
+    typeof script === "object" &&
+    "build" in script &&
+    typeof (script as { build?: unknown }).build === "function"
   ) {
-    return { scenario: (scenario as { build: () => unknown }).build(), steps: loaded.steps };
+    return { script: (script as { build: () => unknown }).build(), steps: loaded.steps };
   }
-  return { scenario, steps: loaded.steps };
+  return { script, steps: loaded.steps };
 }
 
-function resolveArtifactsDir(scenario: Scenario, scenarioName: string, override?: string): string {
+function resolveArtifactsDir(script: Script, scriptName: string, override?: string): string {
   if (override?.trim()) return resolve(override.trim());
-  if (scenario.artifactsDir?.trim()) return resolve(scenario.artifactsDir.trim());
-  return resolve(".tmp", "runs", scenarioName);
+  if (script.artifactsDir?.trim()) return resolve(script.artifactsDir.trim());
+  return resolve(".tmp", "runs", scriptName);
 }
 
 function resolveArtifactPath(artifactsDir: string, path: string): string {

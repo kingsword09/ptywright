@@ -1,5 +1,5 @@
-import { createAssertSnapshotEqualsStep } from "../src/scenario/steps";
-import type { CustomStepHandler } from "../src/scenario/runner";
+import { createAssertSnapshotEqualsStep } from "../src/script/steps";
+import type { CustomStepHandler } from "../src/script/runner";
 
 type CustomSteps = {
   assertMaskedEquals: { expected: string };

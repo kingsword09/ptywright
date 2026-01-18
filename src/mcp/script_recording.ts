@@ -1,8 +1,8 @@
 import { existsSync, mkdirSync, writeFileSync } from "node:fs";
 import { dirname, relative, resolve } from "node:path";
 
-import { scenarioSchema } from "../scenario/schema";
-import type { Scenario, ScenarioStep } from "../scenario/schema";
+import { scriptSchema } from "../script/schema";
+import type { Script, ScriptStep } from "../script/schema";
 import type { TerminalSession } from "../session/terminal_session";
 import type { TextMaskRule } from "../terminal/mask";
 
@@ -37,7 +37,7 @@ export type ScriptRecordingStatus = {
 export type StopScriptRecordingResult = {
   scriptPath?: string;
   goldenPaths: string[];
-  script: Scenario & { $schema?: string };
+  script: Script & { $schema?: string };
 };
 
 type GoldenWrite = { path: string; text: string };
@@ -56,9 +56,9 @@ type ScriptRecording = {
   goldenDir: string;
   overwrite: boolean;
   checkpoint: CheckpointConfig;
-  launch: Scenario["launch"] | null;
+  launch: Script["launch"] | null;
   sessionId: string | null;
-  steps: ScenarioStep[];
+  steps: ScriptStep[];
   checkpointIndex: number;
   goldenWrites: GoldenWrite[];
 };
@@ -120,14 +120,14 @@ export class ScriptRecordingManager {
     const schemaAbs = resolve("schemas/ptywright-script.schema.json");
     const schemaRel = toPosixPath(relative(dirname(resolve(recording.outPath)), schemaAbs));
 
-    const built: Scenario & { $schema?: string } = {
+    const built: Script & { $schema?: string } = {
       $schema: schemaRel,
       name: recording.name,
       launch: recording.launch,
       steps: recording.steps,
     };
 
-    const parsed = scenarioSchema.parse(built) as Scenario;
+    const parsed = scriptSchema.parse(built) as Script;
     const script = { ...parsed, $schema: built.$schema };
 
     const goldenPaths = recording.goldenWrites.map((w) => w.path);
@@ -158,7 +158,7 @@ export class ScriptRecordingManager {
     };
   }
 
-  recordLaunch(args: Scenario["launch"], sessionId: string): void {
+  recordLaunch(args: Script["launch"], sessionId: string): void {
     const rec = this.active;
     if (!rec) return;
 
@@ -167,7 +167,7 @@ export class ScriptRecordingManager {
     rec.sessionId = sessionId;
   }
 
-  recordStep(step: ScenarioStep): void {
+  recordStep(step: ScriptStep): void {
     const rec = this.active;
     if (!rec) return;
     rec.steps.push(step);
@@ -200,12 +200,12 @@ export class ScriptRecordingManager {
       trimRight: rec.checkpoint.trimRight,
       trimBottom: rec.checkpoint.trimBottom,
       mask: rec.checkpoint.mask,
-    } as Extract<ScenarioStep, { type: "snapshot" }>);
+    } as Extract<ScriptStep, { type: "snapshot" }>);
 
     rec.steps.push({
       type: "expectGolden",
       path: goldenPath,
-    } as Extract<ScenarioStep, { type: "expectGolden" }>);
+    } as Extract<ScriptStep, { type: "expectGolden" }>);
   }
 }
 

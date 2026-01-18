@@ -144,9 +144,9 @@ bun run script:run scripts/m6_dsl_demo.ts
 ```
 
 约定：
-- module 默认导出（`export default`），或导出 `script`/`scenario`。
+- module 默认导出（`export default`），或导出 `script`。
 - 可选导出 `steps`（custom step handlers），用于执行 `type:"custom"` 的步骤。
-- 常用 handlers 可复用：`src/scenario/steps/*`。
+- 常用 handlers 可复用：`src/script/steps/*`。
 - 需要测试“粘贴”时可用 `pasteText("...", { bracketed: true })`（bracketed paste）。
 
 ## Cast -> SVG/GIF (可选)

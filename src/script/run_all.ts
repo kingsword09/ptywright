@@ -1,8 +1,8 @@
 import { readdirSync, statSync } from "node:fs";
 import { basename, join, resolve } from "node:path";
 
-import { runScenarioPath } from "./path";
-import type { RunScenarioPathResult } from "./path";
+import { runScriptPath } from "./path";
+import type { RunScriptPathResult } from "./path";
 
 export type RunAllScriptsOptions = {
   dir?: string;
@@ -13,7 +13,7 @@ export type RunAllScriptsOptions = {
 
 export type RunAllScriptsEntry = {
   filePath: string;
-  result: RunScenarioPathResult;
+  result: RunScriptPathResult;
 };
 
 export type RunAllScriptsResult = {
@@ -35,7 +35,7 @@ export async function runAllScripts(options?: RunAllScriptsOptions): Promise<Run
   for (const filePath of filePaths) {
     const base = basename(filePath).replace(/\.(json|ts)$/i, "");
     const artifactsDir = artifactsRoot ? join(artifactsRoot, base) : undefined;
-    const result = await runScenarioPath(filePath, {
+    const result = await runScriptPath(filePath, {
       artifactsDir,
       stepsPath,
       updateGoldens: options?.updateGoldens,
