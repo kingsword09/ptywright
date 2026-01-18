@@ -19,9 +19,6 @@ test("run_all_scripts supports output controls", async () => {
     command: process.execPath,
     args: ["src/index.ts"],
     cwd: process.cwd(),
-    env: {
-      PTYWRIGHT_CAPS: "script",
-    },
     stderr: "pipe",
   });
 

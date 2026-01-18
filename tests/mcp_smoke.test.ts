@@ -22,9 +22,6 @@ test("MCP server smoke test", async () => {
     command: process.execPath,
     args: ["src/index.ts"],
     cwd: process.cwd(),
-    env: {
-      PTYWRIGHT_CAPS: "all",
-    },
     stderr: "pipe",
   });
 

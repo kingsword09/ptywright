@@ -7,22 +7,22 @@
 ```bash
 bun install
 
-# 默认仅加载 core tools（更省 token）
+# 默认加载全量 tools
 bun run src/index.ts
 
-# 可选：加载全量 tools
-# PTYWRIGHT_CAPS=all bun run src/index.ts
+# 可选：减少 tool 数量（降低 Agent 上下文压力）
+# PTYWRIGHT_CAPS=core bun run src/index.ts
 ```
 
 ## Tools (MVP)
 
-工具集按 capability 过滤（减少 MCP tool 体积/上下文压力）：
+工具默认全量开启（等价 `PTYWRIGHT_CAPS=all`）。如需减少 tool 数量，可设置 `PTYWRIGHT_CAPS=core` 或按需组合：
 
-- 默认：`PTYWRIGHT_CAPS=core`
-- 全量：`PTYWRIGHT_CAPS=all`
+- 默认：`PTYWRIGHT_CAPS=all`
+- 最小：`PTYWRIGHT_CAPS=core`
 - 组合：`PTYWRIGHT_CAPS=core,debug,script,recording`
 
-### core（默认）
+### core
 
 - `launch_session`：启动 PTY 会话（会自动成为默认会话）
 - `select_session`：选择默认会话（之后多数 tools 可省略 `sessionId`）
@@ -126,7 +126,7 @@ bun run script:run scripts/m6_json_custom_demo.json --steps scripts/m6_json_cust
 
 ## Script Recording (MCP)
 
-需要启用 `recording` capability（例如 `PTYWRIGHT_CAPS=core,recording` 或 `PTYWRIGHT_CAPS=all`）。
+如果你设置了 `PTYWRIGHT_CAPS` 且未包含 `recording`，需要开启 `recording`（例如 `PTYWRIGHT_CAPS=core,recording`）。
 
 在任意 MCP client/Agent 通过 MCP tools 驱动时，可以一键把工具调用“录成脚本”，并在 `mark` 处自动落盘 golden：
 

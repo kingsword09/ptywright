@@ -19,9 +19,6 @@ test("select_session enables omitting sessionId", async () => {
     command: process.execPath,
     args: ["src/index.ts"],
     cwd: process.cwd(),
-    env: {
-      PTYWRIGHT_CAPS: "core",
-    },
     stderr: "pipe",
   });
 

@@ -992,7 +992,7 @@ function resolveCapabilities(
   }
 
   if (!all && normalized.size === 0) {
-    normalized.add("core");
+    all = true;
   }
 
   return { all, enabled: normalized };
