@@ -1,10 +1,10 @@
 import { mkdirSync, readFileSync, writeFileSync } from "node:fs";
-import { basename, dirname, extname, isAbsolute, join, resolve } from "node:path";
+import { basename, dirname, extname, isAbsolute, join, relative, resolve } from "node:path";
 
 import { SessionManager } from "../session/session_manager";
 import { formatSnapshotView } from "../terminal/view";
 import { generateTraceReportHtml } from "../trace/report";
-import type { TraceReportResult } from "../trace/report";
+import type { TraceReportArtifacts, TraceReportResult } from "../trace/report";
 import { sleep } from "../util/sleep";
 
 import type { TextMaskRule } from "../terminal/mask";
@@ -138,6 +138,7 @@ export async function runScript(
 
     await writeTraceArtifacts({
       session,
+      artifactsDir,
       saveCast,
       castPath,
       saveReport,
@@ -163,6 +164,7 @@ export async function runScript(
       });
       await writeTraceArtifacts({
         session,
+        artifactsDir,
         saveCast,
         castPath,
         saveReport,
@@ -645,6 +647,7 @@ async function snapshotStep(
 
 async function writeTraceArtifacts(args: {
   session: ReturnType<SessionManager["launchSession"]>;
+  artifactsDir: string;
   saveCast: boolean;
   castPath: string;
   saveReport: boolean;
@@ -664,15 +667,63 @@ async function writeTraceArtifacts(args: {
   }
 
   if (args.saveReport) {
+    const artifactHrefs = buildReportArtifactHrefs({
+      reportPath: args.reportPath,
+      castPath: args.saveCast ? args.castPath : null,
+      artifactsDir: args.artifactsDir,
+      includeFailures: args.result?.ok === false,
+    });
+
     const html = await generateTraceReportHtml(snapshot.cast, {
       scope: args.reportScope,
       maxFrames: args.reportMaxFrames,
       scriptName: args.scriptName,
       result: args.result,
+      artifacts: artifactHrefs,
     });
     mkdirSync(dirname(args.reportPath), { recursive: true });
     writeFileSync(args.reportPath, html, "utf8");
   }
+}
+
+function buildReportArtifactHrefs(args: {
+  reportPath: string;
+  castPath: string | null;
+  artifactsDir: string;
+  includeFailures: boolean;
+}): TraceReportArtifacts | undefined {
+  const items: TraceReportArtifacts = {};
+
+  if (args.castPath) {
+    items.castHref = relativeHref(args.reportPath, args.castPath);
+  }
+
+  if (args.includeFailures) {
+    items.failureErrorHref = relativeHref(
+      args.reportPath,
+      join(args.artifactsDir, "failure.error.txt"),
+    );
+    items.failureStepHref = relativeHref(
+      args.reportPath,
+      join(args.artifactsDir, "failure.step.json"),
+    );
+    items.failureLastTextHref = relativeHref(
+      args.reportPath,
+      join(args.artifactsDir, "failure.last.txt"),
+    );
+    items.failureLastViewHref = relativeHref(
+      args.reportPath,
+      join(args.artifactsDir, "failure.last.view.txt"),
+    );
+  }
+
+  return Object.keys(items).length ? items : undefined;
+}
+
+function relativeHref(fromFile: string, toFile: string): string {
+  const rel = relative(dirname(fromFile), toFile);
+  const normalized = rel.replace(/\\/g, "/");
+  return normalized.startsWith(".") ? normalized : `./${normalized}`;
 }
 
 function formatStepLabel(step: ScriptStep): string {

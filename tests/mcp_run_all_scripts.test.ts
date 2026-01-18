@@ -14,7 +14,7 @@ function firstTextContent(result: unknown): string {
   return typeof first.text === "string" ? first.text : "";
 }
 
-test("run_all_scripts supports output controls", async () => {
+test("ptywright_run_all_scripts supports output controls", async () => {
   const transport = new StdioClientTransport({
     command: process.execPath,
     args: ["src/index.ts"],
@@ -30,7 +30,7 @@ test("run_all_scripts supports output controls", async () => {
   await client.connect(transport);
 
   const result = await client.callTool({
-    name: "run_all_scripts",
+    name: "ptywright_run_all_scripts",
     arguments: {
       dir: "tests/fixtures/run_all_scripts",
       artifactsRoot: ".tmp/test_scripts/mcp_run_all_scripts",

@@ -19,17 +19,17 @@ test("MCP server tools default to all", async () => {
   await client.connect(transport);
 
   const list = await client.listTools();
-  expect(list.tools.some((t) => t.name === "launch_session")).toBe(true);
-  expect(list.tools.some((t) => t.name === "select_session")).toBe(true);
-  expect(list.tools.some((t) => t.name === "snapshot_text")).toBe(true);
-  expect(list.tools.some((t) => t.name === "snapshot_view")).toBe(true);
+  expect(list.tools.some((t) => t.name === "ptywright_launch_session")).toBe(true);
+  expect(list.tools.some((t) => t.name === "ptywright_select_session")).toBe(true);
+  expect(list.tools.some((t) => t.name === "ptywright_snapshot_text")).toBe(true);
+  expect(list.tools.some((t) => t.name === "ptywright_snapshot_view")).toBe(true);
 
-  expect(list.tools.some((t) => t.name === "snapshot_ansi")).toBe(true);
-  expect(list.tools.some((t) => t.name === "run_script")).toBe(true);
-  expect(list.tools.some((t) => t.name === "run_all_scripts")).toBe(true);
-  expect(list.tools.some((t) => t.name === "start_script_recording")).toBe(true);
-  expect(list.tools.some((t) => t.name === "stop_script_recording")).toBe(true);
-  expect(list.tools.some((t) => t.name === "mark")).toBe(true);
+  expect(list.tools.some((t) => t.name === "ptywright_snapshot_ansi")).toBe(true);
+  expect(list.tools.some((t) => t.name === "ptywright_run_script")).toBe(true);
+  expect(list.tools.some((t) => t.name === "ptywright_run_all_scripts")).toBe(true);
+  expect(list.tools.some((t) => t.name === "ptywright_start_script_recording")).toBe(true);
+  expect(list.tools.some((t) => t.name === "ptywright_stop_script_recording")).toBe(true);
+  expect(list.tools.some((t) => t.name === "ptywright_mark")).toBe(true);
 
   await client.close();
   await transport.close();
@@ -54,15 +54,15 @@ test("PTYWRIGHT_CAPS=core restricts to core tools", async () => {
   await client.connect(transport);
 
   const list = await client.listTools();
-  expect(list.tools.some((t) => t.name === "launch_session")).toBe(true);
-  expect(list.tools.some((t) => t.name === "select_session")).toBe(true);
-  expect(list.tools.some((t) => t.name === "snapshot_text")).toBe(true);
-  expect(list.tools.some((t) => t.name === "snapshot_view")).toBe(true);
+  expect(list.tools.some((t) => t.name === "ptywright_launch_session")).toBe(true);
+  expect(list.tools.some((t) => t.name === "ptywright_select_session")).toBe(true);
+  expect(list.tools.some((t) => t.name === "ptywright_snapshot_text")).toBe(true);
+  expect(list.tools.some((t) => t.name === "ptywright_snapshot_view")).toBe(true);
 
   // debug/script/recording should be disabled when restricted to core
-  expect(list.tools.some((t) => t.name === "snapshot_ansi")).toBe(false);
-  expect(list.tools.some((t) => t.name === "run_script")).toBe(false);
-  expect(list.tools.some((t) => t.name === "start_script_recording")).toBe(false);
+  expect(list.tools.some((t) => t.name === "ptywright_snapshot_ansi")).toBe(false);
+  expect(list.tools.some((t) => t.name === "ptywright_run_script")).toBe(false);
+  expect(list.tools.some((t) => t.name === "ptywright_start_script_recording")).toBe(false);
 
   await client.close();
   await transport.close();

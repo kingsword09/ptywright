@@ -33,19 +33,19 @@ test("MCP server smoke test", async () => {
   await client.connect(transport);
 
   const list = await client.listTools();
-  expect(list.tools.some((t) => t.name === "launch_session")).toBe(true);
-  expect(list.tools.some((t) => t.name === "snapshot_ansi")).toBe(true);
-  expect(list.tools.some((t) => t.name === "snapshot_view_ansi")).toBe(true);
-  expect(list.tools.some((t) => t.name === "send_mouse")).toBe(true);
-  expect(list.tools.some((t) => t.name === "snapshot_cast")).toBe(true);
-  expect(list.tools.some((t) => t.name === "mark")).toBe(true);
-  expect(list.tools.some((t) => t.name === "run_script")).toBe(true);
-  expect(list.tools.some((t) => t.name === "run_all_scripts")).toBe(true);
-  expect(list.tools.some((t) => t.name === "start_script_recording")).toBe(true);
-  expect(list.tools.some((t) => t.name === "stop_script_recording")).toBe(true);
+  expect(list.tools.some((t) => t.name === "ptywright_launch_session")).toBe(true);
+  expect(list.tools.some((t) => t.name === "ptywright_snapshot_ansi")).toBe(true);
+  expect(list.tools.some((t) => t.name === "ptywright_snapshot_view_ansi")).toBe(true);
+  expect(list.tools.some((t) => t.name === "ptywright_send_mouse")).toBe(true);
+  expect(list.tools.some((t) => t.name === "ptywright_snapshot_cast")).toBe(true);
+  expect(list.tools.some((t) => t.name === "ptywright_mark")).toBe(true);
+  expect(list.tools.some((t) => t.name === "ptywright_run_script")).toBe(true);
+  expect(list.tools.some((t) => t.name === "ptywright_run_all_scripts")).toBe(true);
+  expect(list.tools.some((t) => t.name === "ptywright_start_script_recording")).toBe(true);
+  expect(list.tools.some((t) => t.name === "ptywright_stop_script_recording")).toBe(true);
 
   const scriptRun = await client.callTool({
-    name: "run_script",
+    name: "ptywright_run_script",
     arguments: {
       scriptPath: "scripts/m6_json_custom_demo.json",
       stepsPath: "scripts/m6_json_custom_steps.ts",
@@ -61,7 +61,7 @@ test("MCP server smoke test", async () => {
   expect(readFileSync(maskedPath, "utf8").trimEnd()).toBe("TOKEN: <id>\nDONE");
 
   const launched = await client.callTool({
-    name: "launch_session",
+    name: "ptywright_launch_session",
     arguments: {
       command: process.execPath,
       args: ["tests/fixtures/ansi_demo.ts"],
@@ -75,7 +75,7 @@ test("MCP server smoke test", async () => {
   expect(typeof sessionId).toBe("string");
 
   const waited = await client.callTool({
-    name: "wait_for_text",
+    name: "ptywright_wait_for_text",
     arguments: {
       sessionId,
       text: "DONE",
@@ -88,12 +88,12 @@ test("MCP server smoke test", async () => {
   expect(found).toBe(true);
 
   await client.callTool({
-    name: "mark",
+    name: "ptywright_mark",
     arguments: { sessionId, label: "smoke" },
   });
 
   const snap = await client.callTool({
-    name: "snapshot_view",
+    name: "ptywright_snapshot_view",
     arguments: { sessionId, trimRight: true },
   });
   const viewText = firstTextContent(snap);
@@ -101,21 +101,21 @@ test("MCP server smoke test", async () => {
   expect(viewText).toContain("DONE");
 
   const ansiSnap = await client.callTool({
-    name: "snapshot_ansi",
+    name: "ptywright_snapshot_ansi",
     arguments: { sessionId, trimRight: true, trimBottom: true },
   });
   const ansiText = firstTextContent(ansiSnap);
   expect(ansiText).toContain("Hello world");
 
   const ansiViewSnap = await client.callTool({
-    name: "snapshot_view_ansi",
+    name: "ptywright_snapshot_view_ansi",
     arguments: { sessionId, trimRight: true },
   });
   const ansiViewText = firstTextContent(ansiViewSnap);
   expect(ansiViewText).toContain("Hello world");
 
   const castSnap = await client.callTool({
-    name: "snapshot_cast",
+    name: "ptywright_snapshot_cast",
     arguments: { sessionId },
   });
   const castText = firstTextContent(castSnap);
@@ -123,7 +123,7 @@ test("MCP server smoke test", async () => {
   expect(castText).toContain("smoke");
 
   await client.callTool({
-    name: "close_session",
+    name: "ptywright_close_session",
     arguments: { sessionId },
   });
 

@@ -32,15 +32,15 @@
 - 默认 `auto`：mac/linux 优先 `bun-terminal`，win32 优先 `bun-pty`（避免平台差异）。
 
 ## 快照策略（可读性 vs 可回归）
-- 断言主路径：`snapshot_view` / `snapshot_grid`（稳定、可 diff）。
-- 人眼/调试：`snapshot_view_ansi`（包含 ANSI/SGR；在某些日志/JSON 输出场景会变得不可读）。
+- 断言主路径：`ptywright_snapshot_view` / `ptywright_snapshot_grid`（稳定、可 diff）。
+- 人眼/调试：`ptywright_snapshot_view_ansi`（包含 ANSI/SGR；在某些日志/JSON 输出场景会变得不可读）。
 - 约定：不要默认在结构化返回里塞超长 `text`；需要时用显式参数开启（避免污染 Agent 上下文）。
 
 ## Script Runner（JSON）
 - 用 JSON/TS 脚本文件驱动 TUI：`bun run script:run <file.json|file.ts>`（默认产物在 `.tmp/runs/<name>/`）
 - JSON 可选加 `$schema: "../schemas/ptywright-script.schema.json"`，获得编辑器补全/校验。
 - 批量执行：`bun run script:run-all`（递归扫描 `scripts/`）
-- 录制脚本（MCP）：`start_script_recording` + 在关键处 `mark` + `stop_script_recording`
+- 录制脚本（MCP）：`ptywright_start_script_recording` + 在关键处 `ptywright_mark` + `ptywright_stop_script_recording`
 
 ## 跨平台与换行
 - `.gitattributes` 强制仓库存储为 LF；`.editorconfig` 统一编辑器行为。

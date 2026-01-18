@@ -27,7 +27,7 @@ test("MCP script recording exports a runnable JSON script + goldens", async () =
   const goldenDir = ".tmp/test_scripts/m9_script_recording/goldens";
 
   const started = await client.callTool({
-    name: "start_script_recording",
+    name: "ptywright_start_script_recording",
     arguments: {
       name: "m9_script_recording",
       outPath,
@@ -48,7 +48,7 @@ test("MCP script recording exports a runnable JSON script + goldens", async () =
   expect(typeof recordingId).toBe("string");
 
   const launched = await client.callTool({
-    name: "launch_session",
+    name: "ptywright_launch_session",
     arguments: {
       command: "bun",
       args: ["run", "tests/fixtures/random_token_demo.ts"],
@@ -63,17 +63,17 @@ test("MCP script recording exports a runnable JSON script + goldens", async () =
   expect(typeof sessionId).toBe("string");
 
   await client.callTool({
-    name: "wait_for_text",
+    name: "ptywright_wait_for_text",
     arguments: { sessionId, scope: "visible", text: "DONE", timeoutMs: 5_000, intervalMs: 50 },
   });
 
   await client.callTool({
-    name: "mark",
+    name: "ptywright_mark",
     arguments: { sessionId, label: "done" },
   });
 
   const stopped = await client.callTool({
-    name: "stop_script_recording",
+    name: "ptywright_stop_script_recording",
     arguments: { recordingId, writeFiles: true },
   });
   expect(stopped.isError ?? false).toBe(false);

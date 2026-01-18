@@ -26,6 +26,14 @@ export type TraceReportResult = {
   };
 };
 
+export type TraceReportArtifacts = {
+  castHref?: string;
+  failureErrorHref?: string;
+  failureStepHref?: string;
+  failureLastTextHref?: string;
+  failureLastViewHref?: string;
+};
+
 type ReportFrame = {
   id: string;
   atSeconds: number;
@@ -42,6 +50,7 @@ export async function generateTraceReportHtml(
     maxFrames?: number;
     scriptName?: string;
     result?: TraceReportResult;
+    artifacts?: TraceReportArtifacts;
   },
 ): Promise<string> {
   const parsed = parseAsciicast(cast);
@@ -59,6 +68,7 @@ export async function generateTraceReportHtml(
   const maxFrames = options?.maxFrames ?? 200;
   const scriptName = options?.scriptName?.trim() ? options.scriptName.trim() : "";
   const result = options?.result;
+  const artifacts = options?.artifacts;
 
   let writeChain: Promise<void> = Promise.resolve();
 
@@ -152,6 +162,7 @@ export async function generateTraceReportHtml(
     scope,
     scriptName,
     result,
+    artifacts,
     frames,
     eventCount: parsed.events.length,
   });
@@ -169,6 +180,7 @@ function renderHtml(input: {
   scope: SnapshotScope;
   scriptName: string;
   result?: TraceReportResult;
+  artifacts?: TraceReportArtifacts;
   frames: ReportFrame[];
   eventCount: number;
 }): string {
@@ -186,6 +198,47 @@ function renderHtml(input: {
     input.result?.ok === true ? "PASS" : input.result?.ok === false ? "FAIL" : "UNKNOWN";
   const resultClass =
     input.result?.ok === true ? "pass" : input.result?.ok === false ? "fail" : "unknown";
+
+  const artifactsRows: { label: string; href: string }[] = [];
+  if (input.artifacts?.castHref?.trim()) {
+    artifactsRows.push({ label: "cast", href: input.artifacts.castHref.trim() });
+  }
+  if (input.artifacts?.failureErrorHref?.trim()) {
+    artifactsRows.push({
+      label: "failure.error.txt",
+      href: input.artifacts.failureErrorHref.trim(),
+    });
+  }
+  if (input.artifacts?.failureStepHref?.trim()) {
+    artifactsRows.push({
+      label: "failure.step.json",
+      href: input.artifacts.failureStepHref.trim(),
+    });
+  }
+  if (input.artifacts?.failureLastTextHref?.trim()) {
+    artifactsRows.push({
+      label: "failure.last.txt",
+      href: input.artifacts.failureLastTextHref.trim(),
+    });
+  }
+  if (input.artifacts?.failureLastViewHref?.trim()) {
+    artifactsRows.push({
+      label: "failure.last.view.txt",
+      href: input.artifacts.failureLastViewHref.trim(),
+    });
+  }
+
+  const artifactsHtml =
+    artifactsRows.length === 0
+      ? `<p class="muted">No artifacts linked.</p>`
+      : `<ul class="artifacts">
+${artifactsRows
+  .map(
+    (a) =>
+      `<li><a href="${escapeHtml(a.href)}">${escapeHtml(a.label)}</a><span class="muted"> (${escapeHtml(a.href)})</span></li>`,
+  )
+  .join("\n")}
+</ul>`;
 
   const markListHtml =
     markFrames.length === 0
@@ -313,6 +366,16 @@ ${markFrames
         margin: 8px 0 0 18px;
         padding: 0;
       }
+      .artifacts {
+        margin: 8px 0 0 18px;
+        padding: 0;
+      }
+      .artifacts li {
+        margin: 4px 0;
+      }
+      a {
+        color: inherit;
+      }
       .muted {
         opacity: 0.75;
       }
@@ -352,6 +415,10 @@ timestamp=${escapeHtml(coerceDisplayString(timestamp))}</div>
             .filter(Boolean)
             .join("\n"),
         )}</pre>
+      </section>
+      <section class="section">
+        <h2>Artifacts</h2>
+        ${artifactsHtml}
       </section>
       <section class="section">
         <h2>Marks</h2>

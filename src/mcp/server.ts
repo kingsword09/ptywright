@@ -87,7 +87,7 @@ export function createPtywrightServer(options?: PtywrightServerOptions): {
 
   tool(
     "core",
-    "select_session",
+    "ptywright_select_session",
     "Select the default session for subsequent tool calls (so other tools can omit sessionId).",
     {
       sessionId: z.string().min(1),
@@ -108,7 +108,7 @@ export function createPtywrightServer(options?: PtywrightServerOptions): {
 
   tool(
     "core",
-    "launch_session",
+    "ptywright_launch_session",
     "Launch a new PTY session running a command (returns sessionId).",
     {
       command: z.string().min(1),
@@ -149,7 +149,7 @@ export function createPtywrightServer(options?: PtywrightServerOptions): {
 
   tool(
     "core",
-    "send_text",
+    "ptywright_send_text",
     "Send text input to a session (optionally press Enter).",
     {
       sessionId: z.string().min(1).optional(),
@@ -160,7 +160,9 @@ export function createPtywrightServer(options?: PtywrightServerOptions): {
     async (args, extra) => {
       const sessionId = args.sessionId ?? getSelectedSessionId(extra);
       if (!sessionId) {
-        return toolError("sessionId is required (provide sessionId or call select_session)");
+        return toolError(
+          "sessionId is required (provide sessionId or call ptywright_select_session)",
+        );
       }
 
       const session = sessions.getSession(sessionId);
@@ -175,7 +177,7 @@ export function createPtywrightServer(options?: PtywrightServerOptions): {
 
   tool(
     "core",
-    "press_key",
+    "ptywright_press_key",
     "Send a key or key chord to a session (e.g. Enter, Ctrl+C, Shift+Tab).",
     {
       sessionId: z.string().min(1).optional(),
@@ -185,7 +187,9 @@ export function createPtywrightServer(options?: PtywrightServerOptions): {
     async (args, extra) => {
       const sessionId = args.sessionId ?? getSelectedSessionId(extra);
       if (!sessionId) {
-        return toolError("sessionId is required (provide sessionId or call select_session)");
+        return toolError(
+          "sessionId is required (provide sessionId or call ptywright_select_session)",
+        );
       }
 
       const session = sessions.getSession(sessionId);
@@ -204,7 +208,7 @@ export function createPtywrightServer(options?: PtywrightServerOptions): {
 
   tool(
     "core",
-    "send_mouse",
+    "ptywright_send_mouse",
     "Send an SGR mouse event (click/move/scroll) to a session.",
     {
       sessionId: z.string().min(1).optional(),
@@ -220,7 +224,9 @@ export function createPtywrightServer(options?: PtywrightServerOptions): {
     async (args, extra) => {
       const sessionId = args.sessionId ?? getSelectedSessionId(extra);
       if (!sessionId) {
-        return toolError("sessionId is required (provide sessionId or call select_session)");
+        return toolError(
+          "sessionId is required (provide sessionId or call ptywright_select_session)",
+        );
       }
 
       const session = sessions.getSession(sessionId);
@@ -258,7 +264,7 @@ export function createPtywrightServer(options?: PtywrightServerOptions): {
 
   tool(
     "core",
-    "resize",
+    "ptywright_resize",
     "Resize the session terminal (cols/rows).",
     {
       sessionId: z.string().min(1).optional(),
@@ -269,7 +275,9 @@ export function createPtywrightServer(options?: PtywrightServerOptions): {
     async (args, extra) => {
       const sessionId = args.sessionId ?? getSelectedSessionId(extra);
       if (!sessionId) {
-        return toolError("sessionId is required (provide sessionId or call select_session)");
+        return toolError(
+          "sessionId is required (provide sessionId or call ptywright_select_session)",
+        );
       }
 
       const session = sessions.getSession(sessionId);
@@ -284,7 +292,7 @@ export function createPtywrightServer(options?: PtywrightServerOptions): {
 
   tool(
     "core",
-    "snapshot_text",
+    "ptywright_snapshot_text",
     "Capture plain text from the visible screen or full buffer (best for stable assertions/goldens).",
     {
       sessionId: z.string().min(1).optional(),
@@ -303,7 +311,9 @@ export function createPtywrightServer(options?: PtywrightServerOptions): {
     async (args, extra) => {
       const sessionId = args.sessionId ?? getSelectedSessionId(extra);
       if (!sessionId) {
-        return toolError("sessionId is required (provide sessionId or call select_session)");
+        return toolError(
+          "sessionId is required (provide sessionId or call ptywright_select_session)",
+        );
       }
 
       const session = sessions.getSession(sessionId);
@@ -311,7 +321,7 @@ export function createPtywrightServer(options?: PtywrightServerOptions): {
         return toolError(`session not found: ${sessionId}`);
       }
       if (args.maxLines !== undefined && args.tailLines !== undefined) {
-        return toolError("snapshot_text: maxLines and tailLines are mutually exclusive");
+        return toolError("ptywright_snapshot_text: maxLines and tailLines are mutually exclusive");
       }
       let text: string;
       let hash: string;
@@ -336,7 +346,7 @@ export function createPtywrightServer(options?: PtywrightServerOptions): {
 
   tool(
     "debug",
-    "snapshot_ansi",
+    "ptywright_snapshot_ansi",
     "Capture ANSI-rendered snapshot (debug/human inspection; less stable than plain text).",
     {
       sessionId: z.string().min(1).optional(),
@@ -355,7 +365,9 @@ export function createPtywrightServer(options?: PtywrightServerOptions): {
     async (args, extra) => {
       const sessionId = args.sessionId ?? getSelectedSessionId(extra);
       if (!sessionId) {
-        return toolError("sessionId is required (provide sessionId or call select_session)");
+        return toolError(
+          "sessionId is required (provide sessionId or call ptywright_select_session)",
+        );
       }
 
       const session = sessions.getSession(sessionId);
@@ -363,7 +375,7 @@ export function createPtywrightServer(options?: PtywrightServerOptions): {
         return toolError(`session not found: ${sessionId}`);
       }
       if (args.maxLines !== undefined && args.tailLines !== undefined) {
-        return toolError("snapshot_ansi: maxLines and tailLines are mutually exclusive");
+        return toolError("ptywright_snapshot_ansi: maxLines and tailLines are mutually exclusive");
       }
 
       let ansi: string;
@@ -391,7 +403,7 @@ export function createPtywrightServer(options?: PtywrightServerOptions): {
 
   tool(
     "debug",
-    "snapshot_grid",
+    "ptywright_snapshot_grid",
     "Capture a structured grid snapshot (rows/cols/cursor/lines).",
     {
       sessionId: z.string().min(1).optional(),
@@ -406,7 +418,9 @@ export function createPtywrightServer(options?: PtywrightServerOptions): {
     async (args, extra) => {
       const sessionId = args.sessionId ?? getSelectedSessionId(extra);
       if (!sessionId) {
-        return toolError("sessionId is required (provide sessionId or call select_session)");
+        return toolError(
+          "sessionId is required (provide sessionId or call ptywright_select_session)",
+        );
       }
 
       const session = sessions.getSession(sessionId);
@@ -426,7 +440,7 @@ export function createPtywrightServer(options?: PtywrightServerOptions): {
 
   tool(
     "debug",
-    "snapshot_cast",
+    "ptywright_snapshot_cast",
     "Export the asciicast v2 trace (useful for debugging/report playback).",
     {
       sessionId: z.string().min(1).optional(),
@@ -440,7 +454,9 @@ export function createPtywrightServer(options?: PtywrightServerOptions): {
     async (args, extra) => {
       const sessionId = args.sessionId ?? getSelectedSessionId(extra);
       if (!sessionId) {
-        return toolError("sessionId is required (provide sessionId or call select_session)");
+        return toolError(
+          "sessionId is required (provide sessionId or call ptywright_select_session)",
+        );
       }
 
       const session = sessions.getSession(sessionId);
@@ -467,7 +483,7 @@ export function createPtywrightServer(options?: PtywrightServerOptions): {
 
   tool(
     "recording",
-    "mark",
+    "ptywright_mark",
     "Add a marker to the session trace (used for recording/checkpoints).",
     {
       sessionId: z.string().min(1).optional(),
@@ -477,7 +493,9 @@ export function createPtywrightServer(options?: PtywrightServerOptions): {
     async (args, extra) => {
       const sessionId = args.sessionId ?? getSelectedSessionId(extra);
       if (!sessionId) {
-        return toolError("sessionId is required (provide sessionId or call select_session)");
+        return toolError(
+          "sessionId is required (provide sessionId or call ptywright_select_session)",
+        );
       }
 
       const session = sessions.getSession(sessionId);
@@ -494,7 +512,7 @@ export function createPtywrightServer(options?: PtywrightServerOptions): {
 
   tool(
     "core",
-    "wait_for_text",
+    "ptywright_wait_for_text",
     "Wait until a text/regex appears in the session (polling).",
     {
       sessionId: z.string().min(1).optional(),
@@ -513,7 +531,9 @@ export function createPtywrightServer(options?: PtywrightServerOptions): {
     async (args, extra) => {
       const sessionId = args.sessionId ?? getSelectedSessionId(extra);
       if (!sessionId) {
-        return toolError("sessionId is required (provide sessionId or call select_session)");
+        return toolError(
+          "sessionId is required (provide sessionId or call ptywright_select_session)",
+        );
       }
 
       const session = sessions.getSession(sessionId);
@@ -560,7 +580,7 @@ export function createPtywrightServer(options?: PtywrightServerOptions): {
 
   tool(
     "core",
-    "wait_for_stable_screen",
+    "ptywright_wait_for_stable_screen",
     "Wait until consecutive text snapshots remain unchanged for a quiet window (reduce flakiness).",
     {
       sessionId: z.string().min(1).optional(),
@@ -577,7 +597,9 @@ export function createPtywrightServer(options?: PtywrightServerOptions): {
     async (args, extra) => {
       const sessionId = args.sessionId ?? getSelectedSessionId(extra);
       if (!sessionId) {
-        return toolError("sessionId is required (provide sessionId or call select_session)");
+        return toolError(
+          "sessionId is required (provide sessionId or call ptywright_select_session)",
+        );
       }
 
       const session = sessions.getSession(sessionId);
@@ -615,7 +637,7 @@ export function createPtywrightServer(options?: PtywrightServerOptions): {
 
   tool(
     "core",
-    "snapshot_view",
+    "ptywright_snapshot_view",
     "Capture a formatted, human-readable snapshot view (includes meta + optional line numbers).",
     {
       sessionId: z.string().min(1).optional(),
@@ -635,7 +657,9 @@ export function createPtywrightServer(options?: PtywrightServerOptions): {
     async (args, extra) => {
       const sessionId = args.sessionId ?? getSelectedSessionId(extra);
       if (!sessionId) {
-        return toolError("sessionId is required (provide sessionId or call select_session)");
+        return toolError(
+          "sessionId is required (provide sessionId or call ptywright_select_session)",
+        );
       }
 
       const session = sessions.getSession(sessionId);
@@ -643,7 +667,7 @@ export function createPtywrightServer(options?: PtywrightServerOptions): {
         return toolError(`session not found: ${sessionId}`);
       }
       if (args.maxLines !== undefined && args.tailLines !== undefined) {
-        return toolError("snapshot_view: maxLines and tailLines are mutually exclusive");
+        return toolError("ptywright_snapshot_view: maxLines and tailLines are mutually exclusive");
       }
 
       let text: string;
@@ -679,7 +703,7 @@ export function createPtywrightServer(options?: PtywrightServerOptions): {
 
   tool(
     "debug",
-    "snapshot_view_ansi",
+    "ptywright_snapshot_view_ansi",
     "Capture a formatted ANSI snapshot view (includes meta + optional line numbers).",
     {
       sessionId: z.string().min(1).optional(),
@@ -699,7 +723,9 @@ export function createPtywrightServer(options?: PtywrightServerOptions): {
     async (args, extra) => {
       const sessionId = args.sessionId ?? getSelectedSessionId(extra);
       if (!sessionId) {
-        return toolError("sessionId is required (provide sessionId or call select_session)");
+        return toolError(
+          "sessionId is required (provide sessionId or call ptywright_select_session)",
+        );
       }
 
       const session = sessions.getSession(sessionId);
@@ -707,7 +733,9 @@ export function createPtywrightServer(options?: PtywrightServerOptions): {
         return toolError(`session not found: ${sessionId}`);
       }
       if (args.maxLines !== undefined && args.tailLines !== undefined) {
-        return toolError("snapshot_view_ansi: maxLines and tailLines are mutually exclusive");
+        return toolError(
+          "ptywright_snapshot_view_ansi: maxLines and tailLines are mutually exclusive",
+        );
       }
 
       let ansi: string;
@@ -743,7 +771,7 @@ export function createPtywrightServer(options?: PtywrightServerOptions): {
 
   tool(
     "script",
-    "run_script",
+    "ptywright_run_script",
     "Run a JSON/TS script via the runner and return artifact paths (prefer this for regression runs).",
     {
       scriptPath: z.string().min(1),
@@ -782,7 +810,7 @@ export function createPtywrightServer(options?: PtywrightServerOptions): {
 
   tool(
     "script",
-    "run_all_scripts",
+    "ptywright_run_all_scripts",
     "Run all JSON/TS scripts in a directory (recursive) and return a summary + artifact paths.",
     {
       dir: z.string().optional(),
@@ -857,13 +885,16 @@ export function createPtywrightServer(options?: PtywrightServerOptions): {
 
   tool(
     "recording",
-    "start_script_recording",
-    "Start recording MCP tool calls into a replayable script (with optional golden checkpoints via mark()).",
+    "ptywright_start_script_recording",
+    "Start recording MCP tool calls into a replayable script (with optional golden checkpoints via ptywright_mark()).",
     {
       name: z.string().min(1),
       outPath: z.string().optional(),
       goldenDir: z.string().optional(),
       overwrite: z.boolean().optional(),
+      scope: z.enum(["visible", "buffer"]).optional(),
+      trimRight: z.boolean().optional(),
+      trimBottom: z.boolean().optional(),
       mask: z.array(textMaskRuleSchema).optional(),
     },
     {
@@ -878,9 +909,9 @@ export function createPtywrightServer(options?: PtywrightServerOptions): {
           goldenDir: args.goldenDir,
           overwrite: args.overwrite,
           checkpoint: {
-            scope: "visible",
-            trimRight: true,
-            trimBottom: true,
+            scope: args.scope ?? "visible",
+            trimRight: args.trimRight ?? true,
+            trimBottom: args.trimBottom ?? true,
             mask: args.mask,
           },
         });
@@ -896,7 +927,7 @@ export function createPtywrightServer(options?: PtywrightServerOptions): {
 
   tool(
     "recording",
-    "stop_script_recording",
+    "ptywright_stop_script_recording",
     "Stop recording and optionally write the script + goldens to disk.",
     {
       recordingId: z.string().min(1),
@@ -927,7 +958,7 @@ export function createPtywrightServer(options?: PtywrightServerOptions): {
 
   tool(
     "core",
-    "close_session",
+    "ptywright_close_session",
     "Close a running session.",
     {
       sessionId: z.string().min(1).optional(),
@@ -939,7 +970,9 @@ export function createPtywrightServer(options?: PtywrightServerOptions): {
     async (args, extra) => {
       const sessionId = args.sessionId ?? getSelectedSessionId(extra);
       if (!sessionId) {
-        return toolError("sessionId is required (provide sessionId or call select_session)");
+        return toolError(
+          "sessionId is required (provide sessionId or call ptywright_select_session)",
+        );
       }
 
       const ok = sessions.closeSession(sessionId);
@@ -955,7 +988,7 @@ export function createPtywrightServer(options?: PtywrightServerOptions): {
 
   tool(
     "core",
-    "list_sessions",
+    "ptywright_list_sessions",
     "List active session IDs.",
     {},
     {

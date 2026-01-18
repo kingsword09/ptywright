@@ -10,8 +10,8 @@
 
 ### M0（已完成）：可通用驱动 MVP
 - PTY 启动任意进程 + `@xterm/headless` 重建屏幕。
-- MCP tools：`launch_session/send_text/press_key/resize/snapshot_text/snapshot_grid/snapshot_view/wait_for_text/wait_for_stable_screen/close_session`。
-- 可读性补齐：`snapshot_ansi/snapshot_view_ansi` 作为 debug/人眼验收。
+- MCP tools：`ptywright_launch_session/ptywright_send_text/ptywright_press_key/ptywright_resize/ptywright_snapshot_text/ptywright_snapshot_grid/ptywright_snapshot_view/ptywright_wait_for_text/ptywright_wait_for_stable_screen/ptywright_close_session`。
+- 可读性补齐：`ptywright_snapshot_ansi/ptywright_snapshot_view_ansi` 作为 debug/人眼验收。
 - 最小回归：Bun tests 覆盖 PTY+xterm 与 MCP smoke。
 
 ### M1：确定性 UI 回归（可 diff 的“终端 DOM”）
@@ -33,7 +33,7 @@
 ### M3：交互增强（鼠标/点击）
 目标：覆盖“仅靠键盘不够”的 TUI（可选，按需推进）。
 - 支持 SGR mouse 上报/发送 click（坐标基于 cols/rows）。
-- MCP tool：`send_mouse`（move/down/up/click + modifiers）。
+- MCP tool：`ptywright_send_mouse`（move/down/up/click + modifiers）。
 验收：对 sample app 能用点击触发可见 UI 变更并可断言。
 
 ### M4：框架特化加速（可选）
