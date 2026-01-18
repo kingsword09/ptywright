@@ -2,6 +2,7 @@ import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js"
 
 import type { PtywrightCapability } from "./mcp/server";
 import { createPtywrightServer } from "./mcp/server";
+import { startPtywrightHttpServer } from "./mcp/http_server";
 import { runAllScripts } from "./script/run_all";
 import { runScriptPath } from "./script/path";
 
@@ -11,6 +12,7 @@ function usage(): string {
     "",
     "Commands:",
     "  mcp                 Start the MCP server over stdio (default)",
+    "  mcp-http            Start the MCP server over Streamable HTTP",
     "  run <file>           Run one script (JSON/TS) and write artifacts",
     "  run-all [dir]        Run all scripts in a directory and write a suite report",
     "  help                Show help",
@@ -28,6 +30,12 @@ function usage(): string {
     "",
     "MCP options:",
     "  --caps <list>            Capabilities: all|core|debug|script|recording",
+    "",
+    "MCP HTTP options (mcp-http):",
+    "  --host <host>            Bind host (default: 127.0.0.1)",
+    "  --port <port>            Bind port (default: 3000)",
+    "  --allowed-origins <list> Comma/space separated Origin allowlist",
+    "  --no-cors                Disable CORS headers",
   ].join("\n");
 }
 
@@ -206,6 +214,83 @@ async function cmdMcp(argv: string[]): Promise<void> {
   process.on("SIGTERM", shutdown);
 }
 
+async function cmdMcpHttp(argv: string[]): Promise<void> {
+  let capabilities: PtywrightCapability[] | undefined;
+  let hostname: string | undefined;
+  let port: number | undefined;
+  let allowedOrigins: string[] | undefined;
+  let cors = true;
+
+  for (let i = 0; i < argv.length; i += 1) {
+    const arg = argv[i];
+    const next = argv[i + 1];
+
+    if (isHelp(arg)) {
+      // eslint-disable-next-line no-console
+      console.log(usage());
+      return;
+    }
+
+    if (arg === "--caps" && next) {
+      capabilities = parseCaps(next);
+      i += 1;
+      continue;
+    }
+
+    if ((arg === "--host" || arg === "--hostname") && next) {
+      hostname = next;
+      i += 1;
+      continue;
+    }
+
+    if (arg === "--port" && next) {
+      const value = Number.parseInt(next, 10);
+      if (!Number.isFinite(value) || value < 0) {
+        throw new Error(`invalid --port: ${next}`);
+      }
+      port = value;
+      i += 1;
+      continue;
+    }
+
+    if (arg === "--allowed-origins" && next) {
+      allowedOrigins = next
+        .split(/[\s,]+/g)
+        .map((v) => v.trim())
+        .filter(Boolean);
+      i += 1;
+      continue;
+    }
+
+    if (arg === "--no-cors") {
+      cors = false;
+      continue;
+    }
+
+    throw new Error(`unknown arg: ${arg ?? ""}`);
+  }
+
+  const handle = await startPtywrightHttpServer({
+    hostname,
+    port,
+    capabilities,
+    allowedOrigins,
+    cors,
+  });
+
+  // eslint-disable-next-line no-console
+  console.log(`listening ${handle.url}`);
+  // eslint-disable-next-line no-console
+  console.log(`health http://${handle.hostname}:${handle.port}/health`);
+
+  function shutdown(): void {
+    void handle.close();
+  }
+
+  process.on("SIGINT", shutdown);
+  process.on("SIGTERM", shutdown);
+}
+
 async function cmdRun(argv: string[]): Promise<number> {
   const args = parseRunArgs(argv);
   const result = await runScriptPath(args.scriptPath, {
@@ -297,6 +382,11 @@ export async function main(argv: string[] = process.argv.slice(2)): Promise<void
 
   if (command === "mcp") {
     await cmdMcp(rest);
+    return;
+  }
+
+  if (command === "mcp-http") {
+    await cmdMcpHttp(rest);
     return;
   }
 

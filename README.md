@@ -13,6 +13,9 @@ bun run bin/ptywright
 # 显式写法：
 # bun run bin/ptywright mcp
 
+# 可选：以 Streamable HTTP 方式启动（Web transport）
+# bun run bin/ptywright mcp-http --port 3000
+
 # 可选：减少 tool 数量（降低 Agent 上下文压力）
 # bun run bin/ptywright mcp --caps core
 # 或：PTYWRIGHT_CAPS=core bun run bin/ptywright
@@ -86,6 +89,12 @@ bun test
 ```bash
 # 默认等价 `ptywright mcp`
 bun run bin/ptywright
+```
+
+也可以用 Streamable HTTP 启动（默认 endpoint: `http://127.0.0.1:3000/mcp`）：
+
+```bash
+bun run bin/ptywright mcp-http --port 3000
 ```
 
 然后在你使用的 MCP client 里把它作为一个 stdio server 配置进去即可（不同 client 的配置方式不同）。
