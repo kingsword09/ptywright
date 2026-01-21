@@ -114,7 +114,7 @@ export class ScriptRecordingManager {
     this.active = null;
 
     if (!recording.launch) {
-      throw new Error("recording has no ptywright_launch_session");
+      throw new Error("recording has no launch_session");
     }
 
     const schemaAbs = resolve("schemas/ptywright-script.schema.json");

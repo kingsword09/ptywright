@@ -14,7 +14,7 @@ function firstTextContent(result: unknown): string {
   return typeof first.text === "string" ? first.text : "";
 }
 
-test("ptywright_select_session enables omitting sessionId", async () => {
+test("select_session enables omitting sessionId", async () => {
   const transport = new StdioClientTransport({
     command: process.execPath,
     args: ["src/index.ts"],
@@ -30,7 +30,7 @@ test("ptywright_select_session enables omitting sessionId", async () => {
   await client.connect(transport);
 
   const launched1 = await client.callTool({
-    name: "ptywright_launch_session",
+    name: "launch_session",
     arguments: {
       command: process.execPath,
       args: ["tests/fixtures/ansi_demo.ts"],
@@ -43,18 +43,18 @@ test("ptywright_select_session enables omitting sessionId", async () => {
   expect(typeof sessionId1).toBe("string");
 
   await client.callTool({
-    name: "ptywright_wait_for_text",
+    name: "wait_for_text",
     arguments: { text: "DONE", timeoutMs: 5_000, intervalMs: 50 },
   });
 
   const snap1 = await client.callTool({
-    name: "ptywright_snapshot_text",
+    name: "snapshot_text",
     arguments: { trimRight: true, trimBottom: true },
   });
   expect(firstTextContent(snap1)).toContain("Hello world");
 
   const launched2 = await client.callTool({
-    name: "ptywright_launch_session",
+    name: "launch_session",
     arguments: {
       command: "bun",
       args: ["run", "tests/fixtures/random_token_demo.ts"],
@@ -67,12 +67,12 @@ test("ptywright_select_session enables omitting sessionId", async () => {
   expect(typeof sessionId2).toBe("string");
 
   await client.callTool({
-    name: "ptywright_wait_for_text",
+    name: "wait_for_text",
     arguments: { text: "TOKEN:", timeoutMs: 5_000, intervalMs: 50 },
   });
 
   const snap2 = await client.callTool({
-    name: "ptywright_snapshot_text",
+    name: "snapshot_text",
     arguments: {
       trimRight: true,
       trimBottom: true,
@@ -83,24 +83,24 @@ test("ptywright_select_session enables omitting sessionId", async () => {
   expect(firstTextContent(snap2)).not.toContain("Hello world");
 
   await client.callTool({
-    name: "ptywright_select_session",
+    name: "select_session",
     arguments: { sessionId: sessionId1 },
   });
 
   const snap1Again = await client.callTool({
-    name: "ptywright_snapshot_text",
+    name: "snapshot_text",
     arguments: { trimRight: true, trimBottom: true },
   });
   expect(firstTextContent(snap1Again)).toContain("Hello world");
 
-  // ptywright_close_session can omit sessionId (uses selected session)
+  // close_session can omit sessionId (uses selected session)
   await client.callTool({
-    name: "ptywright_close_session",
+    name: "close_session",
     arguments: {},
   });
 
   await client.callTool({
-    name: "ptywright_close_session",
+    name: "close_session",
     arguments: { sessionId: sessionId2 },
   });
 

@@ -127,6 +127,11 @@ export class BunTerminalAdapter implements PtyAdapter {
       onData: (listener) => {
         dataListeners.add(listener);
         flushPendingDataTo(listener);
+        if (dataListeners.size === 1) {
+          queueMicrotask(() => {
+            pendingData.length = 0;
+          });
+        }
         return createDisposable(dataListeners, listener);
       },
       onExit: (listener) => {

@@ -37,10 +37,16 @@ export type TraceReportArtifacts = {
 type ReportFrame = {
   id: string;
   atSeconds: number;
-  kind: "mark" | "resize" | "final";
+  kind: "mark" | "resize" | "final" | "step";
   markLabel?: string;
   label: string;
   viewHtml: string;
+  stepInfo?: {
+    index: number;
+    type: string;
+    ok: boolean;
+    error?: string;
+  };
 };
 
 export async function generateTraceReportHtml(
@@ -51,6 +57,7 @@ export async function generateTraceReportHtml(
     scriptName?: string;
     result?: TraceReportResult;
     artifacts?: TraceReportArtifacts;
+    steps?: unknown[]; // Should be ScriptStep execution records
   },
 ): Promise<string> {
   const parsed = parseAsciicast(cast);
@@ -69,6 +76,15 @@ export async function generateTraceReportHtml(
   const scriptName = options?.scriptName?.trim() ? options.scriptName.trim() : "";
   const result = options?.result;
   const artifacts = options?.artifacts;
+  const steps = options?.steps as
+    | Array<{
+        index: number;
+        step: { type: string; [key: string]: unknown };
+        ok: boolean;
+        error?: string;
+        after?: { text: string; hash: string; kind: string };
+      }>
+    | undefined;
 
   let writeChain: Promise<void> = Promise.resolve();
 
@@ -80,42 +96,65 @@ export async function generateTraceReportHtml(
     kind: ReportFrame["kind"];
     label: string;
     markLabel?: string;
-  }) => {
+    stepInfo?: ReportFrame["stepInfo"];
+    overrideViewText?: { text: string; hash?: string };
+  }): void => {
     if (frames.length >= maxFrames) return;
 
-    let lines: string[];
-    let hash: string;
-    let changedLines = new Set<number>();
+    let viewHtml: string;
 
-    if (scope === "visible") {
-      const grid = snapshotGrid(terminal, { trimRight: true, includeStyles: true });
-      lines = grid.lines;
-      hash = fnv1a32(JSON.stringify(grid));
+    if (args.overrideViewText) {
+      const parsedView = parseSnapshotViewText(args.overrideViewText.text);
+      const headerLine =
+        parsedView.headerLine ??
+        (args.overrideViewText.hash?.trim()
+          ? `hash=${args.overrideViewText.hash.trim()}`
+          : "snapshot");
 
-      const rowSignatures = lines.map((line, idx) => {
-        const runs = grid.styleRuns?.[idx] ?? [];
-        if (line === "" && runs.length === 0) return "";
-        return `${line}\n${JSON.stringify(runs)}`;
-      });
-
-      changedLines = diffLineIndices(previousRowSignatures ?? [], rowSignatures);
+      const rowSignatures = parsedView.rows.map((r) => r.text);
+      const changedLines = diffLineIndices(previousRowSignatures ?? [], rowSignatures);
       previousRowSignatures = rowSignatures;
-    } else {
-      lines = snapshotLines(terminal, { scope, trimRight: true });
-      hash = fnv1a32(lines.join("\n"));
-    }
 
-    const viewHtml = renderSnapshotViewHtml({
-      terminal,
-      sessionId: "replay",
-      scope,
-      hash,
-      lines,
-      meta: getMeta(terminal),
-      lineNumbers: true,
-      changedLines,
-      trimRight: true,
-    });
+      viewHtml = renderSnapshotViewTextHtml({
+        headerLine,
+        rows: parsedView.rows,
+        changedLines,
+      });
+    } else {
+      let lines: string[];
+      let hash: string;
+      let changedLines = new Set<number>();
+
+      if (scope === "visible") {
+        const grid = snapshotGrid(terminal, { trimRight: true, includeStyles: true });
+        lines = grid.lines;
+        hash = fnv1a32(JSON.stringify(grid));
+
+        const rowSignatures = lines.map((line, idx) => {
+          const runs = grid.styleRuns?.[idx] ?? [];
+          if (line === "" && runs.length === 0) return "";
+          return `${line}\n${JSON.stringify(runs)}`;
+        });
+
+        changedLines = diffLineIndices(previousRowSignatures ?? [], rowSignatures);
+        previousRowSignatures = rowSignatures;
+      } else {
+        lines = snapshotLines(terminal, { scope, trimRight: true });
+        hash = fnv1a32(lines.join("\n"));
+      }
+
+      viewHtml = renderSnapshotViewHtml({
+        terminal,
+        sessionId: "replay",
+        scope,
+        hash,
+        lines,
+        meta: getMeta(terminal),
+        lineNumbers: true,
+        changedLines,
+        trimRight: true,
+      });
+    }
 
     frames.push({
       id: `frame-${frames.length + 1}`,
@@ -124,35 +163,72 @@ export async function generateTraceReportHtml(
       label: args.label,
       markLabel: args.markLabel,
       viewHtml,
+      stepInfo: args.stepInfo,
     });
   };
+  // Build frames. Prefer step-based snapshots when available (runner-provided).
+  if (steps && steps.length > 0) {
+    for (let i = 0; i < steps.length; i += 1) {
+      const stepRec = steps[i];
+      if (!stepRec) continue;
 
-  for (const event of parsed.events) {
-    const [time, type, data] = event;
+      const stepLabel = formatStepLabel(stepRec.step);
+      const viewText = stepRec.after?.text ?? "";
+      const displayIndex = (typeof stepRec.index === "number" ? stepRec.index : i) + 1;
 
-    if (type === "o") {
-      writeChain = writeChain.then(() => writeTerminal(terminal, data));
-    } else if (type === "r") {
-      void writeChain.then(() => {
-        const resized = parseResize(data);
-        if (resized) {
-          terminal.resize(resized.cols, resized.rows);
-        }
-        capture({ atSeconds: time, kind: "resize", label: `resize ${data}` });
+      const stepType = stepRec.step.type;
+      const kind: ReportFrame["kind"] =
+        stepType === "mark" ? "mark" : stepType === "resize" ? "resize" : "step";
+      const markLabel =
+        kind === "mark" && typeof (stepRec.step as { label?: unknown }).label === "string"
+          ? String((stepRec.step as { label?: unknown }).label)
+          : undefined;
+
+      capture({
+        atSeconds: displayIndex,
+        kind,
+        label: stepLabel,
+        markLabel,
+        stepInfo: {
+          index: displayIndex,
+          type: stepType,
+          ok: stepRec.ok,
+          error: stepRec.error,
+        },
+        overrideViewText: { text: viewText, hash: stepRec.after?.hash },
       });
-    } else if (type === "m") {
-      void writeChain.then(() => {
-        const markLabel = (data ?? "").trim();
-        const label = markLabel ? `mark ${markLabel}` : "mark";
-        capture({ atSeconds: time, kind: "mark", label, markLabel });
-      });
-    } else {
-      // input or unknown: no-op
+
+      if (frames.length >= maxFrames) break;
     }
-  }
+  } else {
+    for (const event of parsed.events) {
+      const [time, type, data] = event;
+      if (type === "o") {
+        writeChain = writeChain.then(() => writeTerminal(terminal, data));
+      } else if (type === "r") {
+        void writeChain.then(() => {
+          const resized = parseResize(data);
+          if (resized) {
+            terminal.resize(resized.cols, resized.rows);
+          }
+          capture({ atSeconds: time, kind: "resize", label: `resize ${data}` });
+        });
+      } else if (type === "m") {
+        void writeChain.then(() => {
+          const markLabel = (data ?? "").trim();
+          const label = markLabel ? `mark ${markLabel}` : "mark";
+          capture({ atSeconds: time, kind: "mark", label, markLabel });
+        });
+      }
+    }
 
-  await writeChain;
-  capture({ atSeconds: parsed.events.at(-1)?.[0] ?? 0, kind: "final", label: "final" });
+    await writeChain;
+    capture({
+      atSeconds: parsed.events.at(-1)?.[0] ?? 0,
+      kind: "final",
+      label: "final",
+    });
+  }
 
   terminal.dispose();
 
@@ -166,6 +242,133 @@ export async function generateTraceReportHtml(
     frames,
     eventCount: parsed.events.length,
   });
+}
+
+function formatStepLabel(step: { type: string; [key: string]: unknown }): string {
+  const showText = envTruthy(process.env.PTYWRIGHT_REPORT_SHOW_STEP_TEXT);
+
+  if (step.type === "custom" && typeof step.name === "string") return `custom(${step.name})`;
+
+  if (step.type === "sendText") {
+    const enter = typeof step.enter === "boolean" ? step.enter : undefined;
+    const enterSuffix = enter !== undefined ? `enter=${enter}` : "";
+    const description = typeof step.description === "string" ? step.description : "";
+    const text = typeof step.text === "string" ? step.text : description;
+
+    if (!text) {
+      return enterSuffix ? `sendText (${enterSuffix})` : "sendText";
+    }
+
+    if (!showText) {
+      return `sendText <redacted> (len=${text.length}${enterSuffix ? `, ${enterSuffix}` : ""})`;
+    }
+
+    return `sendText "${truncateInline(text)}"${enterSuffix ? ` (${enterSuffix})` : ""}`;
+  }
+
+  if (step.type === "waitForText") {
+    const text = typeof step.text === "string" ? step.text : undefined;
+    const regex = typeof step.regex === "string" ? step.regex : undefined;
+    const description = typeof step.description === "string" ? step.description : undefined;
+
+    if (!showText) {
+      if (text) return "waitForText (text)";
+      if (regex) return "waitForText (regex)";
+      return "waitForText";
+    }
+
+    if (text) return `waitFor "${truncateInline(text)}"`;
+    if (regex) return `waitFor /${truncateInline(regex)}/`;
+    if (description) return `waitForText "${truncateInline(description)}"`;
+    return "waitForText";
+  }
+
+  if (step.type === "assert") {
+    const text = typeof step.text === "string" ? step.text : undefined;
+    const regex = typeof step.regex === "string" ? step.regex : undefined;
+    const description = typeof step.description === "string" ? step.description : undefined;
+
+    if (!showText) {
+      if (text) return "assert (text)";
+      if (regex) return "assert (regex)";
+      return "assert";
+    }
+
+    if (text) return `assert "${truncateInline(text)}"`;
+    if (regex) return `assert /${truncateInline(regex)}/`;
+    if (description) return `assert "${truncateInline(description)}"`;
+    return "assert";
+  }
+
+  if (step.type === "pressKey" && typeof step.key === "string") return `pressKey ${step.key}`;
+
+  if (step.type === "mark") {
+    const label = typeof step.label === "string" ? step.label.trim() : "";
+    return label ? `mark ${label}` : "mark";
+  }
+
+  if (step.type === "resize") {
+    const cols = typeof step.cols === "number" ? step.cols : undefined;
+    const rows = typeof step.rows === "number" ? step.rows : undefined;
+    if (cols !== undefined && rows !== undefined) return `resize ${cols}x${rows}`;
+    return "resize";
+  }
+
+  return step.type;
+}
+
+function truncateInline(text: string, maxChars: number = 60): string {
+  const normalized = text.replace(/\r\n/g, "\n").replace(/\r/g, "\n").replace(/\n/g, "\\n");
+  if (normalized.length <= maxChars) return normalized;
+  return `${normalized.slice(0, maxChars)}…(+${normalized.length - maxChars})`;
+}
+
+function envTruthy(value: string | undefined): boolean {
+  if (!value?.trim()) return false;
+  const normalized = value.trim().toLowerCase();
+  return normalized === "1" || normalized === "true" || normalized === "yes" || normalized === "on";
+}
+
+type ParsedSnapshotViewText = {
+  headerLine: string | null;
+  rows: Array<{ prefix?: string; text: string }>;
+};
+
+function parseSnapshotViewText(viewText: string): ParsedSnapshotViewText {
+  const normalized = viewText.replace(/\r\n/g, "\n").replace(/\r/g, "\n");
+  const lines = normalized.split("\n");
+  const first = lines[0] ?? "";
+
+  const hasHeader = /\bsession=/.test(first) && /\bhash=/.test(first);
+  const headerLine = hasHeader ? first : null;
+  const rowLines = hasHeader ? lines.slice(1) : lines;
+
+  const rows = rowLines.map((line) => {
+    const match = line.match(/^(\d+│\s)(.*)$/);
+    if (!match) return { text: line };
+    return { prefix: match[1], text: match[2] ?? "" };
+  });
+
+  return { headerLine, rows };
+}
+
+function renderSnapshotViewTextHtml(options: {
+  headerLine: string;
+  rows: Array<{ prefix?: string; text: string }>;
+  changedLines: Set<number>;
+}): string {
+  const digits = Math.max(2, String(options.rows.length).length);
+  const out: string[] = [`<span class="headerblock">${escapeHtml(options.headerLine)}</span>`];
+
+  for (let i = 0; i < options.rows.length; i += 1) {
+    const row = options.rows[i];
+    const prefix = row?.prefix ?? `${String(i + 1).padStart(digits, "0")}│ `;
+    const prefixHtml = `<span class="ln">${escapeHtml(prefix)}</span>`;
+    const rowClass = options.changedLines.has(i) ? "row changed" : "row";
+    out.push(`<span class="${rowClass}">${prefixHtml}${escapeHtml(row?.text ?? "")}</span>`);
+  }
+
+  return out.join("");
 }
 
 async function writeTerminal(terminal: Terminal, data: string): Promise<void> {

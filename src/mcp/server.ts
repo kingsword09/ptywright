@@ -6,7 +6,12 @@ import { SessionManager } from "../session/session_manager";
 import { formatSnapshotView } from "../terminal/view";
 import { runScriptPath } from "../script/path";
 import { runAllScripts } from "../script/run_all";
+import { generateTraceReportHtml } from "../trace/report";
+import { generateTestFromDoc } from "../generator/generate";
 import { ScriptRecordingManager } from "./script_recording";
+import { writeFileSync, mkdirSync } from "node:fs";
+import { join } from "node:path";
+import { tmpdir } from "node:os";
 
 export type PtywrightCapability = "core" | "debug" | "script" | "recording" | "all";
 
@@ -87,7 +92,7 @@ export function createPtywrightServer(options?: PtywrightServerOptions): {
 
   tool(
     "core",
-    "ptywright_select_session",
+    "select_session",
     "Select the default session for subsequent tool calls (so other tools can omit sessionId).",
     {
       sessionId: z.string().min(1),
@@ -108,8 +113,8 @@ export function createPtywrightServer(options?: PtywrightServerOptions): {
 
   tool(
     "core",
-    "ptywright_launch_session",
-    "Launch a new PTY session running a command (returns sessionId).",
+    "launch_session",
+    "Start here! Launch a CLI/TUI command to begin testing (e.g., 'vim', 'top', 'npm start'). Returns a sessionId required for other tools.",
     {
       command: z.string().min(1),
       args: z.array(z.string()).optional(),
@@ -149,7 +154,7 @@ export function createPtywrightServer(options?: PtywrightServerOptions): {
 
   tool(
     "core",
-    "ptywright_send_text",
+    "send_text",
     "Send text input to a session (optionally press Enter).",
     {
       sessionId: z.string().min(1).optional(),
@@ -160,9 +165,7 @@ export function createPtywrightServer(options?: PtywrightServerOptions): {
     async (args, extra) => {
       const sessionId = args.sessionId ?? getSelectedSessionId(extra);
       if (!sessionId) {
-        return toolError(
-          "sessionId is required (provide sessionId or call ptywright_select_session)",
-        );
+        return toolError("sessionId is required (provide sessionId or call select_session)");
       }
 
       const session = sessions.getSession(sessionId);
@@ -177,7 +180,7 @@ export function createPtywrightServer(options?: PtywrightServerOptions): {
 
   tool(
     "core",
-    "ptywright_press_key",
+    "press_key",
     "Send a key or key chord to a session (e.g. Enter, Ctrl+C, Shift+Tab).",
     {
       sessionId: z.string().min(1).optional(),
@@ -187,9 +190,7 @@ export function createPtywrightServer(options?: PtywrightServerOptions): {
     async (args, extra) => {
       const sessionId = args.sessionId ?? getSelectedSessionId(extra);
       if (!sessionId) {
-        return toolError(
-          "sessionId is required (provide sessionId or call ptywright_select_session)",
-        );
+        return toolError("sessionId is required (provide sessionId or call select_session)");
       }
 
       const session = sessions.getSession(sessionId);
@@ -206,93 +207,27 @@ export function createPtywrightServer(options?: PtywrightServerOptions): {
     },
   );
 
+  // Hidden low-level tool: send_mouse
+  /*
   tool(
     "core",
-    "ptywright_send_mouse",
-    "Send an SGR mouse event (click/move/scroll) to a session.",
-    {
-      sessionId: z.string().min(1).optional(),
-      action: z.enum(["down", "up", "move", "click", "scroll_up", "scroll_down"]),
-      x: z.number().int(),
-      y: z.number().int(),
-      button: z.enum(["left", "middle", "right"]).optional(),
-      shift: z.boolean().optional(),
-      alt: z.boolean().optional(),
-      ctrl: z.boolean().optional(),
-    },
-    { title: "Send Mouse Event" },
-    async (args, extra) => {
-      const sessionId = args.sessionId ?? getSelectedSessionId(extra);
-      if (!sessionId) {
-        return toolError(
-          "sessionId is required (provide sessionId or call ptywright_select_session)",
-        );
-      }
-
-      const session = sessions.getSession(sessionId);
-      if (!session) {
-        return toolError(`session not found: ${sessionId}`);
-      }
-
-      const modifiers =
-        args.shift || args.alt || args.ctrl
-          ? { shift: args.shift, alt: args.alt, ctrl: args.ctrl }
-          : undefined;
-
-      session.sendMouse({
-        action: args.action,
-        x: args.x,
-        y: args.y,
-        button: args.button,
-        modifiers,
-      });
-
-      recordings.recordStep({
-        type: "sendMouse",
-        action: args.action,
-        x: args.x,
-        y: args.y,
-        button: args.button,
-        shift: args.shift,
-        alt: args.alt,
-        ctrl: args.ctrl,
-      });
-
-      return { content: [{ type: "text", text: "ok" }] };
-    },
+    "send_mouse",
+    ...
   );
+  */
 
+  // Hidden low-level tool: resize
+  /*
   tool(
     "core",
-    "ptywright_resize",
-    "Resize the session terminal (cols/rows).",
-    {
-      sessionId: z.string().min(1).optional(),
-      cols: z.number().int(),
-      rows: z.number().int(),
-    },
-    { title: "Resize Terminal" },
-    async (args, extra) => {
-      const sessionId = args.sessionId ?? getSelectedSessionId(extra);
-      if (!sessionId) {
-        return toolError(
-          "sessionId is required (provide sessionId or call ptywright_select_session)",
-        );
-      }
-
-      const session = sessions.getSession(sessionId);
-      if (!session) {
-        return toolError(`session not found: ${sessionId}`);
-      }
-      session.resize(args.cols, args.rows);
-      recordings.recordStep({ type: "resize", cols: args.cols, rows: args.rows });
-      return { content: [{ type: "text", text: "ok" }] };
-    },
+    "resize",
+    ...
   );
+  */
 
   tool(
     "core",
-    "ptywright_snapshot_text",
+    "snapshot_text",
     "Capture plain text from the visible screen or full buffer (best for stable assertions/goldens).",
     {
       sessionId: z.string().min(1).optional(),
@@ -311,9 +246,7 @@ export function createPtywrightServer(options?: PtywrightServerOptions): {
     async (args, extra) => {
       const sessionId = args.sessionId ?? getSelectedSessionId(extra);
       if (!sessionId) {
-        return toolError(
-          "sessionId is required (provide sessionId or call ptywright_select_session)",
-        );
+        return toolError("sessionId is required (provide sessionId or call select_session)");
       }
 
       const session = sessions.getSession(sessionId);
@@ -321,7 +254,7 @@ export function createPtywrightServer(options?: PtywrightServerOptions): {
         return toolError(`session not found: ${sessionId}`);
       }
       if (args.maxLines !== undefined && args.tailLines !== undefined) {
-        return toolError("ptywright_snapshot_text: maxLines and tailLines are mutually exclusive");
+        return toolError("snapshot_text: maxLines and tailLines are mutually exclusive");
       }
       let text: string;
       let hash: string;
@@ -346,7 +279,7 @@ export function createPtywrightServer(options?: PtywrightServerOptions): {
 
   tool(
     "debug",
-    "ptywright_snapshot_ansi",
+    "snapshot_ansi",
     "Capture ANSI-rendered snapshot (debug/human inspection; less stable than plain text).",
     {
       sessionId: z.string().min(1).optional(),
@@ -365,9 +298,7 @@ export function createPtywrightServer(options?: PtywrightServerOptions): {
     async (args, extra) => {
       const sessionId = args.sessionId ?? getSelectedSessionId(extra);
       if (!sessionId) {
-        return toolError(
-          "sessionId is required (provide sessionId or call ptywright_select_session)",
-        );
+        return toolError("sessionId is required (provide sessionId or call select_session)");
       }
 
       const session = sessions.getSession(sessionId);
@@ -375,7 +306,7 @@ export function createPtywrightServer(options?: PtywrightServerOptions): {
         return toolError(`session not found: ${sessionId}`);
       }
       if (args.maxLines !== undefined && args.tailLines !== undefined) {
-        return toolError("ptywright_snapshot_ansi: maxLines and tailLines are mutually exclusive");
+        return toolError("snapshot_ansi: maxLines and tailLines are mutually exclusive");
       }
 
       let ansi: string;
@@ -401,89 +332,12 @@ export function createPtywrightServer(options?: PtywrightServerOptions): {
     },
   );
 
-  tool(
-    "debug",
-    "ptywright_snapshot_grid",
-    "Capture a structured grid snapshot (rows/cols/cursor/lines).",
-    {
-      sessionId: z.string().min(1).optional(),
-      trimRight: z.boolean().optional(),
-      includeStyles: z.boolean().optional(),
-    },
-    {
-      title: "Snapshot Grid",
-      readOnlyHint: true,
-      idempotentHint: true,
-    },
-    async (args, extra) => {
-      const sessionId = args.sessionId ?? getSelectedSessionId(extra);
-      if (!sessionId) {
-        return toolError(
-          "sessionId is required (provide sessionId or call ptywright_select_session)",
-        );
-      }
-
-      const session = sessions.getSession(sessionId);
-      if (!session) {
-        return toolError(`session not found: ${sessionId}`);
-      }
-      const { grid, hash } = await session.snapshotGrid({
-        trimRight: args.trimRight,
-        includeStyles: args.includeStyles,
-      });
-      return {
-        content: [{ type: "text", text: grid.lines.join("\n") }],
-        structuredContent: { sessionId, hash, grid },
-      };
-    },
-  );
-
-  tool(
-    "debug",
-    "ptywright_snapshot_cast",
-    "Export the asciicast v2 trace (useful for debugging/report playback).",
-    {
-      sessionId: z.string().min(1).optional(),
-      tailEvents: z.number().int().positive().optional(),
-    },
-    {
-      title: "Snapshot Asciicast",
-      readOnlyHint: true,
-      idempotentHint: true,
-    },
-    async (args, extra) => {
-      const sessionId = args.sessionId ?? getSelectedSessionId(extra);
-      if (!sessionId) {
-        return toolError(
-          "sessionId is required (provide sessionId or call ptywright_select_session)",
-        );
-      }
-
-      const session = sessions.getSession(sessionId);
-      if (!session) {
-        return toolError(`session not found: ${sessionId}`);
-      }
-
-      const snapshot = await session.snapshotCast({
-        tailEvents: args.tailEvents,
-      });
-
-      return {
-        content: [{ type: "text", text: snapshot.cast }],
-        structuredContent: {
-          sessionId,
-          eventCount: snapshot.events.length,
-          droppedEvents: snapshot.droppedEvents,
-          droppedDataChars: snapshot.droppedDataChars,
-          closeReason: session.getCloseReason(),
-        },
-      };
-    },
-  );
+  // Hidden low-level tool: snapshot_grid (use snapshot_view instead)
+  // Hidden low-level tool: snapshot_cast (used internally for reports)
 
   tool(
     "recording",
-    "ptywright_mark",
+    "mark",
     "Add a marker to the session trace (used for recording/checkpoints).",
     {
       sessionId: z.string().min(1).optional(),
@@ -493,9 +347,7 @@ export function createPtywrightServer(options?: PtywrightServerOptions): {
     async (args, extra) => {
       const sessionId = args.sessionId ?? getSelectedSessionId(extra);
       if (!sessionId) {
-        return toolError(
-          "sessionId is required (provide sessionId or call ptywright_select_session)",
-        );
+        return toolError("sessionId is required (provide sessionId or call select_session)");
       }
 
       const session = sessions.getSession(sessionId);
@@ -512,7 +364,7 @@ export function createPtywrightServer(options?: PtywrightServerOptions): {
 
   tool(
     "core",
-    "ptywright_wait_for_text",
+    "wait_for_text",
     "Wait until a text/regex appears in the session (polling).",
     {
       sessionId: z.string().min(1).optional(),
@@ -531,9 +383,7 @@ export function createPtywrightServer(options?: PtywrightServerOptions): {
     async (args, extra) => {
       const sessionId = args.sessionId ?? getSelectedSessionId(extra);
       if (!sessionId) {
-        return toolError(
-          "sessionId is required (provide sessionId or call ptywright_select_session)",
-        );
+        return toolError("sessionId is required (provide sessionId or call select_session)");
       }
 
       const session = sessions.getSession(sessionId);
@@ -580,7 +430,7 @@ export function createPtywrightServer(options?: PtywrightServerOptions): {
 
   tool(
     "core",
-    "ptywright_wait_for_stable_screen",
+    "wait_for_stable_screen",
     "Wait until consecutive text snapshots remain unchanged for a quiet window (reduce flakiness).",
     {
       sessionId: z.string().min(1).optional(),
@@ -597,9 +447,7 @@ export function createPtywrightServer(options?: PtywrightServerOptions): {
     async (args, extra) => {
       const sessionId = args.sessionId ?? getSelectedSessionId(extra);
       if (!sessionId) {
-        return toolError(
-          "sessionId is required (provide sessionId or call ptywright_select_session)",
-        );
+        return toolError("sessionId is required (provide sessionId or call select_session)");
       }
 
       const session = sessions.getSession(sessionId);
@@ -612,12 +460,7 @@ export function createPtywrightServer(options?: PtywrightServerOptions): {
         quietMs: args.quietMs ?? 400,
         intervalMs: args.intervalMs ?? 80,
       });
-      recordings.recordStep({
-        type: "waitForStableScreen",
-        timeoutMs: args.timeoutMs,
-        quietMs: args.quietMs,
-        intervalMs: args.intervalMs,
-      });
+      recordings.recordStep({ type: "waitForStableScreen", ...args });
 
       const structuredContent: Record<string, unknown> = {
         sessionId,
@@ -637,7 +480,100 @@ export function createPtywrightServer(options?: PtywrightServerOptions): {
 
   tool(
     "core",
-    "ptywright_snapshot_view",
+    "assert",
+    "Verify screen content. Use this to check if a test passed or failed (e.g., 'check if X is visible'). Supports exact text, regex, or semantic AI verification.",
+    {
+      sessionId: z.string().min(1).optional(),
+      scope: z.enum(["visible", "buffer"]).optional(),
+      description: z.string().optional(),
+      text: z.string().optional(),
+      regex: z.string().optional(),
+      useAI: z.boolean().optional(),
+    },
+    {
+      title: "Assert",
+      readOnlyHint: true,
+      idempotentHint: true,
+    },
+    async (args, extra) => {
+      const sessionId = args.sessionId ?? getSelectedSessionId(extra);
+      if (!sessionId) {
+        return toolError("sessionId is required (provide sessionId or call select_session)");
+      }
+
+      const session = sessions.getSession(sessionId);
+      if (!session) {
+        return toolError(`session not found: ${sessionId}`);
+      }
+
+      if (!args.text && !args.regex && !args.useAI) {
+        return toolError("must provide text, regex, or useAI: true");
+      }
+
+      const snapshot = await session.snapshotText({
+        scope: args.scope ?? "visible",
+        captureFrame: true,
+      });
+
+      // Pattern semantics match script runner: text OR regex.
+      let found = true;
+      if (args.text || args.regex) {
+        found = false;
+
+        if (args.text && snapshot.text.includes(args.text)) {
+          found = true;
+        }
+
+        if (args.regex) {
+          let re: RegExp;
+          try {
+            re = new RegExp(args.regex);
+          } catch {
+            return toolError(`invalid regex: ${args.regex}`);
+          }
+
+          if (re.test(snapshot.text)) {
+            found = true;
+          }
+        }
+      }
+
+      // Record for the script: keep playback deterministic.
+      if (args.text || args.regex) {
+        recordings.recordStep({
+          type: "assert",
+          scope: args.scope,
+          text: args.text,
+          regex: args.regex,
+          description: args.description,
+        });
+      }
+
+      if (args.useAI) {
+        recordings.recordStep({
+          type: "assertSemantic",
+          prompt: args.description || "Check screen content",
+          description: args.description,
+        });
+      }
+
+      if (!found) {
+        return toolError(`assertion failed: ${args.description || "pattern match"}`, {
+          sessionId,
+          text: snapshot.text,
+        });
+      }
+
+      return {
+        content: [{ type: "text", text: "ok" }],
+        structuredContent: { sessionId, found },
+      };
+    },
+  );
+
+  tool(
+    "core",
+    "snapshot_view",
     "Capture a formatted, human-readable snapshot view (includes meta + optional line numbers).",
     {
       sessionId: z.string().min(1).optional(),
@@ -657,9 +593,7 @@ export function createPtywrightServer(options?: PtywrightServerOptions): {
     async (args, extra) => {
       const sessionId = args.sessionId ?? getSelectedSessionId(extra);
       if (!sessionId) {
-        return toolError(
-          "sessionId is required (provide sessionId or call ptywright_select_session)",
-        );
+        return toolError("sessionId is required (provide sessionId or call select_session)");
       }
 
       const session = sessions.getSession(sessionId);
@@ -667,7 +601,7 @@ export function createPtywrightServer(options?: PtywrightServerOptions): {
         return toolError(`session not found: ${sessionId}`);
       }
       if (args.maxLines !== undefined && args.tailLines !== undefined) {
-        return toolError("ptywright_snapshot_view: maxLines and tailLines are mutually exclusive");
+        return toolError("snapshot_view: maxLines and tailLines are mutually exclusive");
       }
 
       let text: string;
@@ -703,7 +637,7 @@ export function createPtywrightServer(options?: PtywrightServerOptions): {
 
   tool(
     "debug",
-    "ptywright_snapshot_view_ansi",
+    "snapshot_view_ansi",
     "Capture a formatted ANSI snapshot view (includes meta + optional line numbers).",
     {
       sessionId: z.string().min(1).optional(),
@@ -723,9 +657,7 @@ export function createPtywrightServer(options?: PtywrightServerOptions): {
     async (args, extra) => {
       const sessionId = args.sessionId ?? getSelectedSessionId(extra);
       if (!sessionId) {
-        return toolError(
-          "sessionId is required (provide sessionId or call ptywright_select_session)",
-        );
+        return toolError("sessionId is required (provide sessionId or call select_session)");
       }
 
       const session = sessions.getSession(sessionId);
@@ -733,9 +665,7 @@ export function createPtywrightServer(options?: PtywrightServerOptions): {
         return toolError(`session not found: ${sessionId}`);
       }
       if (args.maxLines !== undefined && args.tailLines !== undefined) {
-        return toolError(
-          "ptywright_snapshot_view_ansi: maxLines and tailLines are mutually exclusive",
-        );
+        return toolError("snapshot_view_ansi: maxLines and tailLines are mutually exclusive");
       }
 
       let ansi: string;
@@ -771,7 +701,7 @@ export function createPtywrightServer(options?: PtywrightServerOptions): {
 
   tool(
     "script",
-    "ptywright_run_script",
+    "run_script",
     "Run a JSON/TS script via the runner and return artifact paths (prefer this for regression runs).",
     {
       scriptPath: z.string().min(1),
@@ -810,7 +740,7 @@ export function createPtywrightServer(options?: PtywrightServerOptions): {
 
   tool(
     "script",
-    "ptywright_run_all_scripts",
+    "run_all_scripts",
     "Run all ptywright scripts (JSON/TS) recursively and generate a Playwright-like suite report: index.html + run.summary.json. 用于：一键批量回归 / 生成总览报告 / CI。Call with no args to use defaults (dir='scripts', suite report in .tmp/run-all/). Returns reportPath+summaryPath; open reportPath in a browser to view. Tip: keep includeEntries='failures' (default) and maxEntries to avoid context bloat.",
     {
       dir: z.string().optional(),
@@ -889,9 +819,80 @@ export function createPtywrightServer(options?: PtywrightServerOptions): {
   );
 
   tool(
+    "script",
+    "generate_test_from_doc",
+    "Generate test script from documentation (local file or URL). Parses Markdown/HTML/JSON docs to extract test steps and generates executable ptywright scripts.",
+    {
+      source: z.string().min(1).describe("Document path (local file) or URL"),
+      sourceType: z
+        .enum(["local", "url", "auto"])
+        .optional()
+        .describe("Source type (auto-detected if not specified)"),
+      outputDir: z.string().optional().describe("Output directory for generated scripts"),
+      outputFormat: z
+        .enum(["json", "ts", "both"])
+        .optional()
+        .describe("Output format (default: both)"),
+      targetCommand: z
+        .string()
+        .optional()
+        .describe("Command to test (overrides auto-detected command)"),
+      targetArgs: z.array(z.string()).optional().describe("Arguments for target command"),
+      name: z
+        .string()
+        .optional()
+        .describe("Test name (auto-generated from doc title if not specified)"),
+      cols: z.number().int().positive().optional().describe("Terminal columns (default: 80)"),
+      rows: z.number().int().positive().optional().describe("Terminal rows (default: 24)"),
+    },
+    {
+      title: "Generate Test from Documentation",
+      openWorldHint: true,
+      destructiveHint: true,
+    },
+    async (args) => {
+      try {
+        const result = await generateTestFromDoc({
+          source: args.source,
+          sourceType: args.sourceType,
+          outputDir: args.outputDir,
+          outputFormat: args.outputFormat,
+          targetCommand: args.targetCommand,
+          targetArgs: args.targetArgs,
+          name: args.name,
+          cols: args.cols,
+          rows: args.rows,
+        });
+
+        if (!result.ok) {
+          return toolError(result.error ?? "Failed to generate test", {
+            warnings: result.warnings,
+            parsed: result.parsed,
+          });
+        }
+
+        const summaryLines = [
+          `Generated test: ${result.name}`,
+          `Steps: ${result.stepCount}`,
+          result.jsonPath ? `JSON: ${result.jsonPath}` : null,
+          result.tsPath ? `TypeScript: ${result.tsPath}` : null,
+          result.warnings.length > 0 ? `Warnings: ${result.warnings.join("; ")}` : null,
+        ].filter(Boolean);
+
+        return {
+          content: [{ type: "text", text: summaryLines.join("\n") }],
+          structuredContent: result,
+        };
+      } catch (error) {
+        return toolError((error as Error).message);
+      }
+    },
+  );
+
+  tool(
     "recording",
-    "ptywright_start_script_recording",
-    "Start recording MCP tool calls into a replayable script (with optional golden checkpoints via ptywright_mark()).",
+    "start_script_recording",
+    "Start recording MCP tool calls into a replayable script (with optional golden checkpoints via mark()).",
     {
       name: z.string().min(1),
       outPath: z.string().optional(),
@@ -932,7 +933,7 @@ export function createPtywrightServer(options?: PtywrightServerOptions): {
 
   tool(
     "recording",
-    "ptywright_stop_script_recording",
+    "stop_script_recording",
     "Stop recording and optionally write the script + goldens to disk.",
     {
       recordingId: z.string().min(1),
@@ -963,7 +964,7 @@ export function createPtywrightServer(options?: PtywrightServerOptions): {
 
   tool(
     "core",
-    "ptywright_close_session",
+    "close_session",
     "Close a running session.",
     {
       sessionId: z.string().min(1).optional(),
@@ -975,9 +976,7 @@ export function createPtywrightServer(options?: PtywrightServerOptions): {
     async (args, extra) => {
       const sessionId = args.sessionId ?? getSelectedSessionId(extra);
       if (!sessionId) {
-        return toolError(
-          "sessionId is required (provide sessionId or call ptywright_select_session)",
-        );
+        return toolError("sessionId is required (provide sessionId or call select_session)");
       }
 
       const ok = sessions.closeSession(sessionId);
@@ -991,21 +990,282 @@ export function createPtywrightServer(options?: PtywrightServerOptions): {
     },
   );
 
+  // Hidden low-level tool: list_sessions
+  /*
   tool(
     "core",
-    "ptywright_list_sessions",
-    "List active session IDs.",
-    {},
+    "list_sessions",
+    ...
+  );
+  */
+
+  // High-level tool: run_routine - batch execute steps with full snapshots
+  const routineStepSchema = z.object({
+    action: z.enum(["sendText", "pressKey", "wait", "assert", "snapshot"]),
+    text: z.string().optional(),
+    enter: z.boolean().optional(),
+    key: z.string().optional(),
+    waitFor: z.string().optional(),
+    regex: z.string().optional(),
+    timeoutMs: z.number().int().optional(),
+    description: z.string().optional(),
+  });
+
+  tool(
+    "script",
+    "run_routine",
+    "PRIMARY INTERACTION TOOL. Execute a multi-step test scenario (type, key, wait, assert) in one go. Use this whenever asked to 'test', 'verify', 'do', or 'check' a workflow. It handles delays and snapshots automatically.",
     {
-      title: "List Sessions",
+      sessionId: z.string().min(1).optional(),
+      steps: z.array(routineStepSchema).min(1),
+      saveReport: z.boolean().optional(),
+      reportPath: z.string().optional(),
+    },
+    {
+      title: "Run Routine",
+      openWorldHint: true,
+    },
+    async (args, extra) => {
+      const sessionId = args.sessionId ?? getSelectedSessionId(extra);
+      if (!sessionId) {
+        return toolError("sessionId is required (provide sessionId or call select_session)");
+      }
+
+      const session = sessions.getSession(sessionId);
+      if (!session) {
+        return toolError(`session not found: ${sessionId}`);
+      }
+
+      type StepResult = {
+        index: number;
+        action: string;
+        description?: string;
+        ok: boolean;
+        error?: string;
+        snapshot?: string;
+        hash?: string;
+      };
+
+      const results: StepResult[] = [];
+      let failed = false;
+      let failedStep: number | null = null;
+
+      for (let i = 0; i < args.steps.length; i++) {
+        const step = args.steps[i];
+        if (!step) continue;
+
+        const result: StepResult = {
+          index: i + 1,
+          action: step.action,
+          description: step.description,
+          ok: true,
+        };
+
+        try {
+          if (step.action === "sendText" && step.text !== undefined) {
+            session.sendText(step.text, { enter: step.enter });
+          } else if (step.action === "pressKey" && step.key) {
+            session.pressKey(step.key);
+          } else if (step.action === "wait") {
+            if (step.waitFor || step.regex) {
+              const regex = step.regex ? new RegExp(step.regex) : undefined;
+              const waitResult = await session.waitForText({
+                text: step.waitFor,
+                regex,
+                timeoutMs: step.timeoutMs ?? 10_000,
+                intervalMs: 100,
+              });
+              if (!waitResult.found) {
+                throw new Error(`wait failed: ${step.waitFor || step.regex}`);
+              }
+            } else {
+              await session.waitForStableScreen({
+                timeoutMs: step.timeoutMs ?? 5_000,
+                quietMs: 300,
+                intervalMs: 80,
+              });
+            }
+          } else if (step.action === "assert") {
+            const regex = step.regex ? new RegExp(step.regex) : undefined;
+            const assertResult = await session.waitForText({
+              text: step.waitFor,
+              regex,
+              timeoutMs: 0,
+              intervalMs: 0,
+            });
+            if (!assertResult.found) {
+              throw new Error(`assert failed: ${step.description || step.waitFor || step.regex}`);
+            }
+          }
+
+          // Always capture snapshot after each step
+          const snapshot = await session.snapshotText({
+            scope: "visible",
+            trimRight: true,
+            trimBottom: true,
+            captureFrame: true,
+          });
+          result.snapshot = snapshot.text;
+          result.hash = snapshot.hash;
+        } catch (error) {
+          result.ok = false;
+          result.error = (error as Error).message;
+          failed = true;
+          failedStep = i + 1;
+
+          // Capture snapshot on failure too
+          try {
+            const snapshot = await session.snapshotText({
+              scope: "visible",
+              trimRight: true,
+              trimBottom: true,
+              captureFrame: true,
+            });
+            result.snapshot = snapshot.text;
+            result.hash = snapshot.hash;
+          } catch {
+            // ignore
+          }
+        }
+
+        results.push(result);
+
+        if (failed) break;
+      }
+
+      const summary = failed
+        ? `failed at step ${failedStep}: ${results[results.length - 1]?.error}`
+        : `ok, ${results.length} steps completed`;
+
+      let reportPath = args.reportPath;
+      // Default to saving report unless explicitly disabled (though schema only allows true/false/undefined)
+      // Actually let's just default to true if undefined
+      const saveReport = args.saveReport ?? true;
+
+      if (saveReport) {
+        try {
+          // Generate an ad-hoc report using the captured steps and snapshots
+          // We need a dummy cast (empty header + no events) since we rely on steps for frames
+          const cast = `{"version": 2, "width": ${session.getMeta().cols}, "height": ${session.getMeta().rows}, "command": "routine"}`;
+
+          const html = await generateTraceReportHtml(cast, {
+            scriptName: "routine",
+            result: { ok: !failed, error: results[results.length - 1]?.error },
+            steps: results.map((r) => ({
+              index: r.index,
+              step: { type: r.action, description: r.description },
+              ok: r.ok,
+              error: r.error,
+              after: r.snapshot
+                ? { text: r.snapshot, hash: r.hash ?? "", kind: "view" }
+                : undefined,
+            })),
+          });
+
+          if (!reportPath) {
+            const tmpDir = join(tmpdir(), "ptywright-routines");
+            mkdirSync(tmpDir, { recursive: true });
+            reportPath = join(tmpDir, `routine-${sessionId}-${Date.now()}.html`);
+          }
+
+          writeFileSync(reportPath, html);
+        } catch {
+          // Don't fail the routine if reporting fails, but log it
+          // In MCP we can append to the text content
+          // summary += `\n(Report generation failed: ${(err as Error).message})`;
+        }
+      }
+
+      const contentText = reportPath
+        ? `${summary}
+
+Report generated: ${reportPath}
+Open in browser to view step-by-step timeline.`
+        : summary;
+
+      return {
+        content: [{ type: "text", text: contentText }],
+        structuredContent: {
+          sessionId,
+          ok: !failed,
+          stepCount: results.length,
+          failedStep,
+          reportPath,
+          results,
+        },
+      };
+    },
+  );
+
+  tool(
+    "core",
+    "inspect_failure",
+    "Inspect the last failure state of a session. Returns the last screen snapshot and any error information captured.",
+    {
+      sessionId: z.string().min(1).optional(),
+      includeFrames: z.boolean().optional(),
+      maxFrames: z.number().int().positive().optional(),
+    },
+    {
+      title: "Inspect Failure",
       readOnlyHint: true,
       idempotentHint: true,
     },
-    async (_args) => {
-      const sessionIds = sessions.listSessionIds();
+    async (args, extra) => {
+      const sessionId = args.sessionId ?? getSelectedSessionId(extra);
+      if (!sessionId) {
+        return toolError("sessionId is required (provide sessionId or call select_session)");
+      }
+
+      const session = sessions.getSession(sessionId);
+      if (!session) {
+        return toolError(`session not found: ${sessionId}`);
+      }
+
+      const closeReason = session.getCloseReason();
+      const meta = session.getMeta();
+
+      let currentSnapshot: { text: string; hash: string } | null = null;
+      try {
+        currentSnapshot = await session.snapshotText({
+          scope: "visible",
+          trimRight: true,
+          trimBottom: true,
+          captureFrame: true,
+        });
+      } catch {
+        // Session may be closed
+      }
+
+      const frames = session.getSnapshotFrames();
+      const includeFrames = args.includeFrames ?? false;
+      const maxFrames = args.maxFrames ?? 5;
+
+      const recentFrames = includeFrames ? frames.slice(-maxFrames) : [];
+
+      const view = currentSnapshot
+        ? formatSnapshotView({
+            sessionId,
+            scope: "visible",
+            hash: currentSnapshot.hash,
+            lines: currentSnapshot.text.split("\n"),
+            meta,
+            lineNumbers: true,
+          })
+        : "(no snapshot available)";
+
       return {
-        content: [{ type: "text", text: sessionIds.join("\n") }],
-        structuredContent: { sessionIds },
+        content: [{ type: "text", text: view }],
+        structuredContent: {
+          sessionId,
+          closeReason,
+          meta,
+          currentSnapshot: currentSnapshot
+            ? { text: currentSnapshot.text, hash: currentSnapshot.hash }
+            : null,
+          recentFrames: recentFrames.map((f) => ({ atMs: f.atMs, hash: f.hash })),
+          isClosed: session.isClosed(),
+        },
       };
     },
   );

@@ -183,6 +183,29 @@ const customStepSchema = z.object({
   payload: z.unknown().optional(),
 });
 
+const assertStepSchema = z
+  .object({
+    type: z.literal("assert"),
+    scope: z.enum(["visible", "buffer"]).optional(),
+    text: z.string().optional(),
+    regex: z.string().optional(),
+    description: z.string().optional(),
+  })
+  .superRefine((value, ctx) => {
+    if (!value.text && !value.regex) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        message: "assert requires text or regex",
+      });
+    }
+  });
+
+const assertSemanticStepSchema = z.object({
+  type: z.literal("assertSemantic"),
+  prompt: z.string().min(1),
+  description: z.string().optional(),
+});
+
 export const scriptStepSchema = z.union([
   sendTextStepSchema,
   pressKeyStepSchema,
@@ -198,6 +221,8 @@ export const scriptStepSchema = z.union([
   expectStepSchema,
   expectGoldenStepSchema,
   customStepSchema,
+  assertStepSchema,
+  assertSemanticStepSchema,
 ]);
 
 export const scriptSchema = z.object({

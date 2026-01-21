@@ -10,8 +10,8 @@
 
 ### M0（已完成）：可通用驱动 MVP
 - PTY 启动任意进程 + `@xterm/headless` 重建屏幕。
-- MCP tools：`ptywright_launch_session/ptywright_send_text/ptywright_press_key/ptywright_resize/ptywright_snapshot_text/ptywright_snapshot_grid/ptywright_snapshot_view/ptywright_wait_for_text/ptywright_wait_for_stable_screen/ptywright_close_session`。
-- 可读性补齐：`ptywright_snapshot_ansi/ptywright_snapshot_view_ansi` 作为 debug/人眼验收。
+- MCP tools：`launch_session/select_session/send_text/press_key/snapshot_text/snapshot_view/wait_for_text/wait_for_stable_screen/assert/close_session`。
+- 可读性补齐：`snapshot_ansi/snapshot_view_ansi` 作为 debug/人眼验收。
 - 最小回归：Bun tests 覆盖 PTY+xterm 与 MCP smoke。
 
 ### M1：确定性 UI 回归（可 diff 的“终端 DOM”）
@@ -33,7 +33,7 @@
 ### M3：交互增强（鼠标/点击）
 目标：覆盖“仅靠键盘不够”的 TUI（可选，按需推进）。
 - 支持 SGR mouse 上报/发送 click（坐标基于 cols/rows）。
-- MCP tool：`ptywright_send_mouse`（move/down/up/click + modifiers）。
+- MCP tool：`send_mouse`（move/down/up/click + modifiers）。
 验收：对 sample app 能用点击触发可见 UI 变更并可断言。
 
 ### M4：框架特化加速（可选）
@@ -49,6 +49,14 @@
 - 不可确定：live smoke 只断言流程契约（出现响应、工具调用序列、状态转换），不断言文案。
 验收：CI 主测试全部确定；live smoke 独立跑、失败不阻塞主线。
 
+### M6：文档驱动测试生成（已完成）
+目标：根据文档（本地或网站）自动生成并执行完整的测试流程。
+- 文档解析器：支持 Markdown、HTML、JSON、YAML、纯文本格式。
+- 步骤提取器：从代码块和文本步骤中提取测试操作（sendText/pressKey/waitForText/assert 等）。
+- 脚本生成器：生成 JSON 和 TypeScript 两种格式的 ptywright 测试脚本。
+- MCP tool 集成：`generate_test_from_doc`。
+验收：从示例文档生成可执行测试；生成的脚本能通过 script runner 运行。
+
 ## Progress（按里程碑滚动更新）
 - [x] M0：可通用驱动 MVP
 - [x] M1：确定性 UI 回归（grid style-runs + golden + 边界 fixtures）
@@ -59,6 +67,7 @@
   - [x] M5.1：快照 mask/normalize（避免断言不稳定文案）
   - [x] M5.2：Script runner（JSON 脚本化用例 + report/golden）
   - [ ] M5.3：LLM cassette（record/replay + live smoke）
+- [x] M6：文档驱动测试生成（doc → script generator）
 
 ## Surprises & Discoveries
 - 有 Rust TUI 项目通过 `vt100` 虚拟终端后端做快照测试，证明“字符栅格快照”是稳定且高性价比的回归手段。

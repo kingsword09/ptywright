@@ -71,6 +71,8 @@
         { "$ref": "#/$defs/stepExpectMeta" },
         { "$ref": "#/$defs/stepSnapshot" },
         { "$ref": "#/$defs/stepExpect" },
+        { "$ref": "#/$defs/stepAssert" },
+        { "$ref": "#/$defs/stepAssertSemantic" },
         { "$ref": "#/$defs/stepExpectGolden" },
         { "$ref": "#/$defs/stepCustom" }
       ]
@@ -247,6 +249,29 @@
         { "required": ["notContains"] },
         { "required": ["regex"] }
       ]
+    },
+    "stepAssert": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["type"],
+      "properties": {
+        "type": { "const": "assert" },
+        "scope": { "type": "string", "enum": ["visible", "buffer"] },
+        "text": { "type": "string" },
+        "regex": { "type": "string" },
+        "description": { "type": "string" }
+      },
+      "anyOf": [{ "required": ["text"] }, { "required": ["regex"] }]
+    },
+    "stepAssertSemantic": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["type", "prompt"],
+      "properties": {
+        "type": { "const": "assertSemantic" },
+        "prompt": { "type": "string", "minLength": 1 },
+        "description": { "type": "string" }
+      }
     },
     "stepExpectGolden": {
       "type": "object",
