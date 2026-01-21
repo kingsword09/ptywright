@@ -108,47 +108,48 @@ function renderSuiteReportHtml(args: {
   const resultLabel = args.summary.ok ? "PASS" : "FAIL";
   const resultClass = args.summary.ok ? "pass" : "fail";
 
-  const rowsHtml = args.summary.entries
-    .map((entry) => {
-      const statusLabel = entry.ok ? "PASS" : "FAIL";
-      const statusClass = entry.ok ? "pass" : "fail";
+  const summaryHref = relativeHref(args.reportPath, args.summaryPath);
 
+  const uiData = {
+    version: 1,
+    summary: {
+      ok: args.summary.ok,
+      dir: args.summary.dir,
+      suiteDir: args.summary.suiteDir,
+      totalCount: args.summary.totalCount,
+      failureCount: args.summary.failureCount,
+      durationMs: args.summary.durationMs,
+      summaryHref,
+    },
+    entries: args.summary.entries.map((entry) => {
       const reportHref = entry.reportPath ? relativeHref(args.reportPath, entry.reportPath) : null;
       const castHref = entry.castPath ? relativeHref(args.reportPath, entry.castPath) : null;
-
       const lastHref =
         !entry.ok && entry.failureArtifacts?.lastViewPath
           ? relativeHref(args.reportPath, entry.failureArtifacts.lastViewPath)
           : null;
-
       const errorHref =
         !entry.ok && entry.failureArtifacts?.errorPath
           ? relativeHref(args.reportPath, entry.failureArtifacts.errorPath)
           : null;
 
-      const links = [
-        reportHref ? `<a href="${escapeHtml(reportHref)}">report</a>` : null,
-        castHref ? `<a href="${escapeHtml(castHref)}">cast</a>` : null,
-        lastHref ? `<a href="${escapeHtml(lastHref)}">last</a>` : null,
-        errorHref ? `<a href="${escapeHtml(errorHref)}">error</a>` : null,
-      ]
-        .filter(Boolean)
-        .join(" ");
-
-      const errorText = !entry.ok && entry.error ? entry.error : "";
-
-      return `<tr class="${statusClass}">
-  <td><span class="badge ${statusClass}">${escapeHtml(statusLabel)}</span></td>
-  <td class="mono">${escapeHtml(entry.scriptName)}</td>
-  <td class="mono">${escapeHtml(entry.filePathRel)}</td>
-  <td class="mono">${escapeHtml(formatDuration(entry.durationMs))}</td>
-  <td class="mono">${links || ""}</td>
-  <td class="mono error">${escapeHtml(errorText)}</td>
-</tr>`;
-    })
-    .join("\n");
-
-  const summaryHref = relativeHref(args.reportPath, args.summaryPath);
+      return {
+        id: entry.filePathRel,
+        ok: entry.ok,
+        scriptName: entry.scriptName,
+        filePathRel: entry.filePathRel,
+        durationMs: entry.durationMs,
+        error: entry.ok ? null : (entry.error ?? null),
+        artifactsDir: entry.artifactsDir ?? null,
+        hrefs: {
+          report: reportHref,
+          cast: castHref,
+          last: lastHref,
+          error: errorHref,
+        },
+      };
+    }),
+  };
 
   return `<!doctype html>
 <html lang="en">
@@ -165,6 +166,9 @@ function renderSuiteReportHtml(args: {
         font-family: ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto,
           Helvetica, Arial, "Apple Color Emoji", "Segoe UI Emoji";
         line-height: 1.4;
+      }
+      a {
+        color: inherit;
       }
       header {
         padding: 16px;
@@ -205,28 +209,83 @@ function renderSuiteReportHtml(args: {
         white-space: pre-wrap;
       }
       main {
+        display: grid;
+        grid-template-columns: 360px 1fr;
+        min-height: calc(100vh - 110px);
+      }
+      aside {
+        border-right: 1px solid color-mix(in oklab, currentColor 14%, transparent);
+        padding: 12px;
+      }
+      section {
         padding: 16px;
       }
-      a {
+      .controls {
+        display: flex;
+        gap: 8px;
+        flex-wrap: wrap;
+        align-items: center;
+        margin-bottom: 10px;
+      }
+      .input {
+        width: 100%;
+        box-sizing: border-box;
+        padding: 8px 10px;
+        border-radius: 10px;
+        border: 1px solid color-mix(in oklab, currentColor 16%, transparent);
+        background: color-mix(in oklab, currentColor 4%, transparent);
         color: inherit;
       }
-      table {
-        width: 100%;
-        border-collapse: collapse;
+      .chip {
+        cursor: pointer;
+        user-select: none;
       }
-      th,
-      td {
-        padding: 10px 8px;
-        border-bottom: 1px solid color-mix(in oklab, currentColor 14%, transparent);
-        vertical-align: top;
-        text-align: left;
+      .chip[aria-pressed="true"] {
+        background: color-mix(in oklab, #0ea5e9 18%, transparent);
+        border-color: color-mix(in oklab, #0ea5e9 45%, transparent);
       }
-      th {
+      .list {
+        list-style: none;
+        padding: 0;
+        margin: 0;
+        display: flex;
+        flex-direction: column;
+        gap: 6px;
+      }
+      .item {
+        border: 1px solid color-mix(in oklab, currentColor 14%, transparent);
+        border-radius: 12px;
+        padding: 10px;
+        cursor: pointer;
+        background: color-mix(in oklab, currentColor 2%, transparent);
+      }
+      .item:hover {
+        background: color-mix(in oklab, currentColor 6%, transparent);
+      }
+      .item[aria-selected="true"] {
+        border-color: color-mix(in oklab, #0ea5e9 55%, transparent);
+        background: color-mix(in oklab, #0ea5e9 10%, transparent);
+      }
+      .item .top {
+        display: flex;
+        gap: 8px;
+        align-items: center;
+      }
+      .item .name {
+        font-weight: 600;
+        overflow: hidden;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+      }
+      .item .sub {
+        margin-top: 6px;
+        display: flex;
+        gap: 8px;
+        flex-wrap: wrap;
+        font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas,
+          "Liberation Mono", "Courier New", monospace;
         font-size: 12px;
         opacity: 0.8;
-      }
-      tr.fail {
-        background: color-mix(in oklab, #ef4444 6%, transparent);
       }
       .mono {
         font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas,
@@ -235,6 +294,33 @@ function renderSuiteReportHtml(args: {
       }
       .error {
         color: color-mix(in oklab, #ef4444 70%, currentColor);
+      }
+      .kv {
+        display: grid;
+        grid-template-columns: 110px 1fr;
+        gap: 8px 12px;
+        margin-top: 12px;
+      }
+      .kv .k {
+        opacity: 0.75;
+      }
+      .links {
+        display: flex;
+        gap: 10px;
+        flex-wrap: wrap;
+        margin-top: 10px;
+      }
+      .muted {
+        opacity: 0.75;
+      }
+      @media (max-width: 920px) {
+        main {
+          grid-template-columns: 1fr;
+        }
+        aside {
+          border-right: none;
+          border-bottom: 1px solid color-mix(in oklab, currentColor 14%, transparent);
+        }
       }
     </style>
   </head>
@@ -251,24 +337,166 @@ function renderSuiteReportHtml(args: {
 summary=<a href="${escapeHtml(summaryHref)}">run.summary.json</a></div>
     </header>
     <main>
-      <table>
-        <thead>
-          <tr>
-            <th>Status</th>
-            <th>Script</th>
-            <th>File</th>
-            <th>Duration</th>
-            <th>Artifacts</th>
-            <th>Error</th>
-          </tr>
-        </thead>
-        <tbody>
-${rowsHtml}
-        </tbody>
-      </table>
+      <aside>
+        <div class="controls">
+          <input id="search" class="input mono" placeholder="Search…" autocomplete="off" />
+          <button id="filterAll" class="badge chip" type="button" aria-pressed="true">all</button>
+          <button id="filterPass" class="badge chip pass" type="button" aria-pressed="false">pass</button>
+          <button id="filterFail" class="badge chip fail" type="button" aria-pressed="false">fail</button>
+          <span id="visibleCount" class="badge">visible=0</span>
+        </div>
+        <ol id="list" class="list"></ol>
+      </aside>
+      <section>
+        <div id="details">
+          <div class="muted">Select a test from the left.</div>
+        </div>
+      </section>
     </main>
+    <script id="suiteData" type="application/json">${jsonForHtml(uiData)}</script>
+    <script>
+      (function () {
+        const dataEl = document.getElementById("suiteData");
+        const listEl = document.getElementById("list");
+        const detailsEl = document.getElementById("details");
+        const searchEl = document.getElementById("search");
+        const visibleCountEl = document.getElementById("visibleCount");
+        const filterAllEl = document.getElementById("filterAll");
+        const filterPassEl = document.getElementById("filterPass");
+        const filterFailEl = document.getElementById("filterFail");
+        if (!dataEl || !listEl || !detailsEl || !searchEl) return;
+
+        /** @type {{entries: any[]}} */
+        const raw = JSON.parse(dataEl.textContent || "{}");
+        const entries = Array.isArray(raw.entries) ? raw.entries : [];
+        let filter = "all";
+        let selectedId = null;
+
+        function setPressed(el, on) {
+          el.setAttribute("aria-pressed", on ? "true" : "false");
+        }
+
+        function applyFilter() {
+          const q = (searchEl.value || "").trim().toLowerCase();
+          const out = [];
+          for (const e of entries) {
+            if (!e) continue;
+            if (filter === "pass" && !e.ok) continue;
+            if (filter === "fail" && e.ok) continue;
+            if (q) {
+              const hay = (e.scriptName + " " + e.filePathRel).toLowerCase();
+              if (!hay.includes(q)) continue;
+            }
+            out.push(e);
+          }
+          renderList(out);
+          if (visibleCountEl) visibleCountEl.textContent = "visible=" + out.length;
+        }
+
+        function renderList(items) {
+          listEl.textContent = "";
+          for (const e of items) {
+            const li = document.createElement("li");
+            li.className = "item";
+            li.setAttribute("role", "option");
+            li.dataset.id = e.id;
+            li.setAttribute("aria-selected", e.id === selectedId ? "true" : "false");
+
+            const top = document.createElement("div");
+            top.className = "top";
+            const badge = document.createElement("span");
+            badge.className = "badge " + (e.ok ? "pass" : "fail");
+            badge.textContent = e.ok ? "PASS" : "FAIL";
+            const name = document.createElement("div");
+            name.className = "name";
+            name.textContent = e.scriptName;
+            top.appendChild(badge);
+            top.appendChild(name);
+
+            const sub = document.createElement("div");
+            sub.className = "sub";
+            const file = document.createElement("span");
+            file.textContent = e.filePathRel;
+            const dur = document.createElement("span");
+            dur.textContent = "dur=" + (e.durationMs < 1000 ? e.durationMs + "ms" : (e.durationMs / 1000).toFixed(2) + "s");
+            sub.appendChild(file);
+            sub.appendChild(dur);
+
+            li.appendChild(top);
+            li.appendChild(sub);
+            li.addEventListener("click", function () {
+              selectedId = e.id;
+              applyFilter();
+              renderDetails(e);
+            });
+            listEl.appendChild(li);
+          }
+        }
+
+        function linkHtml(href, label) {
+          if (!href) return "";
+          return '<a class="mono" href="' + href.replaceAll('"', "&quot;") + '">' + label + "</a>";
+        }
+
+        function renderDetails(e) {
+          const links = [
+            linkHtml(e.hrefs && e.hrefs.report, "report"),
+            linkHtml(e.hrefs && e.hrefs.cast, "cast"),
+            linkHtml(e.hrefs && e.hrefs.last, "last"),
+            linkHtml(e.hrefs && e.hrefs.error, "error"),
+          ].filter(Boolean);
+
+          detailsEl.innerHTML =
+            '<div class="badges">' +
+              '<span class="badge ' + (e.ok ? "pass" : "fail") + '">status=' + (e.ok ? "PASS" : "FAIL") + "</span>" +
+              '<span class="badge">duration=' + (e.durationMs < 1000 ? e.durationMs + "ms" : (e.durationMs / 1000).toFixed(2) + "s") + "</span>" +
+            "</div>" +
+            '<h2 style="margin: 10px 0 6px 0;">' + e.scriptName.replaceAll("&", "&amp;").replaceAll("<", "&lt;").replaceAll(">", "&gt;") + "</h2>" +
+            '<div class="kv mono">' +
+              '<div class="k">file</div><div class="v">' + e.filePathRel.replaceAll("&", "&amp;").replaceAll("<", "&lt;").replaceAll(">", "&gt;") + "</div>" +
+              '<div class="k">artifacts</div><div class="v">' + (e.artifactsDir ? e.artifactsDir.replaceAll("&", "&amp;").replaceAll("<", "&lt;").replaceAll(">", "&gt;") : "<span class=\"muted\">(none)</span>") + "</div>" +
+            "</div>" +
+            (links.length ? '<div class="links">' + links.join(" ") + "</div>" : "") +
+            (!e.ok && e.error ? '<pre class="mono error" style="margin-top: 12px; white-space: pre-wrap;">' + e.error.replaceAll("&", "&amp;").replaceAll("<", "&lt;").replaceAll(">", "&gt;") + "</pre>" : "");
+        }
+
+        filterAllEl.addEventListener("click", function () {
+          filter = "all";
+          setPressed(filterAllEl, true);
+          setPressed(filterPassEl, false);
+          setPressed(filterFailEl, false);
+          applyFilter();
+        });
+        filterPassEl.addEventListener("click", function () {
+          filter = "pass";
+          setPressed(filterAllEl, false);
+          setPressed(filterPassEl, true);
+          setPressed(filterFailEl, false);
+          applyFilter();
+        });
+        filterFailEl.addEventListener("click", function () {
+          filter = "fail";
+          setPressed(filterAllEl, false);
+          setPressed(filterPassEl, false);
+          setPressed(filterFailEl, true);
+          applyFilter();
+        });
+        searchEl.addEventListener("input", applyFilter);
+
+        applyFilter();
+        if (entries[0]) {
+          selectedId = entries[0].id;
+          renderDetails(entries[0]);
+          applyFilter();
+        }
+      })();
+    </script>
   </body>
 </html>`;
+}
+
+function jsonForHtml(data: unknown): string {
+  return JSON.stringify(data).replaceAll("<", "\\u003c");
 }
 
 function formatDuration(ms: number): string {
