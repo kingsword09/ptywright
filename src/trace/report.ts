@@ -41,6 +41,7 @@ type ReportFrame = {
   markLabel?: string;
   label: string;
   viewHtml: string;
+  changedCount: number;
   stepInfo?: {
     index: number;
     type: string;
@@ -102,6 +103,7 @@ export async function generateTraceReportHtml(
     if (frames.length >= maxFrames) return;
 
     let viewHtml: string;
+    let changedCount: number;
 
     if (args.overrideViewText) {
       const parsedView = parseSnapshotViewText(args.overrideViewText.text);
@@ -114,6 +116,7 @@ export async function generateTraceReportHtml(
       const rowSignatures = parsedView.rows.map((r) => r.text);
       const changedLines = diffLineIndices(previousRowSignatures ?? [], rowSignatures);
       previousRowSignatures = rowSignatures;
+      changedCount = changedLines.size;
 
       viewHtml = renderSnapshotViewTextHtml({
         headerLine,
@@ -143,6 +146,7 @@ export async function generateTraceReportHtml(
         hash = fnv1a32(lines.join("\n"));
       }
 
+      changedCount = changedLines.size;
       viewHtml = renderSnapshotViewHtml({
         terminal,
         sessionId: "replay",
@@ -163,6 +167,7 @@ export async function generateTraceReportHtml(
       label: args.label,
       markLabel: args.markLabel,
       viewHtml,
+      changedCount,
       stepInfo: args.stepInfo,
     });
   };
@@ -455,15 +460,55 @@ ${markFrames
   .join("\n")}
 </ol>`;
 
-  const framesHtml = input.frames
+  const traceData = {
+    version: 1,
+    frames: input.frames.map((f, idx) => ({
+      index: idx + 1,
+      id: f.id,
+      atSeconds: f.atSeconds,
+      kind: f.kind,
+      label: f.label,
+      markLabel: f.markLabel ?? null,
+      changedCount: f.changedCount,
+      stepInfo: f.stepInfo ?? null,
+    })),
+  };
+
+  const frameListHtml = input.frames
     .map((frame, idx) => {
-      const safeLabel = escapeHtml(frame.label);
-      return `
-<section class="frame" id="${escapeHtml(frame.id)}">
-  <h2>${idx + 1}. t=${frame.atSeconds.toFixed(3)}s — ${safeLabel}</h2>
-  <pre class="terminal">${frame.viewHtml}</pre>
-</section>`;
+      const statusBadge =
+        frame.stepInfo && frame.stepInfo.ok
+          ? `<span class="badge pass">PASS</span>`
+          : frame.stepInfo && !frame.stepInfo.ok
+            ? `<span class="badge fail">FAIL</span>`
+            : `<span class="badge">INFO</span>`;
+
+      const changedBadge =
+        frame.changedCount > 0 ? `<span class="badge">changed=${frame.changedCount}</span>` : "";
+
+      return `<li>
+  <button
+    type="button"
+    class="frame-btn"
+    data-idx="${idx}"
+    data-id="${escapeHtml(frame.id)}"
+    data-kind="${escapeHtml(frame.kind)}"
+    data-ok="${frame.stepInfo ? String(frame.stepInfo.ok) : ""}"
+    data-changed="${String(frame.changedCount)}"
+  >
+    <div class="frame-btn-top">
+      ${statusBadge}
+      ${changedBadge}
+      <span class="mono frame-btn-time">t=${frame.atSeconds.toFixed(3)}s</span>
+    </div>
+    <div class="frame-btn-label mono">${escapeHtml(frame.label)}</div>
+  </button>
+</li>`;
     })
+    .join("\n");
+
+  const templatesHtml = input.frames
+    .map((frame) => `<template id="tpl-${escapeHtml(frame.id)}">${frame.viewHtml}</template>`)
     .join("\n");
 
   return `<!doctype html>
@@ -542,6 +587,109 @@ ${markFrames
       main {
         padding: 16px;
       }
+      .trace {
+        display: grid;
+        grid-template-columns: 360px 1fr;
+        gap: 12px;
+      }
+      .trace aside {
+        border: 1px solid color-mix(in oklab, currentColor 14%, transparent);
+        border-radius: 10px;
+        padding: 10px;
+        background: color-mix(in oklab, currentColor 2%, transparent);
+      }
+      .trace .viewer {
+        border: 1px solid color-mix(in oklab, currentColor 14%, transparent);
+        border-radius: 10px;
+        overflow: hidden;
+      }
+      .viewer-header {
+        padding: 10px 12px;
+        border-bottom: 1px solid color-mix(in oklab, currentColor 14%, transparent);
+        display: flex;
+        gap: 8px;
+        align-items: center;
+        flex-wrap: wrap;
+        background: color-mix(in oklab, currentColor 4%, transparent);
+      }
+      .viewer-title {
+        font-weight: 600;
+      }
+      .viewer-sub {
+        opacity: 0.75;
+      }
+      .controls {
+        display: flex;
+        gap: 8px;
+        flex-wrap: wrap;
+        align-items: center;
+        margin-bottom: 10px;
+      }
+      .input {
+        width: 100%;
+        box-sizing: border-box;
+        padding: 8px 10px;
+        border-radius: 10px;
+        border: 1px solid color-mix(in oklab, currentColor 16%, transparent);
+        background: color-mix(in oklab, currentColor 4%, transparent);
+        color: inherit;
+      }
+      .chip {
+        cursor: pointer;
+        user-select: none;
+      }
+      .chip[aria-pressed="true"] {
+        background: color-mix(in oklab, #0ea5e9 18%, transparent);
+        border-color: color-mix(in oklab, #0ea5e9 45%, transparent);
+      }
+      .frame-list {
+        list-style: none;
+        padding: 0;
+        margin: 0;
+        display: flex;
+        flex-direction: column;
+        gap: 8px;
+        max-height: 70vh;
+        overflow: auto;
+      }
+      .frame-btn {
+        width: 100%;
+        text-align: left;
+        border: 1px solid color-mix(in oklab, currentColor 14%, transparent);
+        border-radius: 10px;
+        padding: 10px;
+        background: color-mix(in oklab, currentColor 2%, transparent);
+        color: inherit;
+        cursor: pointer;
+      }
+      .frame-btn:hover {
+        background: color-mix(in oklab, currentColor 6%, transparent);
+      }
+      .frame-btn[aria-selected="true"] {
+        border-color: color-mix(in oklab, #0ea5e9 55%, transparent);
+        background: color-mix(in oklab, #0ea5e9 10%, transparent);
+      }
+      .frame-btn-top {
+        display: flex;
+        gap: 8px;
+        flex-wrap: wrap;
+        align-items: center;
+      }
+      .frame-btn-time {
+        opacity: 0.8;
+      }
+      .frame-btn-label {
+        margin-top: 6px;
+        opacity: 0.9;
+      }
+      @media (max-width: 920px) {
+        .trace {
+          grid-template-columns: 1fr;
+        }
+        .frame-list {
+          max-height: 38vh;
+        }
+      }
       details {
         margin: 12px 0;
       }
@@ -588,11 +736,6 @@ ${markFrames
       .terminal .ln {
         color: color-mix(in oklab, currentColor 55%, transparent);
         user-select: none;
-      }
-      .frame h2 {
-        margin: 18px 0 0 0;
-        font-size: 14px;
-        font-weight: 600;
       }
       .marks {
         margin: 8px 0 0 18px;
@@ -658,7 +801,185 @@ timestamp=${escapeHtml(coerceDisplayString(timestamp))}</div>
         <h2>Marks</h2>
         ${markListHtml}
       </section>
-      ${framesHtml}
+      <section class="section">
+        <h2>Trace</h2>
+        <div class="trace">
+          <aside>
+            <div class="controls">
+              <input id="frameSearch" class="input mono" placeholder="Search frames…" autocomplete="off" />
+              <button id="modeAll" class="badge chip" type="button" aria-pressed="true">all</button>
+              <button id="modeChanged" class="badge chip" type="button" aria-pressed="false">changed</button>
+              <button id="modeMarks" class="badge chip" type="button" aria-pressed="false">marks</button>
+              <button id="modeFailed" class="badge chip fail" type="button" aria-pressed="false">failed</button>
+              <span id="visibleFrames" class="badge">visible=0</span>
+            </div>
+            <ol id="frameList" class="frame-list">
+              ${frameListHtml}
+            </ol>
+          </aside>
+          <div class="viewer">
+            <div class="viewer-header">
+              <span id="viewerTitle" class="viewer-title mono"></span>
+              <span id="viewerSub" class="viewer-sub mono muted"></span>
+            </div>
+            <pre id="viewer" class="terminal"></pre>
+          </div>
+        </div>
+        <div class="muted mono" style="margin-top: 10px;">Tips: click a frame, or use ↑/↓ (j/k) to navigate; filters affect navigation.</div>
+        <script id="traceData" type="application/json">${jsonForHtml(traceData)}</script>
+        ${templatesHtml}
+        <script>
+          (function () {
+            const dataEl = document.getElementById("traceData");
+            const listEl = document.getElementById("frameList");
+            const viewerEl = document.getElementById("viewer");
+            const titleEl = document.getElementById("viewerTitle");
+            const subEl = document.getElementById("viewerSub");
+            const searchEl = document.getElementById("frameSearch");
+            const visibleEl = document.getElementById("visibleFrames");
+            const modeAll = document.getElementById("modeAll");
+            const modeChanged = document.getElementById("modeChanged");
+            const modeMarks = document.getElementById("modeMarks");
+            const modeFailed = document.getElementById("modeFailed");
+            if (!dataEl || !listEl || !viewerEl || !titleEl || !subEl || !searchEl) return;
+
+            const raw = JSON.parse(dataEl.textContent || "{}");
+            const frames = Array.isArray(raw.frames) ? raw.frames : [];
+            const buttons = Array.from(listEl.querySelectorAll("button.frame-btn"));
+            const idToIndex = new Map();
+            for (const f of frames) idToIndex.set(f.id, f.index - 1);
+
+            let mode = "all";
+            let current = 0;
+
+            function setPressed(el, on) {
+              el.setAttribute("aria-pressed", on ? "true" : "false");
+            }
+
+            function setMode(next) {
+              mode = next;
+              setPressed(modeAll, mode === "all");
+              setPressed(modeChanged, mode === "changed");
+              setPressed(modeMarks, mode === "marks");
+              setPressed(modeFailed, mode === "failed");
+              applyFilter();
+            }
+
+            function applyFilter() {
+              const q = (searchEl.value || "").trim().toLowerCase();
+              let visible = 0;
+              for (const btn of buttons) {
+                const idx = Number(btn.dataset.idx || "0");
+                const f = frames[idx];
+                let show = true;
+                if (mode === "changed") show = Number(btn.dataset.changed || "0") > 0;
+                else if (mode === "marks") show = btn.dataset.kind === "mark";
+                else if (mode === "failed") show = btn.dataset.ok === "false";
+                if (show && q) {
+                  const label = (btn.querySelector(".frame-btn-label")?.textContent || "").toLowerCase();
+                  if (!label.includes(q)) show = false;
+                }
+                btn.parentElement.style.display = show ? "" : "none";
+                if (show) visible += 1;
+              }
+              if (visibleEl) visibleEl.textContent = "visible=" + visible;
+
+              // If current is hidden, jump to first visible.
+              if (buttons[current] && buttons[current].parentElement.style.display === "none") {
+                const firstVisible = buttons.findIndex((b) => b.parentElement.style.display !== "none");
+                if (firstVisible >= 0) select(firstVisible, false);
+              } else {
+                updateSelected();
+              }
+            }
+
+            function updateSelected() {
+              for (const btn of buttons) {
+                const idx = Number(btn.dataset.idx || "0");
+                btn.setAttribute("aria-selected", idx === current ? "true" : "false");
+              }
+            }
+
+            function renderFrame(idx) {
+              const f = frames[idx];
+              if (!f) return;
+              const tpl = document.getElementById("tpl-" + f.id);
+              if (tpl && tpl.content) {
+                viewerEl.innerHTML = "";
+                viewerEl.appendChild(tpl.content.cloneNode(true));
+              } else if (tpl) {
+                viewerEl.innerHTML = tpl.innerHTML || "";
+              } else {
+                viewerEl.textContent = "(missing template)";
+              }
+
+              titleEl.textContent = idx + 1 + ". t=" + f.atSeconds.toFixed(3) + "s — " + f.label;
+              const bits = [];
+              if (f.kind) bits.push("kind=" + f.kind);
+              if (typeof f.changedCount === "number") bits.push("changed=" + f.changedCount);
+              if (f.stepInfo && typeof f.stepInfo.ok === "boolean") bits.push("ok=" + String(f.stepInfo.ok));
+              subEl.textContent = bits.join(" ");
+            }
+
+            function select(idx, updateHash) {
+              current = Math.max(0, Math.min(buttons.length - 1, idx));
+              updateSelected();
+              renderFrame(current);
+              if (updateHash) location.hash = frames[current]?.id ? "#" + frames[current].id : "";
+            }
+
+            function selectById(id) {
+              const idx = idToIndex.get(id);
+              if (typeof idx === "number") select(idx, false);
+            }
+
+            for (const btn of buttons) {
+              btn.addEventListener("click", function () {
+                select(Number(btn.dataset.idx || "0"), true);
+              });
+            }
+
+            modeAll.addEventListener("click", () => setMode("all"));
+            modeChanged.addEventListener("click", () => setMode("changed"));
+            modeMarks.addEventListener("click", () => setMode("marks"));
+            modeFailed.addEventListener("click", () => setMode("failed"));
+            searchEl.addEventListener("input", applyFilter);
+
+            window.addEventListener("hashchange", function () {
+              const id = (location.hash || "").replace(/^#/, "");
+              if (id) selectById(id);
+            });
+
+            document.addEventListener("keydown", function (e) {
+              const tag = (document.activeElement && document.activeElement.tagName) || "";
+              if (tag === "INPUT" || tag === "TEXTAREA") return;
+              if (e.key === "ArrowDown" || e.key === "j") {
+                e.preventDefault();
+                let next = current + 1;
+                while (next < buttons.length && buttons[next].parentElement.style.display === "none") next += 1;
+                if (next < buttons.length) select(next, true);
+              } else if (e.key === "ArrowUp" || e.key === "k") {
+                e.preventDefault();
+                let next = current - 1;
+                while (next >= 0 && buttons[next].parentElement.style.display === "none") next -= 1;
+                if (next >= 0) select(next, true);
+              }
+            });
+
+            // Initial frame: prefer hash, otherwise first failing, otherwise final.
+            const hashId = (location.hash || "").replace(/^#/, "");
+            if (hashId) {
+              selectById(hashId);
+            } else {
+              const firstFail = buttons.findIndex((b) => b.dataset.ok === "false");
+              if (firstFail >= 0) select(firstFail, false);
+              else select(buttons.length - 1, false);
+            }
+
+            applyFilter();
+          })();
+        </script>
+      </section>
       <section class="summary">
         <h2>Summary</h2>
         <pre>${escapeHtml(
@@ -677,8 +998,12 @@ timestamp=${escapeHtml(coerceDisplayString(timestamp))}</div>
         )}</pre>
       </section>
     </main>
-  </body>
-</html>`;
+	  </body>
+	</html>`;
+}
+
+function jsonForHtml(data: unknown): string {
+  return JSON.stringify(data).replaceAll("<", "\\u003c");
 }
 
 function renderSnapshotViewHtml(options: {
