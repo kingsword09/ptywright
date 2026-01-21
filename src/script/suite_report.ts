@@ -132,6 +132,11 @@ function renderSuiteReportHtml(args: {
         !entry.ok && entry.failureArtifacts?.errorPath
           ? relativeHref(args.reportPath, entry.failureArtifacts.errorPath)
           : null;
+      const dataKey = entry.artifactsDir ? basename(entry.artifactsDir) : null;
+      const dataHref =
+        entry.artifactsDir && dataKey
+          ? relativeHref(args.reportPath, join(entry.artifactsDir, "test.data.js"))
+          : null;
 
       return {
         id: entry.filePathRel,
@@ -141,11 +146,13 @@ function renderSuiteReportHtml(args: {
         durationMs: entry.durationMs,
         error: entry.ok ? null : (entry.error ?? null),
         artifactsDir: entry.artifactsDir ?? null,
+        dataKey,
         hrefs: {
           report: reportHref,
           cast: castHref,
           last: lastHref,
           error: errorHref,
+          data: dataHref,
         },
       };
     }),
@@ -371,6 +378,7 @@ summary=<a href="${escapeHtml(summaryHref)}">run.summary.json</a></div>
         const entries = Array.isArray(raw.entries) ? raw.entries : [];
         let filter = "all";
         let selectedId = null;
+        const dataLoaders = Object.create(null);
 
         function setPressed(el, on) {
           el.setAttribute("aria-pressed", on ? "true" : "false");
@@ -438,6 +446,47 @@ summary=<a href="${escapeHtml(summaryHref)}">run.summary.json</a></div>
           return '<a class="mono" href="' + href.replaceAll('"', "&quot;") + '">' + label + "</a>";
         }
 
+        function escapeText(s) {
+          return (s || "")
+            .replaceAll("&", "&amp;")
+            .replaceAll("<", "&lt;")
+            .replaceAll(">", "&gt;");
+        }
+
+        function getTestData(e) {
+          const store = globalThis.__ptywright && globalThis.__ptywright.tests;
+          if (!store || !e || !e.dataKey) return null;
+          return store[e.dataKey] || null;
+        }
+
+        function ensureTestDataLoaded(e, cb) {
+          if (!e || !e.hrefs || !e.hrefs.data || !e.dataKey) return cb(null);
+          const existing = getTestData(e);
+          if (existing) return cb(existing);
+
+          if (dataLoaders[e.dataKey]) {
+            dataLoaders[e.dataKey].push(cb);
+            return;
+          }
+          dataLoaders[e.dataKey] = [cb];
+
+          const script = document.createElement("script");
+          script.src = e.hrefs.data;
+          script.async = true;
+          script.onload = function () {
+            const loaded = getTestData(e);
+            const cbs = dataLoaders[e.dataKey] || [];
+            delete dataLoaders[e.dataKey];
+            for (const fn of cbs) fn(loaded);
+          };
+          script.onerror = function () {
+            const cbs = dataLoaders[e.dataKey] || [];
+            delete dataLoaders[e.dataKey];
+            for (const fn of cbs) fn(null);
+          };
+          document.head.appendChild(script);
+        }
+
         function renderDetails(e) {
           const links = [
             linkHtml(e.hrefs && e.hrefs.report, "report"),
@@ -446,18 +495,63 @@ summary=<a href="${escapeHtml(summaryHref)}">run.summary.json</a></div>
             linkHtml(e.hrefs && e.hrefs.error, "error"),
           ].filter(Boolean);
 
+          const data = getTestData(e);
+          const stepsHtml = (() => {
+            if (data && Array.isArray(data.steps)) {
+              const rows = data.steps
+                .map(function (s) {
+                  const badge = '<span class="badge ' + (s.ok ? "pass" : "fail") + '">' + (s.ok ? "PASS" : "FAIL") + "</span>";
+                  const dur = typeof s.durationMs === "number"
+                    ? (s.durationMs < 1000 ? s.durationMs + "ms" : (s.durationMs / 1000).toFixed(2) + "s")
+                    : "";
+                  const err = !s.ok && s.error ? '<div class="mono error" style="margin-top: 4px;">' + escapeText(s.error) + "</div>" : "";
+                  return '<div class="item" style="cursor: default;">' +
+                    '<div class="top">' + badge +
+                    '<div class="name mono" style="font-weight: 600;">' + escapeText(s.label || s.type || "") + "</div>" +
+                    "</div>" +
+                    '<div class="sub"><span>step=' + escapeText(String(s.index)) + "</span><span>dur=" + escapeText(dur) + "</span></div>" +
+                    err +
+                    "</div>";
+                })
+                .join("");
+              return '<h3 style="margin: 16px 0 8px 0;">Steps</h3>' +
+                '<div class="muted mono">count=' + escapeText(String(data.stepCount || data.steps.length)) + "</div>" +
+                '<div style="margin-top: 10px; display: flex; flex-direction: column; gap: 8px;">' + rows + "</div>";
+            }
+
+            if (e.hrefs && e.hrefs.data && e.dataKey) {
+              return '<h3 style="margin: 16px 0 8px 0;">Steps</h3>' +
+                '<div class="muted">Step details are available. Click to load.</div>' +
+                '<div style="margin-top: 10px;">' +
+                  '<button id="loadSteps" class="badge chip" type="button">load steps</button>' +
+                "</div>";
+            }
+
+            return "";
+          })();
+
           detailsEl.innerHTML =
             '<div class="badges">' +
               '<span class="badge ' + (e.ok ? "pass" : "fail") + '">status=' + (e.ok ? "PASS" : "FAIL") + "</span>" +
               '<span class="badge">duration=' + (e.durationMs < 1000 ? e.durationMs + "ms" : (e.durationMs / 1000).toFixed(2) + "s") + "</span>" +
             "</div>" +
-            '<h2 style="margin: 10px 0 6px 0;">' + e.scriptName.replaceAll("&", "&amp;").replaceAll("<", "&lt;").replaceAll(">", "&gt;") + "</h2>" +
+            '<h2 style="margin: 10px 0 6px 0;">' + escapeText(e.scriptName) + "</h2>" +
             '<div class="kv mono">' +
-              '<div class="k">file</div><div class="v">' + e.filePathRel.replaceAll("&", "&amp;").replaceAll("<", "&lt;").replaceAll(">", "&gt;") + "</div>" +
-              '<div class="k">artifacts</div><div class="v">' + (e.artifactsDir ? e.artifactsDir.replaceAll("&", "&amp;").replaceAll("<", "&lt;").replaceAll(">", "&gt;") : "<span class=\"muted\">(none)</span>") + "</div>" +
+              '<div class="k">file</div><div class="v">' + escapeText(e.filePathRel) + "</div>" +
+              '<div class="k">artifacts</div><div class="v">' + (e.artifactsDir ? escapeText(e.artifactsDir) : "<span class=\"muted\">(none)</span>") + "</div>" +
             "</div>" +
             (links.length ? '<div class="links">' + links.join(" ") + "</div>" : "") +
-            (!e.ok && e.error ? '<pre class="mono error" style="margin-top: 12px; white-space: pre-wrap;">' + e.error.replaceAll("&", "&amp;").replaceAll("<", "&lt;").replaceAll(">", "&gt;") + "</pre>" : "");
+            (!e.ok && e.error ? '<pre class="mono error" style="margin-top: 12px; white-space: pre-wrap;">' + escapeText(e.error) + "</pre>" : "") +
+            stepsHtml;
+
+          const loadBtn = document.getElementById("loadSteps");
+          if (loadBtn) {
+            loadBtn.addEventListener("click", function () {
+              ensureTestDataLoaded(e, function () {
+                renderDetails(e);
+              });
+            });
+          }
         }
 
         filterAllEl.addEventListener("click", function () {

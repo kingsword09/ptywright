@@ -123,6 +123,7 @@ export async function runScript(
     step: ScriptStep;
     before: SnapshotRecord | null;
     after: SnapshotRecord | null;
+    durationMs: number;
     ok: boolean;
     error?: string;
   }[] = [];
@@ -133,6 +134,7 @@ export async function runScript(
       currentStepIndex = stepIndex;
       currentStep = step;
 
+      const stepStartedAt = Date.now();
       // Capture state before step (reuse last if available)
       const before = last;
 
@@ -186,6 +188,7 @@ export async function runScript(
           step,
           before,
           after,
+          durationMs: Date.now() - stepStartedAt,
           ok: true,
         });
       } catch (err) {
@@ -195,6 +198,7 @@ export async function runScript(
           step,
           before,
           after: null, // Will be captured in failure block
+          durationMs: Date.now() - stepStartedAt,
           ok: false,
           error: (err as Error).message,
         });
@@ -215,11 +219,26 @@ export async function runScript(
       result: { ok: true },
       executionSteps, // Pass steps to report generator
     });
+    writeTestDataArtifact({
+      artifactsDir,
+      scriptName,
+      ok: true,
+      executionSteps,
+      resolveArtifactPath,
+    });
 
     sessions.closeAll();
     return { ok: true, artifactsDir };
   } catch (error) {
     try {
+      writeTestDataArtifact({
+        artifactsDir,
+        scriptName,
+        ok: false,
+        error: (error as Error).message,
+        executionSteps,
+        resolveArtifactPath,
+      });
       await writeFailureArtifacts({
         session,
         artifactsDir,
@@ -837,6 +856,119 @@ function formatStepLabel(step: ScriptStep): string {
   return step.type === "custom"
     ? `custom(${(step as ScriptCustomStep).name})`
     : (step as ScriptStep).type;
+}
+
+function formatPublicStepLabel(step: ScriptStep): string {
+  const showText = envTruthy(process.env.PTYWRIGHT_REPORT_SHOW_STEP_TEXT);
+  if (step.type === "custom") return `custom(${(step as ScriptCustomStep).name})`;
+
+  if (step.type === "sendText") {
+    const enter = step.enter !== undefined ? ` enter=${String(step.enter)}` : "";
+    if (!showText) return `sendText <redacted> (len=${step.text.length}${enter})`;
+    return `sendText "${truncateInline(step.text)}"${enter ? ` (${enter.trim()})` : ""}`;
+  }
+
+  if (step.type === "pressKey") return `pressKey ${step.key}`;
+  if (step.type === "sendMouse") return `sendMouse ${step.action} (${step.x},${step.y})`;
+  if (step.type === "resize") return `resize ${step.cols}x${step.rows}`;
+  if (step.type === "mark") return step.label ? `mark ${step.label}` : "mark";
+  if (step.type === "sleep") return `sleep ${step.ms}ms`;
+
+  if (step.type === "waitForText") {
+    if (!showText)
+      return step.text ? "waitForText (text)" : step.regex ? "waitForText (regex)" : "waitForText";
+    if (step.text) return `waitFor "${truncateInline(step.text)}"`;
+    if (step.regex) return `waitFor /${truncateInline(step.regex)}/`;
+    return "waitForText";
+  }
+
+  if (step.type === "waitForStableScreen") return "waitForStableScreen";
+  if (step.type === "waitForExit") return "waitForExit";
+  if (step.type === "expectMeta") return "expectMeta";
+
+  if (step.type === "snapshot") {
+    return `snapshot ${step.kind}${step.saveAs ? ` as ${step.saveAs}` : ""}`;
+  }
+
+  if (step.type === "expect") {
+    const parts: string[] = [];
+    if (step.equals !== undefined) parts.push("equals");
+    if (step.contains?.length) parts.push(`contains(${step.contains.length})`);
+    if (step.notContains?.length) parts.push(`notContains(${step.notContains.length})`);
+    if (step.regex) parts.push("regex");
+    return parts.length ? `expect ${parts.join(",")}` : "expect";
+  }
+
+  if (step.type === "expectGolden") return `expectGolden ${step.path}`;
+
+  if (step.type === "assert") {
+    if (!showText) return step.text ? "assert (text)" : step.regex ? "assert (regex)" : "assert";
+    if (step.text) return `assert "${truncateInline(step.text)}"`;
+    if (step.regex) return `assert /${truncateInline(step.regex)}/`;
+    if (step.description) return `assert "${truncateInline(step.description)}"`;
+    return "assert";
+  }
+
+  if (step.type === "assertSemantic") return "assertSemantic";
+
+  return step.type;
+}
+
+function truncateInline(text: string, maxChars: number = 60): string {
+  const normalized = text.replace(/\r\n/g, "\n").replace(/\r/g, "\n").replace(/\n/g, "\\n");
+  if (normalized.length <= maxChars) return normalized;
+  return `${normalized.slice(0, maxChars)}…(+${normalized.length - maxChars})`;
+}
+
+function writeTestDataArtifact(args: {
+  artifactsDir: string;
+  scriptName: string;
+  ok: boolean;
+  error?: string;
+  executionSteps: Array<{
+    index: number;
+    step: ScriptStep;
+    durationMs: number;
+    ok: boolean;
+    error?: string;
+  }>;
+  resolveArtifactPath: (path: string) => string;
+}): void {
+  try {
+    const testId = basename(args.artifactsDir);
+    const outPath = args.resolveArtifactPath("test.data.js");
+    mkdirSync(dirname(outPath), { recursive: true });
+
+    const steps = args.executionSteps.map((s) => ({
+      index: s.index + 1,
+      type: s.step.type,
+      label: formatPublicStepLabel(s.step),
+      ok: s.ok,
+      durationMs: s.durationMs,
+      error: s.ok ? null : (s.error ?? null),
+    }));
+
+    const data = {
+      version: 1,
+      testId,
+      scriptName: args.scriptName,
+      ok: args.ok,
+      error: args.ok ? null : (args.error ?? null),
+      stepCount: steps.length,
+      steps,
+      generatedAt: new Date().toISOString(),
+    };
+
+    const json = JSON.stringify(data).replaceAll("<", "\\u003c");
+    const key = JSON.stringify(testId);
+    const js =
+      `globalThis.__ptywright = globalThis.__ptywright || {};\n` +
+      `globalThis.__ptywright.tests = globalThis.__ptywright.tests || {};\n` +
+      `globalThis.__ptywright.tests[${key}] = ${json};\n`;
+    writeFileSync(outPath, js, "utf8");
+  } catch {
+    // best-effort
+  }
 }
 
 function envTruthy(value: string | undefined): boolean {
