@@ -44,7 +44,7 @@ export async function runAllScripts(options?: RunAllScriptsOptions): Promise<Run
 
   for (const filePath of filePaths) {
     const artifactsDirName = safeArtifactsDirName(relative(dir, filePath));
-    const artifactsDir = artifactsRoot ? join(artifactsRoot, artifactsDirName) : undefined;
+    const artifactsDir = join(suiteDir, "tests", artifactsDirName);
 
     const entryStartedAt = Date.now();
     const result = await runScriptPath(filePath, {
