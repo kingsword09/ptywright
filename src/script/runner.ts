@@ -911,13 +911,17 @@ function formatPublicStepLabel(step: ScriptStep): string {
 
   if (step.type === "assertSemantic") return "assertSemantic";
 
-  return step.type;
+  return assertUnreachableStep(step);
 }
 
 function truncateInline(text: string, maxChars: number = 60): string {
   const normalized = text.replace(/\r\n/g, "\n").replace(/\r/g, "\n").replace(/\n/g, "\\n");
   if (normalized.length <= maxChars) return normalized;
   return `${normalized.slice(0, maxChars)}…(+${normalized.length - maxChars})`;
+}
+
+function assertUnreachableStep(_step: never): string {
+  return "unknown";
 }
 
 function writeTestDataArtifact(args: {

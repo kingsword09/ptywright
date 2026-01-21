@@ -538,7 +538,11 @@ summary=<a href="${escapeHtml(summaryHref)}">run.summary.json</a></div>
             '<h2 style="margin: 10px 0 6px 0;">' + escapeText(e.scriptName) + "</h2>" +
             '<div class="kv mono">' +
               '<div class="k">file</div><div class="v">' + escapeText(e.filePathRel) + "</div>" +
-              '<div class="k">artifacts</div><div class="v">' + (e.artifactsDir ? escapeText(e.artifactsDir) : "<span class=\"muted\">(none)</span>") + "</div>" +
+              '<div class="k">artifacts</div><div class="v">' +
+                (e.artifactsDir
+                  ? escapeText(e.artifactsDir)
+                  : '<span class="muted">(none)</span>') +
+              "</div>" +
             "</div>" +
             (links.length ? '<div class="links">' + links.join(" ") + "</div>" : "") +
             (!e.ok && e.error ? '<pre class="mono error" style="margin-top: 12px; white-space: pre-wrap;">' + escapeText(e.error) + "</pre>" : "") +
