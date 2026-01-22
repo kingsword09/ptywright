@@ -96,6 +96,8 @@ test("MCP tools full smoke (core+debug+script+recording)", async () => {
   expect(readFileSync(resolve(runScriptDir, "masked.txt"), "utf8").trimEnd()).toBe(
     "TOKEN: <id>\nDONE",
   );
+  expect(existsSync(resolve(runScriptDir, "asciinema-player.min.js"))).toBe(true);
+  expect(existsSync(resolve(runScriptDir, "asciinema-player.css"))).toBe(true);
 
   // run_all_scripts
   const runAll = await client.callTool({
@@ -328,6 +330,8 @@ test("MCP tools full smoke (core+debug+script+recording)", async () => {
   });
   expect(routine.isError ?? false).toBe(false);
   expect(existsSync(routineReportPath)).toBe(true);
+  expect(existsSync(resolve(routineDir, "asciinema-player.min.js"))).toBe(true);
+  expect(existsSync(resolve(routineDir, "asciinema-player.css"))).toBe(true);
 
   await client.callTool({ name: "close_session", arguments: { sessionId: tuiSessionId } });
   await client.callTool({ name: "close_session", arguments: { sessionId: echoSessionId } });

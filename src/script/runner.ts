@@ -3,6 +3,7 @@ import { basename, dirname, extname, isAbsolute, join, relative, resolve } from 
 
 import { SessionManager } from "../session/session_manager";
 import { formatSnapshotView } from "../terminal/view";
+import { ensureAsciinemaPlayerAssets } from "../trace/asciinema_player_assets";
 import { generateTraceReportHtml } from "../trace/report";
 import type { TraceReportArtifacts, TraceReportResult } from "../trace/report";
 import { sleep } from "../util/sleep";
@@ -809,6 +810,7 @@ async function writeTraceArtifacts(args: {
     });
     mkdirSync(dirname(args.reportPath), { recursive: true });
     writeFileSync(args.reportPath, html, "utf8");
+    ensureAsciinemaPlayerAssets(args.reportPath);
   }
 }
 

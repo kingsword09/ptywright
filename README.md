@@ -144,6 +144,8 @@ bun run script:run examples/json_custom_steps_demo.json --steps scripts/m6_json_
 
 `report.html` 现在包含 **Timeline View**，展示每一步操作后的屏幕快照（不仅是失败时）。点击顶部 `debug` badge 可切换到调试视图。
 
+Cast Playback（完整录屏）会优先加载 report 同目录的 `asciinema-player.min.js` / `asciinema-player.css`（生成 report 时自动复制），因此离线打开 report 也可播放；若本地资源缺失则会 fallback 到 CDN。
+
 内置 steps（无需 `--steps`）：
 - `assert`：**[NEW]** 断言文本/正则（`text`/`regex`）
 - `assertSemantic`：**[NEW]** 语义断言占位符（`prompt`）

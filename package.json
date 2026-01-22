@@ -43,6 +43,7 @@
   "dependencies": {
     "@modelcontextprotocol/sdk": "^1.25.2",
     "@xterm/headless": "^6.0.0",
+    "asciinema-player": "3.9.0",
     "bun-pty": "^0.4.7",
     "zod": "^3.25.76"
   },

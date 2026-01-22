@@ -11,6 +11,7 @@ import type { TerminalMeta } from "../terminal/view";
 import { fnv1a32 } from "../util/hash";
 
 import type { AsciicastEvent } from "./asciicast";
+import { ensureAsciinemaPlayerAssets } from "./asciinema_player_assets";
 
 type ParsedAsciicast = {
   header: Record<string, unknown>;
@@ -484,13 +485,15 @@ ${artifactsRows
 
             // Load external assets automatically (no extra click).
             const VERSION = "3.9.0";
+            const LOCAL_CSS = "./asciinema-player.css";
+            const LOCAL_JS = "./asciinema-player.min.js";
             // Use multiple CDNs to avoid regional blocks (e.g. jsdelivr).
             const CDN_BASES = [
               "https://cdn.jsdelivr.net/npm/asciinema-player@" + VERSION + "/dist/bundle/",
               "https://unpkg.com/asciinema-player@" + VERSION + "/dist/bundle/",
             ];
-            const CSS_URLS = CDN_BASES.map((b) => b + "asciinema-player.css");
-            const JS_URLS = CDN_BASES.map((b) => b + "asciinema-player.min.js");
+            const CSS_URLS = [LOCAL_CSS, ...CDN_BASES.map((b) => b + "asciinema-player.css")];
+            const JS_URLS = [LOCAL_JS, ...CDN_BASES.map((b) => b + "asciinema-player.min.js")];
 
             function setStatus(text) {
               if (statusEl) statusEl.textContent = text ? " " + text : "";
@@ -2026,6 +2029,7 @@ if (import.meta.main) {
   const outPath = join(dir, `${base}.report.html`);
 
   writeFileSync(outPath, html);
+  ensureAsciinemaPlayerAssets(outPath);
   // eslint-disable-next-line no-console
   console.log(outPath);
 }

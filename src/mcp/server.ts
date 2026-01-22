@@ -6,6 +6,7 @@ import { SessionManager } from "../session/session_manager";
 import { formatSnapshotView } from "../terminal/view";
 import { runScriptPath } from "../script/path";
 import { runAllScripts } from "../script/run_all";
+import { ensureAsciinemaPlayerAssets } from "../trace/asciinema_player_assets";
 import { generateTraceReportHtml } from "../trace/report";
 import { generateTestFromDoc } from "../generator/generate";
 import { ScriptRecordingManager } from "./script_recording";
@@ -1169,6 +1170,7 @@ export function createPtywrightServer(options?: PtywrightServerOptions): {
           }
 
           writeFileSync(reportPath, html);
+          ensureAsciinemaPlayerAssets(reportPath);
         } catch {
           // Don't fail the routine if reporting fails, but log it
           // In MCP we can append to the text content
