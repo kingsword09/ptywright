@@ -26,6 +26,7 @@ test("trace report contains frames and final screen", async () => {
   const html = await generateTraceReportHtml(cast.cast);
 
   expect(html).toContain("Raw header JSON");
+  expect(html).toContain("Cast Playback");
   expect(html).toContain("mark after_done");
   expect(html).toContain("READY");
   expect(html).toContain("DONE");

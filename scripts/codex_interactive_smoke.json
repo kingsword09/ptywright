@@ -1,0 +1,23 @@
+{
+  "$schema": "../schemas/ptywright-script.schema.json",
+  "name": "codex_interactive_smoke",
+  "launch": {
+    "command": "codex",
+    "args": [],
+    "cwd": ".",
+    "cols": 100,
+    "rows": 30,
+    "name": "codex-interactive-smoke"
+  },
+  "steps": [
+    { "type": "waitForText", "text": "OpenAI Codex", "timeoutMs": 30000 },
+    { "type": "waitForStableScreen", "timeoutMs": 60000, "quietMs": 2000, "intervalMs": 100 },
+
+    { "type": "pressKey", "key": "?" },
+    { "type": "waitForText", "text": "ctrl + c to exit", "timeoutMs": 10000 },
+    { "type": "assert", "text": "ctrl + c to exit", "description": "shortcuts overlay is visible" },
+
+    { "type": "pressKey", "key": "Esc" },
+    { "type": "waitForStableScreen", "timeoutMs": 10000, "quietMs": 500, "intervalMs": 100 }
+  ]
+}

@@ -1144,11 +1144,11 @@ export function createPtywrightServer(options?: PtywrightServerOptions): {
 
       if (saveReport) {
         try {
-          // Generate an ad-hoc report using the captured steps and snapshots
-          // We need a dummy cast (empty header + no events) since we rely on steps for frames
-          const cast = `{"version": 2, "width": ${session.getMeta().cols}, "height": ${session.getMeta().rows}, "command": "routine"}`;
+          // Generate an ad-hoc report using the captured steps and snapshots.
+          // Use the session trace so Cast Playback is fully playable.
+          const castSnapshot = await session.snapshotCast();
 
-          const html = await generateTraceReportHtml(cast, {
+          const html = await generateTraceReportHtml(castSnapshot.cast, {
             scriptName: "routine",
             result: { ok: !failed, error: results[results.length - 1]?.error },
             steps: results.map((r) => ({

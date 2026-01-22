@@ -30,6 +30,7 @@
   "scripts": {
     "dev": "bun run src/index.ts",
     "test": "bun test",
+    "test:mcp-all-tools": "bun test tests/mcp_all_tools_smoke.test.ts",
     "lint": "oxlint --type-aware --type-check .",
     "format": "oxfmt src tests '!tests/fixtures/**'",
     "format:check": "oxfmt --check src tests '!tests/fixtures/**'",

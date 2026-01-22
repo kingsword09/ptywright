@@ -124,6 +124,7 @@ function renderSuiteReportHtml(args: {
     entries: args.summary.entries.map((entry) => {
       const reportHref = entry.reportPath ? relativeHref(args.reportPath, entry.reportPath) : null;
       const castHref = entry.castPath ? relativeHref(args.reportPath, entry.castPath) : null;
+      const playHref = reportHref ? `${reportHref}#cast-playback` : null;
       const lastHref =
         !entry.ok && entry.failureArtifacts?.lastViewPath
           ? relativeHref(args.reportPath, entry.failureArtifacts.lastViewPath)
@@ -149,6 +150,7 @@ function renderSuiteReportHtml(args: {
         dataKey,
         hrefs: {
           report: reportHref,
+          play: playHref,
           cast: castHref,
           last: lastHref,
           error: errorHref,
@@ -490,6 +492,7 @@ summary=<a href="${escapeHtml(summaryHref)}">run.summary.json</a></div>
         function renderDetails(e) {
           const links = [
             linkHtml(e.hrefs && e.hrefs.report, "report"),
+            linkHtml(e.hrefs && e.hrefs.play, "play"),
             linkHtml(e.hrefs && e.hrefs.cast, "cast"),
             linkHtml(e.hrefs && e.hrefs.last, "last"),
             linkHtml(e.hrefs && e.hrefs.error, "error"),

@@ -47,7 +47,10 @@ type ReportFrame = {
     type: string;
     ok: boolean;
     error?: string;
+    params?: Record<string, unknown>;
+    durationMs?: number;
   };
+  previousViewHtml?: string;
 };
 
 export async function generateTraceReportHtml(
@@ -83,6 +86,7 @@ export async function generateTraceReportHtml(
         step: { type: string; [key: string]: unknown };
         ok: boolean;
         error?: string;
+        durationMs?: number;
         after?: { text: string; hash: string; kind: string };
       }>
     | undefined;
@@ -160,6 +164,7 @@ export async function generateTraceReportHtml(
       });
     }
 
+    const previousFrame = frames.at(-1);
     frames.push({
       id: `frame-${frames.length + 1}`,
       atSeconds: args.atSeconds,
@@ -169,6 +174,7 @@ export async function generateTraceReportHtml(
       viewHtml,
       changedCount,
       stepInfo: args.stepInfo,
+      previousViewHtml: previousFrame?.viewHtml,
     });
   };
   // Build frames. Prefer step-based snapshots when available (runner-provided).
@@ -189,6 +195,14 @@ export async function generateTraceReportHtml(
           ? String((stepRec.step as { label?: unknown }).label)
           : undefined;
 
+      // Extract step params for Call tab
+      const stepParams: Record<string, unknown> = {};
+      for (const [key, value] of Object.entries(stepRec.step)) {
+        if (key !== "type") {
+          stepParams[key] = value;
+        }
+      }
+
       capture({
         atSeconds: displayIndex,
         kind,
@@ -199,6 +213,8 @@ export async function generateTraceReportHtml(
           type: stepType,
           ok: stepRec.ok,
           error: stepRec.error,
+          params: Object.keys(stepParams).length > 0 ? stepParams : undefined,
+          durationMs: typeof stepRec.durationMs === "number" ? stepRec.durationMs : undefined,
         },
         overrideViewText: { text: viewText, hash: stepRec.after?.hash },
       });
@@ -238,6 +254,7 @@ export async function generateTraceReportHtml(
   terminal.dispose();
 
   return renderHtml({
+    cast,
     header: parsed.header,
     term: termInfo,
     scope,
@@ -383,6 +400,7 @@ async function writeTerminal(terminal: Terminal, data: string): Promise<void> {
 }
 
 function renderHtml(input: {
+  cast: string;
   header: Record<string, unknown>;
   term: { cols: number; rows: number; type: string };
   scope: SnapshotScope;
@@ -448,6 +466,192 @@ ${artifactsRows
   .join("\n")}
 </ul>`;
 
+  const castPlayerHtml = `
+        <p class="muted">Render the full recording using <span class="mono">asciinema-player</span>.</p>
+        <div class="cast-controls">
+          <button id="castToggleSize" class="badge chip" type="button">expand</button>
+          <span id="castPlayerStatus" class="muted mono"></span>
+        </div>
+        <div id="castPlayer" class="cast-player"></div>
+        <script id="castData" type="application/json">${jsonForHtml(input.cast)}</script>
+        <script>
+          (function () {
+            const statusEl = document.getElementById("castPlayerStatus");
+            const container = document.getElementById("castPlayer");
+            const castEl = document.getElementById("castData");
+            const toggleBtn = document.getElementById("castToggleSize");
+            if (!container || !castEl) return;
+
+            // Load external assets automatically (no extra click).
+            const VERSION = "3.9.0";
+            // Use multiple CDNs to avoid regional blocks (e.g. jsdelivr).
+            const CDN_BASES = [
+              "https://cdn.jsdelivr.net/npm/asciinema-player@" + VERSION + "/dist/bundle/",
+              "https://unpkg.com/asciinema-player@" + VERSION + "/dist/bundle/",
+            ];
+            const CSS_URLS = CDN_BASES.map((b) => b + "asciinema-player.css");
+            const JS_URLS = CDN_BASES.map((b) => b + "asciinema-player.min.js");
+
+            function setStatus(text) {
+              if (statusEl) statusEl.textContent = text ? " " + text : "";
+            }
+
+            async function loadCssOnce() {
+              if (document.getElementById("asciinemaPlayerCss")) return;
+
+              for (const href of CSS_URLS) {
+                try {
+                  await new Promise((resolve, reject) => {
+                    const link = document.createElement("link");
+                    link.id = "asciinemaPlayerCss";
+                    link.rel = "stylesheet";
+                    link.href = href;
+                    link.onload = resolve;
+                    link.onerror = reject;
+                    document.head.appendChild(link);
+                  });
+                  return;
+                } catch {
+                  const el = document.getElementById("asciinemaPlayerCss");
+                  if (el) el.remove();
+                }
+              }
+            }
+
+            function loadScriptOnce() {
+              return new Promise((resolve, reject) => {
+                if (window.AsciinemaPlayer) return resolve(window.AsciinemaPlayer);
+                const existing = document.getElementById("asciinemaPlayerJs");
+                if (existing) {
+                  // If another instance is loading, poll until available.
+                  const startedAt = Date.now();
+                  const poll = setInterval(() => {
+                    if (window.AsciinemaPlayer) {
+                      clearInterval(poll);
+                      resolve(window.AsciinemaPlayer);
+                    } else if (Date.now() - startedAt > 15000) {
+                      clearInterval(poll);
+                      reject(new Error("timeout loading asciinema-player"));
+                    }
+                  }, 100);
+                  return;
+                }
+
+                let idx = 0;
+                const tryNext = () => {
+                  const src = JS_URLS[idx++];
+                  if (!src) {
+                    reject(new Error("failed to load asciinema-player"));
+                    return;
+                  }
+
+                  const script = document.createElement("script");
+                  script.id = "asciinemaPlayerJs";
+                  script.src = src;
+                  script.async = true;
+                  script.onload = () => resolve(window.AsciinemaPlayer);
+                  script.onerror = () => {
+                    script.remove();
+                    if (window.AsciinemaPlayer) {
+                      resolve(window.AsciinemaPlayer);
+                      return;
+                    }
+                    tryNext();
+                  };
+                  document.head.appendChild(script);
+                };
+                tryNext();
+              });
+            }
+
+            function computeMarkers(castText) {
+              try {
+                const lines = String(castText || "").trimEnd().split("\\n");
+                const out = [];
+                for (let i = 1; i < lines.length; i++) {
+                  const line = (lines[i] || "").trim();
+                  if (!line) continue;
+                  const value = JSON.parse(line);
+                  if (!Array.isArray(value) || value.length < 3) continue;
+                  const t = Number(value[0]);
+                  const type = String(value[1]);
+                  const data = String(value[2]);
+                  if (!Number.isFinite(t)) continue;
+
+                  // Prefer explicit marks when present.
+                  if (type === "m") out.push(t);
+
+                  // Also mark "Enter" submissions (helps jump between commands).
+                  if (type === "i" && data.indexOf("\\r") >= 0) out.push(t);
+                }
+
+                out.sort((a, b) => a - b);
+                // Deduplicate with a tiny epsilon to keep the marker list sane.
+                const uniq = [];
+                let last = -1e9;
+                for (const t of out) {
+                  if (t - last > 0.001) {
+                    uniq.push(t);
+                    last = t;
+                  }
+                }
+                // Cap to avoid pathological UIs (e.g. every keypress).
+                return uniq.slice(0, 200);
+              } catch {
+                return [];
+              }
+            }
+
+            function toggleSize(player) {
+              container.classList.toggle("expanded");
+              if (toggleBtn) {
+                toggleBtn.textContent = container.classList.contains("expanded")
+                  ? "collapse"
+                  : "expand";
+              }
+              // Nudge the player to re-render after resize.
+              try {
+                if (player && typeof player.getCurrentTime === "function" && typeof player.seek === "function") {
+                  const t = player.getCurrentTime();
+                  player.seek(t);
+                }
+              } catch {
+                // ignore
+              }
+            }
+
+            async function mountPlayer() {
+              setStatus("loading…");
+              await loadCssOnce();
+              const AsciinemaPlayer = await loadScriptOnce();
+              if (!AsciinemaPlayer || !AsciinemaPlayer.create) {
+                throw new Error("AsciinemaPlayer API missing");
+              }
+
+              const castText = JSON.parse(castEl.textContent || '""');
+              const markers = computeMarkers(castText);
+
+              const player = AsciinemaPlayer.create({ data: () => castText }, container, {
+                // Keep it compact inside the report; user can expand if needed.
+                fit: "both",
+                controls: true,
+                preload: true,
+                autoPlay: false,
+                markers: markers.length ? markers : undefined,
+              });
+
+              if (toggleBtn) toggleBtn.addEventListener("click", () => toggleSize(player));
+
+              setStatus("ready");
+            }
+
+            mountPlayer().catch((err) => {
+              setStatus("failed: " + (err && err.message ? err.message : String(err)));
+            });
+          })();
+        </script>
+  `;
+
   const markListHtml =
     markFrames.length === 0
       ? `<p class="muted">No marks recorded.</p>`
@@ -461,7 +665,8 @@ ${markFrames
 </ol>`;
 
   const traceData = {
-    version: 1,
+    version: 2,
+    durationSeconds,
     frames: input.frames.map((f, idx) => ({
       index: idx + 1,
       id: f.id,
@@ -508,7 +713,12 @@ ${markFrames
     .join("\n");
 
   const templatesHtml = input.frames
-    .map((frame) => `<template id="tpl-${escapeHtml(frame.id)}">${frame.viewHtml}</template>`)
+    .map((frame) => {
+      const prevTpl = frame.previousViewHtml
+        ? `<template id="prev-${escapeHtml(frame.id)}">${frame.previousViewHtml}</template>`
+        : "";
+      return `<template id="tpl-${escapeHtml(frame.id)}">${frame.viewHtml}</template>${prevTpl}`;
+    })
     .join("\n");
 
   return `<!doctype html>
@@ -748,21 +958,278 @@ ${markFrames
       .artifacts li {
         margin: 4px 0;
       }
+      /* asciinema-player defaults to centering in .ap-wrapper; align left in reports. */
+      .cast-player .ap-wrapper {
+        justify-content: flex-start;
+      }
+      .cast-player {
+        height: 320px;
+        border-radius: 10px;
+        overflow: hidden;
+        border: 1px solid color-mix(in oklab, currentColor 14%, transparent);
+        background: color-mix(in oklab, currentColor 6%, transparent);
+      }
+      .cast-player.expanded {
+        height: 70vh;
+      }
+      .cast-controls {
+        display: flex;
+        align-items: center;
+        gap: 10px;
+        margin: 8px 0 10px 0;
+      }
       a {
         color: inherit;
       }
       .muted {
         opacity: 0.75;
       }
+      .mono {
+        font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas,
+          "Liberation Mono", "Courier New", monospace;
+      }
       .summary {
         margin-top: 18px;
         padding-top: 18px;
         border-top: 1px solid color-mix(in oklab, currentColor 20%, transparent);
       }
+      /* Timeline styles */
+      .timeline {
+        margin: 12px 0;
+        padding: 12px;
+        border: 1px solid color-mix(in oklab, currentColor 14%, transparent);
+        border-radius: 10px;
+        background: color-mix(in oklab, currentColor 2%, transparent);
+      }
+      .timeline-header {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        margin-bottom: 8px;
+        font-size: 12px;
+      }
+      .timeline-track {
+        position: relative;
+        height: 40px;
+        background: color-mix(in oklab, currentColor 6%, transparent);
+        border-radius: 6px;
+        cursor: pointer;
+        overflow: hidden;
+      }
+      .timeline-bar {
+        position: absolute;
+        top: 0;
+        height: 100%;
+        min-width: 2px;
+        border-radius: 3px;
+        transition: opacity 0.15s;
+      }
+      .timeline-bar.pass {
+        background: color-mix(in oklab, #16a34a 50%, transparent);
+      }
+      .timeline-bar.fail {
+        background: color-mix(in oklab, #ef4444 70%, transparent);
+      }
+      .timeline-bar.info {
+        background: color-mix(in oklab, #0ea5e9 40%, transparent);
+      }
+      .timeline-bar:hover {
+        opacity: 0.8;
+      }
+      .timeline-bar.selected {
+        box-shadow: 0 0 0 2px #0ea5e9;
+      }
+      .timeline-marker {
+        position: absolute;
+        top: 0;
+        width: 2px;
+        height: 100%;
+        background: #f59e0b;
+        z-index: 2;
+      }
+      .timeline-marker.error {
+        background: #ef4444;
+        width: 3px;
+      }
+      .timeline-playhead {
+        position: absolute;
+        top: -4px;
+        width: 10px;
+        height: calc(100% + 8px);
+        background: #0ea5e9;
+        border-radius: 2px;
+        cursor: ew-resize;
+        z-index: 3;
+        transform: translateX(-50%);
+        display: none;
+      }
+      /* Viewer tabs */
+      .viewer-tabs {
+        display: flex;
+        gap: 0;
+        border-bottom: 1px solid color-mix(in oklab, currentColor 14%, transparent);
+        background: color-mix(in oklab, currentColor 4%, transparent);
+      }
+      .viewer-tab {
+        padding: 8px 16px;
+        border: none;
+        background: transparent;
+        color: inherit;
+        cursor: pointer;
+        font-size: 13px;
+        border-bottom: 2px solid transparent;
+        opacity: 0.7;
+        transition: opacity 0.15s, border-color 0.15s;
+      }
+      .viewer-tab:hover {
+        opacity: 1;
+        background: color-mix(in oklab, currentColor 4%, transparent);
+      }
+      .viewer-tab[aria-selected="true"] {
+        opacity: 1;
+        border-bottom-color: #0ea5e9;
+      }
+      .viewer-tab.has-error {
+        color: #ef4444;
+      }
+      .viewer-content {
+        display: none;
+      }
+      .viewer-content.active {
+        display: block;
+      }
+      .viewer-content pre.terminal {
+        margin: 0;
+        border: none;
+        border-radius: 0;
+      }
+      /* Call tab */
+      .call-details {
+        padding: 12px;
+        font-size: 13px;
+      }
+      .call-row {
+        display: grid;
+        grid-template-columns: 100px 1fr;
+        gap: 8px;
+        margin: 4px 0;
+      }
+      .call-key {
+        opacity: 0.7;
+      }
+      .call-value {
+        word-break: break-all;
+      }
+      /* Error display */
+      .error-box {
+        padding: 12px;
+        background: color-mix(in oklab, #ef4444 12%, transparent);
+        border-left: 3px solid #ef4444;
+        margin: 12px;
+        border-radius: 0 6px 6px 0;
+      }
+      .error-title {
+        font-weight: 600;
+        color: #ef4444;
+        margin-bottom: 8px;
+      }
+      .error-message {
+        font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+        font-size: 12px;
+        white-space: pre-wrap;
+        word-break: break-word;
+      }
+      /* Diff view */
+      .diff-view {
+        display: grid;
+        grid-template-columns: 1fr 1fr;
+        gap: 1px;
+        background: color-mix(in oklab, currentColor 14%, transparent);
+      }
+      .diff-pane {
+        background: #0b0f14;
+      }
+      .diff-pane-header {
+        padding: 8px 12px;
+        background: color-mix(in oklab, currentColor 8%, transparent);
+        font-size: 12px;
+        font-weight: 600;
+      }
+      .diff-pane pre {
+        margin: 0;
+        padding: 12px;
+        font-size: 11px;
+        max-height: 400px;
+        overflow: auto;
+      }
+      /* Built-in player */
+      .builtin-player {
+        background: #0b0f14;
+        border-radius: 10px;
+        overflow: hidden;
+        border: 1px solid color-mix(in oklab, currentColor 14%, transparent);
+      }
+      .builtin-player-screen {
+        padding: 12px;
+        min-height: 200px;
+        font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+        font-size: 13px;
+        line-height: 1.4;
+        color: #e6edf3;
+        white-space: pre;
+        overflow: auto;
+      }
+      .builtin-player-controls {
+        display: flex;
+        gap: 8px;
+        align-items: center;
+        padding: 10px 12px;
+        background: color-mix(in oklab, #0b0f14 80%, #fff);
+        border-top: 1px solid color-mix(in oklab, currentColor 14%, transparent);
+      }
+      .player-btn {
+        padding: 6px 12px;
+        border: 1px solid color-mix(in oklab, currentColor 20%, transparent);
+        border-radius: 6px;
+        background: color-mix(in oklab, currentColor 8%, transparent);
+        color: inherit;
+        cursor: pointer;
+        font-size: 12px;
+      }
+      .player-btn:hover {
+        background: color-mix(in oklab, currentColor 14%, transparent);
+      }
+      .player-progress {
+        flex: 1;
+        height: 6px;
+        background: color-mix(in oklab, currentColor 14%, transparent);
+        border-radius: 3px;
+        cursor: pointer;
+        position: relative;
+      }
+      .player-progress-fill {
+        height: 100%;
+        background: #0ea5e9;
+        border-radius: 3px;
+        width: 0%;
+        transition: width 0.1s linear;
+      }
+      .player-time {
+        font-size: 12px;
+        min-width: 80px;
+        text-align: right;
+      }
+      .player-speed {
+        font-size: 11px;
+        padding: 4px 8px;
+        border-radius: 4px;
+        background: color-mix(in oklab, currentColor 8%, transparent);
+        cursor: pointer;
+      }
     </style>
   </head>
   <body>
-    <input id="debugToggle" class="debug-toggle" type="checkbox" />
+    <input id="debugToggle" class="debug-toggle" type="checkbox" checked />
     <header>
       <h1>${escapeHtml(title)}</h1>
       <div class="badges">
@@ -797,12 +1264,24 @@ timestamp=${escapeHtml(coerceDisplayString(timestamp))}</div>
         <h2>Artifacts</h2>
         ${artifactsHtml}
       </section>
+      <section class="section" id="cast-playback">
+        <h2>Cast Playback</h2>
+        ${castPlayerHtml}
+      </section>
       <section class="section">
         <h2>Marks</h2>
         ${markListHtml}
       </section>
       <section class="section">
         <h2>Trace</h2>
+        <!-- Timeline -->
+        <div class="timeline" id="timeline">
+          <div class="timeline-header">
+            <span class="mono">Timeline</span>
+            <span class="mono muted" id="timelineInfo">0 steps · 0.000s</span>
+          </div>
+          <div class="timeline-track" id="timelineTrack"></div>
+        </div>
         <div class="trace">
           <aside>
             <div class="controls">
@@ -818,14 +1297,40 @@ timestamp=${escapeHtml(coerceDisplayString(timestamp))}</div>
             </ol>
           </aside>
           <div class="viewer">
+            <div class="viewer-tabs" id="viewerTabs">
+              <button class="viewer-tab" data-tab="snapshot" aria-selected="true">Snapshot</button>
+              <button class="viewer-tab" data-tab="call">Call</button>
+              <button class="viewer-tab" data-tab="errors" id="errorsTab">Errors</button>
+              <button class="viewer-tab" data-tab="diff">Diff</button>
+            </div>
             <div class="viewer-header">
               <span id="viewerTitle" class="viewer-title mono"></span>
               <span id="viewerSub" class="viewer-sub mono muted"></span>
             </div>
-            <pre id="viewer" class="terminal"></pre>
+            <div id="viewerSnapshot" class="viewer-content active">
+              <pre id="viewer" class="terminal"></pre>
+            </div>
+            <div id="viewerCall" class="viewer-content">
+              <div class="call-details" id="callDetails"></div>
+            </div>
+            <div id="viewerErrors" class="viewer-content">
+              <div id="errorContent"></div>
+            </div>
+            <div id="viewerDiff" class="viewer-content">
+              <div class="diff-view" id="diffView">
+                <div class="diff-pane">
+                  <div class="diff-pane-header">Previous</div>
+                  <pre id="diffPrev" class="terminal"></pre>
+                </div>
+                <div class="diff-pane">
+                  <div class="diff-pane-header">Current</div>
+                  <pre id="diffCurr" class="terminal"></pre>
+                </div>
+              </div>
+            </div>
           </div>
         </div>
-        <div class="muted mono" style="margin-top: 10px;">Tips: click a frame, or use ↑/↓ (j/k) to navigate; filters affect navigation.</div>
+        <div class="muted mono" style="margin-top: 10px;">Tips: click a frame or timeline bar, use ↑/↓ (j/k) to navigate, 1-4 to switch tabs.</div>
         <script id="traceData" type="application/json">${jsonForHtml(traceData)}</script>
         ${templatesHtml}
         <script>
@@ -841,16 +1346,89 @@ timestamp=${escapeHtml(coerceDisplayString(timestamp))}</div>
             const modeChanged = document.getElementById("modeChanged");
             const modeMarks = document.getElementById("modeMarks");
             const modeFailed = document.getElementById("modeFailed");
+            const timelineTrack = document.getElementById("timelineTrack");
+            const timelineInfo = document.getElementById("timelineInfo");
+            const viewerTabs = document.getElementById("viewerTabs");
+            const callDetails = document.getElementById("callDetails");
+            const errorContent = document.getElementById("errorContent");
+            const diffPrev = document.getElementById("diffPrev");
+            const diffCurr = document.getElementById("diffCurr");
+            const errorsTab = document.getElementById("errorsTab");
             if (!dataEl || !listEl || !viewerEl || !titleEl || !subEl || !searchEl) return;
 
             const raw = JSON.parse(dataEl.textContent || "{}");
             const frames = Array.isArray(raw.frames) ? raw.frames : [];
+            const durationSeconds = raw.durationSeconds || 0;
             const buttons = Array.from(listEl.querySelectorAll("button.frame-btn"));
             const idToIndex = new Map();
             for (const f of frames) idToIndex.set(f.id, f.index - 1);
 
             let mode = "all";
             let current = 0;
+            let activeTab = "snapshot";
+
+            // Timeline setup
+            if (timelineTrack && frames.length > 0) {
+              const maxTime = Math.max(durationSeconds, frames[frames.length - 1]?.atSeconds || 1);
+              timelineInfo.textContent = frames.length + " steps · " + maxTime.toFixed(3) + "s";
+
+              frames.forEach((f, idx) => {
+                const bar = document.createElement("div");
+                bar.className = "timeline-bar";
+                const left = (f.atSeconds / maxTime) * 100;
+                const width = Math.max(2, (1 / frames.length) * 100);
+                bar.style.left = left + "%";
+                bar.style.width = width + "%";
+
+                if (f.stepInfo) {
+                  bar.classList.add(f.stepInfo.ok ? "pass" : "fail");
+                } else {
+                  bar.classList.add("info");
+                }
+
+                bar.dataset.idx = idx;
+                bar.title = f.label;
+                bar.addEventListener("click", () => select(idx, true));
+                timelineTrack.appendChild(bar);
+
+                // Add error markers
+                if (f.stepInfo && !f.stepInfo.ok) {
+                  const marker = document.createElement("div");
+                  marker.className = "timeline-marker error";
+                  marker.style.left = left + "%";
+                  timelineTrack.appendChild(marker);
+                }
+
+                // Add mark markers
+                if (f.kind === "mark") {
+                  const marker = document.createElement("div");
+                  marker.className = "timeline-marker";
+                  marker.style.left = left + "%";
+                  timelineTrack.appendChild(marker);
+                }
+              });
+            }
+
+            // Tab switching
+            const tabs = viewerTabs ? Array.from(viewerTabs.querySelectorAll(".viewer-tab")) : [];
+            const contents = {
+              snapshot: document.getElementById("viewerSnapshot"),
+              call: document.getElementById("viewerCall"),
+              errors: document.getElementById("viewerErrors"),
+              diff: document.getElementById("viewerDiff"),
+            };
+
+            function switchTab(tabName) {
+              activeTab = tabName;
+              tabs.forEach(t => t.setAttribute("aria-selected", t.dataset.tab === tabName ? "true" : "false"));
+              Object.entries(contents).forEach(([name, el]) => {
+                if (el) el.classList.toggle("active", name === tabName);
+              });
+            }
+
+            tabs.forEach(tab => {
+              tab.addEventListener("click", () => switchTab(tab.dataset.tab));
+            });
 
             function setPressed(el, on) {
               el.setAttribute("aria-pressed", on ? "true" : "false");
@@ -870,7 +1448,6 @@ timestamp=${escapeHtml(coerceDisplayString(timestamp))}</div>
               let visible = 0;
               for (const btn of buttons) {
                 const idx = Number(btn.dataset.idx || "0");
-                const f = frames[idx];
                 let show = true;
                 if (mode === "changed") show = Number(btn.dataset.changed || "0") > 0;
                 else if (mode === "marks") show = btn.dataset.kind === "mark";
@@ -884,7 +1461,6 @@ timestamp=${escapeHtml(coerceDisplayString(timestamp))}</div>
               }
               if (visibleEl) visibleEl.textContent = "visible=" + visible;
 
-              // If current is hidden, jump to first visible.
               if (buttons[current] && buttons[current].parentElement.style.display === "none") {
                 const firstVisible = buttons.findIndex((b) => b.parentElement.style.display !== "none");
                 if (firstVisible >= 0) select(firstVisible, false);
@@ -898,11 +1474,22 @@ timestamp=${escapeHtml(coerceDisplayString(timestamp))}</div>
                 const idx = Number(btn.dataset.idx || "0");
                 btn.setAttribute("aria-selected", idx === current ? "true" : "false");
               }
+              // Update timeline selection
+              if (timelineTrack) {
+                const bars = timelineTrack.querySelectorAll(".timeline-bar");
+                bars.forEach((bar, idx) => bar.classList.toggle("selected", idx === current));
+              }
+            }
+
+            function escapeHtml(s) {
+              return (s || "").replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
             }
 
             function renderFrame(idx) {
               const f = frames[idx];
               if (!f) return;
+
+              // Render snapshot tab
               const tpl = document.getElementById("tpl-" + f.id);
               if (tpl && tpl.content) {
                 viewerEl.innerHTML = "";
@@ -913,12 +1500,64 @@ timestamp=${escapeHtml(coerceDisplayString(timestamp))}</div>
                 viewerEl.textContent = "(missing template)";
               }
 
-              titleEl.textContent = idx + 1 + ". t=" + f.atSeconds.toFixed(3) + "s — " + f.label;
+              // Render call tab
+              if (callDetails) {
+                let html = '<div class="call-row"><span class="call-key">type</span><span class="call-value mono">' + escapeHtml(f.stepInfo?.type || f.kind) + '</span></div>';
+                html += '<div class="call-row"><span class="call-key">index</span><span class="call-value mono">' + (idx + 1) + '</span></div>';
+                html += '<div class="call-row"><span class="call-key">time</span><span class="call-value mono">' + f.atSeconds.toFixed(3) + 's</span></div>';
+                if (f.stepInfo?.durationMs !== undefined) {
+                  html += '<div class="call-row"><span class="call-key">duration</span><span class="call-value mono">' + f.stepInfo.durationMs + 'ms</span></div>';
+                }
+                if (f.stepInfo?.params) {
+                  Object.entries(f.stepInfo.params).forEach(([key, value]) => {
+                    const val = typeof value === "string" ? value : JSON.stringify(value);
+                    html += '<div class="call-row"><span class="call-key">' + escapeHtml(key) + '</span><span class="call-value mono">' + escapeHtml(val) + '</span></div>';
+                  });
+                }
+                callDetails.innerHTML = html;
+              }
+
+              // Render errors tab
+              if (errorContent) {
+                if (f.stepInfo && !f.stepInfo.ok && f.stepInfo.error) {
+                  errorContent.innerHTML = '<div class="error-box"><div class="error-title">Step ' + (idx + 1) + ' Failed</div><div class="error-message">' + escapeHtml(f.stepInfo.error) + '</div></div>';
+                  if (errorsTab) errorsTab.classList.add("has-error");
+                } else {
+                  errorContent.innerHTML = '<div class="muted" style="padding: 12px;">No errors for this step.</div>';
+                  if (errorsTab) errorsTab.classList.remove("has-error");
+                }
+              }
+
+              // Render diff tab
+              if (diffPrev && diffCurr) {
+                const prevTpl = document.getElementById("prev-" + f.id);
+                if (prevTpl && prevTpl.content) {
+                  diffPrev.innerHTML = "";
+                  diffPrev.appendChild(prevTpl.content.cloneNode(true));
+                } else if (prevTpl) {
+                  diffPrev.innerHTML = prevTpl.innerHTML || "";
+                } else {
+                  diffPrev.textContent = "(first frame - no previous)";
+                }
+                if (tpl && tpl.content) {
+                  diffCurr.innerHTML = "";
+                  diffCurr.appendChild(tpl.content.cloneNode(true));
+                } else if (tpl) {
+                  diffCurr.innerHTML = tpl.innerHTML || "";
+                }
+              }
+
+              titleEl.textContent = (idx + 1) + ". t=" + f.atSeconds.toFixed(3) + "s — " + f.label;
               const bits = [];
               if (f.kind) bits.push("kind=" + f.kind);
               if (typeof f.changedCount === "number") bits.push("changed=" + f.changedCount);
               if (f.stepInfo && typeof f.stepInfo.ok === "boolean") bits.push("ok=" + String(f.stepInfo.ok));
               subEl.textContent = bits.join(" ");
+
+              // Auto-switch to errors tab if step failed
+              if (f.stepInfo && !f.stepInfo.ok && activeTab === "snapshot") {
+                switchTab("errors");
+              }
             }
 
             function select(idx, updateHash) {
@@ -926,6 +1565,8 @@ timestamp=${escapeHtml(coerceDisplayString(timestamp))}</div>
               updateSelected();
               renderFrame(current);
               if (updateHash) location.hash = frames[current]?.id ? "#" + frames[current].id : "";
+              // Scroll button into view
+              if (buttons[current]) buttons[current].scrollIntoView({ block: "nearest" });
             }
 
             function selectById(id) {
@@ -953,6 +1594,8 @@ timestamp=${escapeHtml(coerceDisplayString(timestamp))}</div>
             document.addEventListener("keydown", function (e) {
               const tag = (document.activeElement && document.activeElement.tagName) || "";
               if (tag === "INPUT" || tag === "TEXTAREA") return;
+
+              // Navigation
               if (e.key === "ArrowDown" || e.key === "j") {
                 e.preventDefault();
                 let next = current + 1;
@@ -964,6 +1607,12 @@ timestamp=${escapeHtml(coerceDisplayString(timestamp))}</div>
                 while (next >= 0 && buttons[next].parentElement.style.display === "none") next -= 1;
                 if (next >= 0) select(next, true);
               }
+
+              // Tab switching with number keys
+              if (e.key === "1") switchTab("snapshot");
+              if (e.key === "2") switchTab("call");
+              if (e.key === "3") switchTab("errors");
+              if (e.key === "4") switchTab("diff");
             });
 
             // Initial frame: prefer hash, otherwise first failing, otherwise final.
