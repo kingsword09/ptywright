@@ -1,0 +1,50 @@
+#!/usr/bin/env bun
+import { accessSync } from "node:fs";
+import { homedir } from "node:os";
+import { join } from "node:path";
+
+function isExecutable(filePath: string): boolean {
+  try {
+    accessSync(filePath, 0o1);
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+function resolveCodexBin(): string | null {
+  const override = process.env.CODEX_BIN?.trim();
+  if (override && isExecutable(override)) return override;
+
+  const inPath = Bun.which("codex");
+  if (inPath) return inPath;
+
+  const home = process.env.HOME?.trim() || homedir();
+  const candidates = [
+    join(home, ".local", "share", "mise", "installs", "codex", "latest", "codex"),
+    join(home, ".local", "share", "mise", "installs", "codex", "0", "codex"),
+  ];
+
+  for (const candidate of candidates) {
+    if (isExecutable(candidate)) return candidate;
+  }
+
+  return null;
+}
+
+const bin = resolveCodexBin();
+if (!bin) {
+  // eslint-disable-next-line no-console
+  console.error(
+    "codex executable not found. Install Codex CLI or set CODEX_BIN to an absolute path.",
+  );
+  process.exit(127);
+}
+
+const args = process.argv.slice(2);
+const child = Bun.spawn([bin, ...args], {
+  stdin: "inherit",
+  stdout: "inherit",
+  stderr: "inherit",
+});
+process.exit(await child.exited);

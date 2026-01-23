@@ -99,6 +99,11 @@ export class BunTerminalAdapter implements PtyAdapter {
       throw new Error("expected Bun.spawn(..., { terminal }) to attach a PTY terminal");
     }
 
+    // Ensure input is passed through without CR->LF translation (needed for apps that
+    // distinguish Enter (CR) from Ctrl+J (LF), e.g. Codex CLI).
+    // Note: Bun.Terminal.setRawMode only affects PTY line discipline, not the child process.
+    terminal.setRawMode(true);
+
     return {
       pid: proc.pid,
       get cols() {

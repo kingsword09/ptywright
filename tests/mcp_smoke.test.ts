@@ -76,6 +76,14 @@ test("MCP server smoke test", async () => {
   const sessionId = (launched.structuredContent as { sessionId?: string } | undefined)?.sessionId;
   expect(typeof sessionId).toBe("string");
 
+  const sessionsList = await client.callTool({
+    name: "list_sessions",
+    arguments: {},
+  });
+  const sessions = (sessionsList.structuredContent as { sessions?: { id: string }[] })?.sessions;
+  expect(Array.isArray(sessions)).toBe(true);
+  expect(sessions?.some((s) => s.id === sessionId)).toBe(true);
+
   const waited = await client.callTool({
     name: "wait_for_text",
     arguments: {

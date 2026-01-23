@@ -108,6 +108,14 @@ export class TerminalSession {
     );
   }
 
+  get cols(): number {
+    return this.terminal.cols;
+  }
+
+  get rows(): number {
+    return this.terminal.rows;
+  }
+
   isClosed(): boolean {
     return this.closed !== null;
   }

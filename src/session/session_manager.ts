@@ -24,6 +24,10 @@ export class SessionManager {
     return [...this.sessions.keys()];
   }
 
+  listSessions(): TerminalSession[] {
+    return [...this.sessions.values()];
+  }
+
   getSession(sessionId: SessionId): TerminalSession | undefined {
     return this.sessions.get(sessionId);
   }

@@ -357,8 +357,13 @@ type ParsedSnapshotViewText = {
   rows: Array<{ prefix?: string; text: string }>;
 };
 
+function stripAnsi(str: string): string {
+  // eslint-disable-next-line no-control-regex
+  return str.replace(/\x1B\[[0-?]*[ -/]*[@-~]/g, "");
+}
+
 function parseSnapshotViewText(viewText: string): ParsedSnapshotViewText {
-  const normalized = viewText.replace(/\r\n/g, "\n").replace(/\r/g, "\n");
+  const normalized = stripAnsi(viewText).replace(/\r\n/g, "\n").replace(/\r/g, "\n");
   const lines = normalized.split("\n");
   const first = lines[0] ?? "";
 
@@ -730,440 +735,505 @@ ${markFrames
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <title>${escapeHtml(title)}</title>
-    <style>
+        <style>
       :root {
-        color-scheme: light dark;
+        /* Base Colors - Slate/Zinc inspired */
+        --bg-body: #f8fafc;
+        --bg-card: #ffffff;
+        --bg-subtle: #f1f5f9;
+        --bg-hover: #e2e8f0;
+        --bg-active: #cbd5e1;
+        
+        --border-subtle: #e2e8f0;
+        --border-default: #cbd5e1;
+        --border-active: #94a3b8;
+
+        --text-main: #0f172a;
+        --text-muted: #64748b;
+        --text-faint: #94a3b8;
+
+        /* Accents */
+        --accent-primary: #0f172a; /* Slate 900 */
+        --accent-primary-fg: #f8fafc;
+        --accent-brand: #3b82f6; /* Blue 500 */
+        
+        /* Status Colors */
+        --status-pass-bg: #dcfce7;
+        --status-pass-text: #166534;
+        --status-pass-border: #86efac;
+        
+        --status-fail-bg: #fee2e2;
+        --status-fail-text: #991b1b;
+        --status-fail-border: #fca5a5;
+        
+        --status-info-bg: #e0f2fe;
+        --status-info-text: #075985;
+        --status-info-border: #7dd3fc;
+        
+        --status-changed-bg: #fef3c7;
+        --status-changed-text: #92400e;
+
+        /* Fonts */
+        --font-sans: "Inter", ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+        --font-mono: "JetBrains Mono", ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace;
+
+        /* Shadows */
+        --shadow-sm: 0 1px 2px 0 rgb(0 0 0 / 0.05);
+        --shadow-md: 0 4px 6px -1px rgb(0 0 0 / 0.1), 0 2px 4px -2px rgb(0 0 0 / 0.1);
       }
+
+      @media (prefers-color-scheme: dark) {
+        :root {
+          /* Dark Mode Base */
+          --bg-body: #0f172a;
+          --bg-card: #1e293b;
+          --bg-subtle: #334155;
+          --bg-hover: #475569;
+          --bg-active: #64748b;
+
+          --border-subtle: #334155;
+          --border-default: #475569;
+          --border-active: #64748b;
+
+          --text-main: #f8fafc;
+          --text-muted: #94a3b8;
+          --text-faint: #64748b;
+
+          --accent-primary: #f8fafc;
+          --accent-primary-fg: #0f172a;
+          --accent-brand: #60a5fa; /* Blue 400 */
+
+          /* Dark Mode Status */
+          --status-pass-bg: #052e16;
+          --status-pass-text: #4ade80;
+          --status-pass-border: #166534;
+
+          --status-fail-bg: #450a0a;
+          --status-fail-text: #f87171;
+          --status-fail-border: #991b1b;
+
+          --status-info-bg: #082f49;
+          --status-info-text: #38bdf8;
+          --status-info-border: #075985;
+          
+          --status-changed-bg: #451a03;
+          --status-changed-text: #fbbf24;
+        }
+      }
+
       body {
         margin: 0;
-        font-family: ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto,
-          Helvetica, Arial, "Apple Color Emoji", "Segoe UI Emoji";
-        line-height: 1.4;
+        background-color: var(--bg-body);
+        color: var(--text-main);
+        font-family: var(--font-sans);
+        line-height: 1.5;
+        font-size: 14px;
+        -webkit-font-smoothing: antialiased;
       }
+      
+      * {
+        box-sizing: border-box;
+      }
+
+      /* Layout & Containers */
       header {
-        padding: 16px;
-        border-bottom: 1px solid color-mix(in oklab, currentColor 20%, transparent);
+        background-color: var(--bg-card);
+        padding: 16px 24px;
+        border-bottom: 1px solid var(--border-subtle);
+        box-shadow: var(--shadow-sm);
+        position: sticky;
+        top: 0;
+        z-index: 50;
       }
+
+      main {
+        max-width: 1600px;
+        margin: 0 auto;
+        padding: 24px;
+      }
+
+      .section {
+        margin-bottom: 24px;
+        background-color: var(--bg-card);
+        border: 1px solid var(--border-subtle);
+        border-radius: 12px;
+        padding: 20px;
+        box-shadow: var(--shadow-sm);
+      }
+      
+      h1, h2, h3 {
+        margin: 0;
+        font-weight: 600;
+        letter-spacing: -0.025em;
+      }
+      
       header h1 {
-        margin: 0 0 8px 0;
-        font-size: 18px;
+        font-size: 20px;
+        margin-bottom: 8px;
+        color: var(--text-main);
       }
-      header .badges {
+      
+      h2 {
+        font-size: 16px;
+        margin-bottom: 16px;
+        padding-bottom: 8px;
+        border-bottom: 1px solid var(--border-subtle);
+        color: var(--text-main);
+      }
+
+      /* Typography & Utility */
+      .mono { font-family: var(--font-mono); }
+      .muted { color: var(--text-muted); }
+      
+      a {
+        color: var(--accent-brand);
+        text-decoration: none;
+      }
+      a:hover { text-decoration: underline; }
+
+      pre {
+        margin: 0;
+        font-family: var(--font-mono);
+        font-size: 13px;
+        line-height: normal;
+        white-space: pre;
+        overflow: auto;
+      }
+
+      /* Badges */
+      .badges {
         display: flex;
         gap: 8px;
         flex-wrap: wrap;
-        margin: 6px 0 10px 0;
+        margin-top: 8px;
       }
-      .debug-toggle {
-        position: absolute;
-        left: -99999px;
-        width: 1px;
-        height: 1px;
-        overflow: hidden;
-      }
+      
       .badge {
         display: inline-flex;
         align-items: center;
-        border-radius: 999px;
         padding: 2px 10px;
+        border-radius: 9999px;
         font-size: 12px;
-        border: 1px solid color-mix(in oklab, currentColor 16%, transparent);
-        background: color-mix(in oklab, currentColor 6%, transparent);
+        font-weight: 500;
+        border: 1px solid var(--border-default);
+        background-color: var(--bg-subtle);
+        color: var(--text-muted);
       }
-      .badge.toggle {
-        cursor: pointer;
-        user-select: none;
-      }
-      #debugToggle:checked ~ header .badge.toggle {
-        background: color-mix(in oklab, #0ea5e9 18%, transparent);
-        border-color: color-mix(in oklab, #0ea5e9 45%, transparent);
-      }
+      
       .badge.pass {
-        background: color-mix(in oklab, #16a34a 18%, transparent);
-        border-color: color-mix(in oklab, #16a34a 45%, transparent);
+        background-color: var(--status-pass-bg);
+        color: var(--status-pass-text);
+        border-color: var(--status-pass-border);
       }
+      
       .badge.fail {
-        background: color-mix(in oklab, #ef4444 18%, transparent);
-        border-color: color-mix(in oklab, #ef4444 45%, transparent);
+        background-color: var(--status-fail-bg);
+        color: var(--status-fail-text);
+        border-color: var(--status-fail-border);
       }
-      .badge.unknown {
-        background: color-mix(in oklab, #64748b 18%, transparent);
-        border-color: color-mix(in oklab, #64748b 45%, transparent);
+      
+      .badge.chip {
+        cursor: pointer;
+        transition: all 0.2s;
       }
-      header .meta {
-        font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas,
-          "Liberation Mono", "Courier New", monospace;
-        font-size: 12px;
-        opacity: 0.8;
-        white-space: pre-wrap;
+      .badge.chip:hover {
+        background-color: var(--bg-hover);
       }
-      main {
-        padding: 16px;
+      .badge.chip[aria-pressed="true"] {
+        background-color: var(--accent-primary);
+        color: var(--accent-primary-fg);
+        border-color: var(--accent-primary);
       }
+      /* Special case: toggle badge in header */
+      .badge.toggle { cursor: pointer; user-select: none; }
+      #debugToggle:checked ~ header .badge.toggle {
+        background-color: var(--accent-brand);
+        color: white;
+        border-color: var(--accent-brand);
+      }
+
+      /* Trace Layout */
       .trace {
         display: grid;
-        grid-template-columns: 360px 1fr;
-        gap: 12px;
+        grid-template-columns: 320px 1fr;
+        gap: 24px;
+        height: 70vh;
+        min-height: 500px;
       }
+      
       .trace aside {
-        border: 1px solid color-mix(in oklab, currentColor 14%, transparent);
-        border-radius: 10px;
-        padding: 10px;
-        background: color-mix(in oklab, currentColor 2%, transparent);
-      }
-      .trace .viewer {
-        border: 1px solid color-mix(in oklab, currentColor 14%, transparent);
-        border-radius: 10px;
+        display: flex;
+        flex-direction: column;
+        height: 100%;
         overflow: hidden;
       }
-      .viewer-header {
-        padding: 10px 12px;
-        border-bottom: 1px solid color-mix(in oklab, currentColor 14%, transparent);
-        display: flex;
-        gap: 8px;
-        align-items: center;
-        flex-wrap: wrap;
-        background: color-mix(in oklab, currentColor 4%, transparent);
-      }
-      .viewer-title {
-        font-weight: 600;
-      }
-      .viewer-sub {
-        opacity: 0.75;
-      }
+
+      /* Frame List in Sidebar */
       .controls {
         display: flex;
         gap: 8px;
         flex-wrap: wrap;
-        align-items: center;
-        margin-bottom: 10px;
+        margin-bottom: 12px;
+        padding-bottom: 12px;
+        border-bottom: 1px solid var(--border-subtle);
       }
+      
       .input {
         width: 100%;
-        box-sizing: border-box;
-        padding: 8px 10px;
-        border-radius: 10px;
-        border: 1px solid color-mix(in oklab, currentColor 16%, transparent);
-        background: color-mix(in oklab, currentColor 4%, transparent);
-        color: inherit;
+        font-family: var(--font-mono);
+        font-size: 13px;
+        padding: 8px 12px;
+        border-radius: 6px;
+        border: 1px solid var(--border-default);
+        background-color: var(--bg-body);
+        color: var(--text-main);
+        transition: border-color 0.2s;
       }
-      .chip {
-        cursor: pointer;
-        user-select: none;
+      .input:focus {
+        outline: none;
+        border-color: var(--accent-brand);
+        box-shadow: 0 0 0 2px var(--bg-body), 0 0 0 4px var(--accent-brand);
       }
-      .chip[aria-pressed="true"] {
-        background: color-mix(in oklab, #0ea5e9 18%, transparent);
-        border-color: color-mix(in oklab, #0ea5e9 45%, transparent);
-      }
+      
       .frame-list {
         list-style: none;
         padding: 0;
         margin: 0;
+        overflow-y: auto;
+        flex: 1;
         display: flex;
         flex-direction: column;
-        gap: 8px;
-        max-height: 70vh;
-        overflow: auto;
+        gap: 4px;
       }
+      
       .frame-btn {
         width: 100%;
         text-align: left;
-        border: 1px solid color-mix(in oklab, currentColor 14%, transparent);
-        border-radius: 10px;
-        padding: 10px;
-        background: color-mix(in oklab, currentColor 2%, transparent);
-        color: inherit;
+        padding: 10px 12px;
+        border-radius: 8px;
+        border: 1px solid transparent;
+        background: transparent;
+        color: var(--text-main);
         cursor: pointer;
+        transition: all 0.1s;
       }
+      
       .frame-btn:hover {
-        background: color-mix(in oklab, currentColor 6%, transparent);
+        background-color: var(--bg-hover);
       }
+      
       .frame-btn[aria-selected="true"] {
-        border-color: color-mix(in oklab, #0ea5e9 55%, transparent);
-        background: color-mix(in oklab, #0ea5e9 10%, transparent);
+        background-color: var(--bg-active);
+        border-color: var(--border-active);
+        font-weight: 500;
       }
+      
       .frame-btn-top {
         display: flex;
-        gap: 8px;
-        flex-wrap: wrap;
         align-items: center;
+        gap: 8px;
+        margin-bottom: 4px;
+        font-size: 11px;
       }
-      .frame-btn-time {
-        opacity: 0.8;
-      }
+      
       .frame-btn-label {
-        margin-top: 6px;
-        opacity: 0.9;
-      }
-      @media (max-width: 920px) {
-        .trace {
-          grid-template-columns: 1fr;
-        }
-        .frame-list {
-          max-height: 38vh;
-        }
-      }
-      details {
-        margin: 12px 0;
-      }
-      .section {
-        margin: 0 0 18px 0;
-      }
-      pre {
-        margin: 8px 0 0 0;
-        padding: 12px;
-        overflow: auto;
-        border-radius: 8px;
-        background: color-mix(in oklab, currentColor 6%, transparent);
-        border: 1px solid color-mix(in oklab, currentColor 14%, transparent);
-        font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas,
-          "Liberation Mono", "Courier New", monospace;
+        font-family: var(--font-mono);
         font-size: 12px;
-        line-height: 1.35;
+        overflow: hidden;
+        text-overflow: ellipsis;
+        white-space: nowrap;
       }
-      pre.terminal {
-        background: #0b0f14;
-        border-color: color-mix(in oklab, #0b0f14 55%, currentColor);
-        color: #e6edf3;
+
+      /* Main Viewer */
+      .viewer {
+        display: flex;
+        flex-direction: column;
+        height: 100%;
+        border: 1px solid var(--border-default);
+        border-radius: 8px;
+        overflow: hidden;
+        background-color: var(--bg-body);
       }
-      #debugToggle:not(:checked) ~ main pre.terminal .headerblock {
-        display: none;
+      
+      .viewer-tabs {
+        display: flex;
+        background-color: var(--bg-subtle);
+        border-bottom: 1px solid var(--border-default);
       }
-      #debugToggle:not(:checked) ~ main pre.terminal .ln {
-        display: none;
-      }
-      #debugToggle:not(:checked) ~ main pre.terminal .row.changed {
+      
+      .viewer-tab {
+        padding: 10px 16px;
+        font-size: 13px;
+        font-weight: 500;
+        color: var(--text-muted);
         background: transparent;
+        border: none;
+        border-right: 1px solid var(--border-subtle);
+        cursor: pointer;
+        transition: background 0.2s;
+      }
+      
+      .viewer-tab:hover {
+        background-color: var(--bg-hover);
+        color: var(--text-main);
+      }
+      
+      .viewer-tab[aria-selected="true"] {
+        background-color: var(--bg-body);
+        color: var(--accent-brand);
+        box-shadow: inset 0 -2px 0 0 var(--accent-brand);
+      }
+      
+      .viewer-tab.has-error {
+        color: var(--status-fail-text);
+      }
+
+      .viewer-header {
+        padding: 12px 16px;
+        border-bottom: 1px solid var(--border-subtle);
+        background-color: var(--bg-card);
+        font-size: 13px;
+        display: flex;
+        gap: 12px;
+        align-items: baseline;
+      }
+      .viewer-title { font-weight: 600; color: var(--text-main); }
+      .viewer-sub { color: var(--text-faint); font-size: 12px; }
+
+      .viewer-content {
+        flex: 1;
+        overflow: auto;
+        position: relative;
+        display: none;
+      }
+      .viewer-content.active { display: block; }
+
+      /* Terminal Render */
+      .terminal {
+        background-color: #0d1117; /* GitHub Dark dim */
+        color: #c9d1d9;
+        font-family: var(--font-mono);
+        font-size: 13px;
+        line-height: normal;
+        padding: 16px;
+        min-height: 100%;
       }
       .terminal .headerblock {
+        color: #8b949e;
+        margin-bottom: 8px;
         display: block;
-        opacity: 0.75;
-        margin-bottom: 6px;
+        font-size: 11px;
       }
       .terminal .row {
         display: block;
       }
-      .terminal .row.changed {
-        background: color-mix(in oklab, #f59e0b 18%, transparent);
-      }
       .terminal .ln {
-        color: color-mix(in oklab, currentColor 55%, transparent);
+        display: inline-block;
+        width: 3ch;
+        margin-right: 1ch;
+        color: #484f58;
         user-select: none;
+        text-align: right;
+        vertical-align: top;
       }
-      .marks {
-        margin: 8px 0 0 18px;
-        padding: 0;
+      .terminal .row.changed {
+        background: rgba(187, 128, 9, 0.15); /* Yellow marking */
       }
-      .artifacts {
-        margin: 8px 0 0 18px;
-        padding: 0;
+      .terminal .seg { display: inline; }
+
+      /* Hide debug lines if toggle off */
+      #debugToggle:not(:checked) ~ main .terminal .headerblock,
+      #debugToggle:not(:checked) ~ main .terminal .ln {
+        display: none;
       }
-      .artifacts li {
-        margin: 4px 0;
+      #debugToggle:not(:checked) ~ main .terminal .row.changed {
+        background: transparent;
       }
-      /* asciinema-player defaults to centering in .ap-wrapper; align left in reports. */
-      .cast-player .ap-wrapper {
-        justify-content: flex-start;
+      .debug-toggle {
+        position: absolute;
+        width: 0; height: 0; opacity: 0;
       }
-      .cast-player {
-        height: 320px;
-        border-radius: 10px;
-        overflow: hidden;
-        border: 1px solid color-mix(in oklab, currentColor 14%, transparent);
-        background: color-mix(in oklab, currentColor 6%, transparent);
-      }
-      .cast-player.expanded {
-        height: 70vh;
-      }
-      .cast-controls {
-        display: flex;
-        align-items: center;
-        gap: 10px;
-        margin: 8px 0 10px 0;
-      }
-      a {
-        color: inherit;
-      }
-      .muted {
-        opacity: 0.75;
-      }
-      .mono {
-        font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas,
-          "Liberation Mono", "Courier New", monospace;
-      }
-      .summary {
-        margin-top: 18px;
-        padding-top: 18px;
-        border-top: 1px solid color-mix(in oklab, currentColor 20%, transparent);
-      }
-      /* Timeline styles */
+
+      /* Timeline */
       .timeline {
-        margin: 12px 0;
-        padding: 12px;
-        border: 1px solid color-mix(in oklab, currentColor 14%, transparent);
-        border-radius: 10px;
-        background: color-mix(in oklab, currentColor 2%, transparent);
+        padding: 6px 0;
+        margin-bottom: 16px;
       }
       .timeline-header {
         display: flex;
         justify-content: space-between;
-        align-items: center;
         margin-bottom: 8px;
         font-size: 12px;
+        color: var(--text-muted);
+        font-family: var(--font-mono);
       }
       .timeline-track {
+        height: 32px;
+        background-color: var(--bg-subtle);
+        border: 1px solid var(--border-default);
+        border-radius: 4px;
         position: relative;
-        height: 40px;
-        background: color-mix(in oklab, currentColor 6%, transparent);
-        border-radius: 6px;
         cursor: pointer;
         overflow: hidden;
       }
       .timeline-bar {
         position: absolute;
-        top: 0;
-        height: 100%;
+        top: 4px; bottom: 4px;
+        background-color: var(--border-active);
+        border-radius: 1px;
         min-width: 2px;
-        border-radius: 3px;
-        transition: opacity 0.15s;
       }
-      .timeline-bar.pass {
-        background: color-mix(in oklab, #16a34a 50%, transparent);
-      }
-      .timeline-bar.fail {
-        background: color-mix(in oklab, #ef4444 70%, transparent);
-      }
-      .timeline-bar.info {
-        background: color-mix(in oklab, #0ea5e9 40%, transparent);
-      }
-      .timeline-bar:hover {
-        opacity: 0.8;
-      }
+      .timeline-bar.pass { background-color: var(--status-pass-border); }
+      .timeline-bar.fail { background-color: var(--status-fail-text); }
+      .timeline-bar.info { background-color: var(--status-info-border); }
       .timeline-bar.selected {
-        box-shadow: 0 0 0 2px #0ea5e9;
+        background-color: var(--accent-brand);
+        z-index: 10;
+        top: 0; bottom: 0;
+        box-shadow: 0 0 0 1px white;
       }
-      .timeline-marker {
-        position: absolute;
-        top: 0;
-        width: 2px;
-        height: 100%;
-        background: #f59e0b;
-        z-index: 2;
-      }
-      .timeline-marker.error {
-        background: #ef4444;
-        width: 3px;
-      }
-      .timeline-playhead {
-        position: absolute;
-        top: -4px;
-        width: 10px;
-        height: calc(100% + 8px);
-        background: #0ea5e9;
-        border-radius: 2px;
-        cursor: ew-resize;
-        z-index: 3;
-        transform: translateX(-50%);
-        display: none;
-      }
-      /* Viewer tabs */
-      .viewer-tabs {
-        display: flex;
-        gap: 0;
-        border-bottom: 1px solid color-mix(in oklab, currentColor 14%, transparent);
-        background: color-mix(in oklab, currentColor 4%, transparent);
-      }
-      .viewer-tab {
-        padding: 8px 16px;
-        border: none;
-        background: transparent;
-        color: inherit;
-        cursor: pointer;
-        font-size: 13px;
-        border-bottom: 2px solid transparent;
-        opacity: 0.7;
-        transition: opacity 0.15s, border-color 0.15s;
-      }
-      .viewer-tab:hover {
-        opacity: 1;
-        background: color-mix(in oklab, currentColor 4%, transparent);
-      }
-      .viewer-tab[aria-selected="true"] {
-        opacity: 1;
-        border-bottom-color: #0ea5e9;
-      }
-      .viewer-tab.has-error {
-        color: #ef4444;
-      }
-      .viewer-content {
-        display: none;
-      }
-      .viewer-content.active {
-        display: block;
-      }
-      .viewer-content pre.terminal {
-        margin: 0;
-        border: none;
-        border-radius: 0;
-      }
-      /* Call tab */
-      .call-details {
-        padding: 12px;
-        font-size: 13px;
-      }
+      
+      /* Other Components */
       .call-row {
         display: grid;
         grid-template-columns: 100px 1fr;
-        gap: 8px;
-        margin: 4px 0;
+        gap: 16px;
+        padding: 8px 16px;
+        border-bottom: 1px solid var(--border-subtle);
+        font-size: 13px;
       }
-      .call-key {
-        opacity: 0.7;
-      }
-      .call-value {
-        word-break: break-all;
-      }
-      /* Error display */
+      .call-key { color: var(--text-muted); font-weight: 500; text-align: right; }
+      .call-value { color: var(--text-main); font-family: var(--font-mono); }
+      
       .error-box {
-        padding: 12px;
-        background: color-mix(in oklab, #ef4444 12%, transparent);
-        border-left: 3px solid #ef4444;
-        margin: 12px;
-        border-radius: 0 6px 6px 0;
+        margin: 16px;
+        padding: 16px;
+        background-color: var(--status-fail-bg);
+        border: 1px solid var(--status-fail-border);
+        border-radius: 6px;
+        color: var(--status-fail-text);
       }
-      .error-title {
-        font-weight: 600;
-        color: #ef4444;
-        margin-bottom: 8px;
-      }
-      .error-message {
-        font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
-        font-size: 12px;
-        white-space: pre-wrap;
-        word-break: break-word;
-      }
-      /* Diff view */
+      .error-title { font-weight: 700; margin-bottom: 8px; }
+
       .diff-view {
         display: grid;
         grid-template-columns: 1fr 1fr;
-        gap: 1px;
-        background: color-mix(in oklab, currentColor 14%, transparent);
+        height: 100%;
       }
       .diff-pane {
-        background: #0b0f14;
+        overflow: auto;
+        border-right: 1px solid #30363d;
+        background-color: #0d1117;
       }
       .diff-pane-header {
-        padding: 8px 12px;
-        background: color-mix(in oklab, currentColor 8%, transparent);
-        font-size: 12px;
-        font-weight: 600;
-      }
-      .diff-pane pre {
-        margin: 0;
-        padding: 12px;
+        background: #161b22;
+        color: #8b949e;
+        padding: 8px 16px;
         font-size: 11px;
-        max-height: 400px;
-        overflow: auto;
+        font-weight: 600;
+        border-bottom: 1px solid #30363d;
+        position: sticky;
+        top: 0;
       }
       /* Built-in player */
       .builtin-player {
@@ -1172,62 +1242,49 @@ ${markFrames
         overflow: hidden;
         border: 1px solid color-mix(in oklab, currentColor 14%, transparent);
       }
-      .builtin-player-screen {
-        padding: 12px;
+      /* Cast player styles */
+      .cast-player {
+        height: 450px;
         min-height: 200px;
-        font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
-        font-size: 13px;
-        line-height: 1.4;
-        color: #e6edf3;
-        white-space: pre;
-        overflow: auto;
+        max-height: 450px;
+        overflow: hidden;
+        background: transparent;
+        margin-top: 16px;
+        margin-bottom: 20px;
+        border-bottom: 1px solid var(--border-subtle);
       }
-      .builtin-player-controls {
+      
+      /* Force left alignment of the player */
+      .cast-player .ap-wrapper {
         display: flex;
-        gap: 8px;
+        justify-content: flex-start !important;
+        text-align: left;
+      }
+      
+      /* Style the inner player terminal box */
+      .cast-player .ap-player {
+        border-radius: 8px;
+        box-shadow: var(--shadow-md);
+        border: 1px solid var(--border-subtle);
+      }
+
+      .cast-player.expanded {
+        height: 80vh;
+      }
+      
+      .cast-controls {
+        display: flex;
         align-items: center;
-        padding: 10px 12px;
-        background: color-mix(in oklab, #0b0f14 80%, #fff);
-        border-top: 1px solid color-mix(in oklab, currentColor 14%, transparent);
+        gap: 12px;
+        margin: 12px 0;
+        padding-bottom: 12px;
+        border-bottom: 1px solid var(--border-subtle);
       }
-      .player-btn {
-        padding: 6px 12px;
-        border: 1px solid color-mix(in oklab, currentColor 20%, transparent);
-        border-radius: 6px;
-        background: color-mix(in oklab, currentColor 8%, transparent);
-        color: inherit;
-        cursor: pointer;
-        font-size: 12px;
-      }
-      .player-btn:hover {
-        background: color-mix(in oklab, currentColor 14%, transparent);
-      }
-      .player-progress {
-        flex: 1;
-        height: 6px;
-        background: color-mix(in oklab, currentColor 14%, transparent);
-        border-radius: 3px;
-        cursor: pointer;
-        position: relative;
-      }
-      .player-progress-fill {
-        height: 100%;
-        background: #0ea5e9;
-        border-radius: 3px;
-        width: 0%;
-        transition: width 0.1s linear;
-      }
-      .player-time {
-        font-size: 12px;
-        min-width: 80px;
-        text-align: right;
-      }
-      .player-speed {
-        font-size: 11px;
-        padding: 4px 8px;
-        border-radius: 4px;
-        background: color-mix(in oklab, currentColor 8%, transparent);
-        cursor: pointer;
+      
+      @media (max-width: 1024px) {
+        .trace { grid-template-columns: 1fr; height: auto; }
+        .viewer { height: 500px; }
+        .frame-list { max-height: 300px; }
       }
     </style>
   </head>

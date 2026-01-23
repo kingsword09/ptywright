@@ -31,8 +31,8 @@ bun run bin/ptywright
 
 ### core
 
+- `list_sessions` / `select_session`：管理与选择会话
 - `launch_session`：启动 PTY 会话（会自动成为默认会话）
-- `select_session`：选择默认会话（之后多数 tools 可省略 `sessionId`）
 - `send_text` / `press_key`：发送输入
 - `snapshot_text`：返回可见屏幕文本（适合 Agent “看界面”与做 golden）
 - `snapshot_view`：更适合人看的快照（带元信息+行号）

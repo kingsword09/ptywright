@@ -13,6 +13,7 @@ import { ScriptRecordingManager } from "./script_recording";
 import { writeFileSync, mkdirSync } from "node:fs";
 import { join } from "node:path";
 import { tmpdir } from "node:os";
+import pkg from "../../package.json";
 
 export type PtywrightCapability = "core" | "debug" | "script" | "recording" | "all";
 
@@ -37,7 +38,7 @@ export function createPtywrightServer(options?: PtywrightServerOptions): {
 
   const server = new McpServer({
     name: "ptywright",
-    version: "0.1.0",
+    version: pkg.version,
   });
 
   const caps = resolveCapabilities(options?.capabilities, process.env.PTYWRIGHT_CAPS);
@@ -991,14 +992,26 @@ export function createPtywrightServer(options?: PtywrightServerOptions): {
     },
   );
 
-  // Hidden low-level tool: list_sessions
-  /*
   tool(
     "core",
     "list_sessions",
-    ...
+    "List all active sessions.",
+    {},
+    { title: "List Sessions" },
+    async (_args, _extra) => {
+      const all = sessions.listSessions().map((s) => ({
+        id: s.id,
+        cols: s.cols,
+        rows: s.rows,
+        meta: s.getMeta(),
+      }));
+
+      return {
+        content: [{ type: "text", text: JSON.stringify(all, null, 2) }],
+        structuredContent: { sessions: all },
+      };
+    },
   );
-  */
 
   // High-level tool: run_routine - batch execute steps with full snapshots
   const routineStepSchema = z.object({

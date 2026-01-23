@@ -2,22 +2,75 @@
   "$schema": "../schemas/ptywright-script.schema.json",
   "name": "codex_interactive_smoke",
   "launch": {
-    "command": "codex",
-    "args": [],
+    "command": "./scripts/codex",
+    "args": [
+      "-c",
+      "mcp_servers.chrome-devtools.enabled=false",
+      "-c",
+      "mcp_servers.context7.enabled=false",
+      "-c",
+      "mcp_servers.skills.enabled=false",
+      "-c",
+      "mcp_servers.ptywright.enabled=false",
+      "Respond with exactly READY and nothing else."
+    ],
     "cwd": ".",
     "cols": 100,
     "rows": 30,
-    "name": "codex-interactive-smoke"
+    "name": "xterm-256color"
+  },
+  "trace": {
+    "saveCast": true,
+    "saveReport": true,
+    "reportScope": "visible",
+    "reportMaxFrames": 500
   },
   "steps": [
-    { "type": "waitForText", "text": "OpenAI Codex", "timeoutMs": 30000 },
-    { "type": "waitForStableScreen", "timeoutMs": 60000, "quietMs": 2000, "intervalMs": 100 },
-
-    { "type": "pressKey", "key": "?" },
-    { "type": "waitForText", "text": "ctrl + c to exit", "timeoutMs": 10000 },
-    { "type": "assert", "text": "ctrl + c to exit", "description": "shortcuts overlay is visible" },
-
-    { "type": "pressKey", "key": "Esc" },
-    { "type": "waitForStableScreen", "timeoutMs": 10000, "quietMs": 500, "intervalMs": 100 }
+    {
+      "type": "waitForText",
+      "scope": "buffer",
+      "regex": "\\bREADY\\b",
+      "timeoutMs": 120000
+    },
+    {
+      "type": "sendText",
+      "text": "Write a python hello world function"
+    },
+    {
+      "type": "sleep",
+      "ms": 150
+    },
+    {
+      "type": "pressKey",
+      "key": "Enter"
+    },
+    {
+      "type": "waitForText",
+      "scope": "buffer",
+      "regex": "def\\s+hello_world\\s*\\(",
+      "timeoutMs": 120000
+    },
+    {
+      "type": "waitForText",
+      "scope": "buffer",
+      "regex": "Hello\\s*,?\\s*[Ww]orld",
+      "timeoutMs": 120000
+    },
+    {
+      "type": "sendText",
+      "text": "/exit"
+    },
+    {
+      "type": "sleep",
+      "ms": 150
+    },
+    {
+      "type": "pressKey",
+      "key": "Enter"
+    },
+    {
+      "type": "waitForExit",
+      "timeoutMs": 10000
+    }
   ]
 }
