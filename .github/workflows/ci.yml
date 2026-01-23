@@ -43,18 +43,3 @@ jobs:
 
       - name: Test (Unit + MCP Smoke)
         run: bun test
-
-      - name: Smoke Test (Scripts)
-        # Run regression scripts to generate report. 
-        # Continue on error to upload artifacts.
-        run: bun run script:run-all --artifacts-root .tmp/cli-smoke
-        continue-on-error: true
-
-      - name: Upload CLI Smoke Report
-        if: always()
-        uses: actions/upload-artifact@v4
-        with:
-          name: cli-smoke-${{ matrix.os }}
-          path: .tmp/cli-smoke/
-          retention-days: 5
-
