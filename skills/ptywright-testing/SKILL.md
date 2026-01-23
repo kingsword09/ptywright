@@ -7,22 +7,33 @@ description: Terminal/TUI automation and regression testing using ptywright (PTY
 
 Use ptywright to run deterministic CLI/TUI regression tests with readable “terminal screenshots” and a Playwright-like HTML report.
 
+## How to run (发布版 vs 仓库内开发)
+
+This CLI is Bun-based (`#!/usr/bin/env bun`). For a released package, prefer `bunx`.
+
+- **Published package (recommended):**
+  - one-off: `bunx ptywright@latest <command>`
+  - pinned: `bunx ptywright@0.1.0 <command>`
+  - global: `bun add -g ptywright` then `ptywright <command>`
+- **Inside this repo (dev):**
+  - `bun run bin/ptywright <command>`
+
 ## Choose the interface
 
 - **MCP tools**: best for agent-driven interactive flows (`launch_session`, `wait_for_text`, snapshots, recording).
 - **CLI**: best for local deterministic regressions and reviewing HTML reports.
 
-In this repo, prefer running via Bun:
-
-- `bun run bin/ptywright ...`
-
-(Only use `ptywright ...` if you installed the binary on your PATH.)
-
 ## Start the MCP server
 
-- stdio (default): `bun run bin/ptywright mcp`
-- restrict tools to reduce context: `bun run bin/ptywright mcp --caps core` (or `PTYWRIGHT_CAPS=core`)
-- Streamable HTTP: `bun run bin/ptywright mcp-http --port 3000`
+- stdio (default):
+  - published: `bunx ptywright@latest mcp`
+  - repo: `bun run bin/ptywright mcp`
+- restrict tools to reduce context:
+  - published: `bunx ptywright@latest mcp --caps core`
+  - repo: `bun run bin/ptywright mcp --caps core` (or `PTYWRIGHT_CAPS=core`)
+- Streamable HTTP:
+  - published: `bunx ptywright@latest mcp-http --port 3000`
+  - repo: `bun run bin/ptywright mcp-http --port 3000`
 
 Capabilities (`--caps` / `PTYWRIGHT_CAPS`) match MCP tools:
 
@@ -32,7 +43,9 @@ Capabilities (`--caps` / `PTYWRIGHT_CAPS`) match MCP tools:
 
 ### Run the whole suite (preferred)
 
-- CLI: `bun run bin/ptywright run-all --dir scripts`
+- CLI:
+  - published: `bunx ptywright@latest run-all --dir scripts`
+  - repo: `bun run bin/ptywright run-all --dir scripts`
 - Output to focus on:
   - `reportPath` (open in a browser)
   - `summaryPath` (`run.summary.json` for agents/CI)
@@ -44,7 +57,9 @@ MCP equivalent:
 
 ### Run one script
 
-- CLI: `bun run bin/ptywright run <file.json|file.ts> [--artifacts-dir <dir>]`
+- CLI:
+  - published: `bunx ptywright@latest run <file.json|file.ts> [--artifacts-dir <dir>]`
+  - repo: `bun run bin/ptywright run <file.json|file.ts> [--artifacts-dir <dir>]`
 - MCP: `run_script(scriptPath=...)`
 
 ## Debug a failure
