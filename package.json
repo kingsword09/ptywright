@@ -22,6 +22,13 @@
     "type": "git",
     "url": "git+https://github.com/kingsword09/ptywright.git"
   },
+  "main": "src/index.ts",
+  "exports": {
+    ".": "./src/index.ts",
+    "./mcp": "./src/mcp/server.ts",
+    "./session": "./src/session/terminal_session.ts",
+    "./script": "./src/script/runner.ts"
+  },
   "bin": {
     "ptywright": "bin/ptywright"
   },
