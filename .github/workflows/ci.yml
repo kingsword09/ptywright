@@ -1,45 +1,16 @@
-name: ci
+name: CI
 
 on:
   push:
+    branches: [main]
   pull_request:
+    branches: [main]
 
 jobs:
-  lint:
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-      - uses: oven-sh/setup-bun@v1
-        with:
-          bun-version: "1.3.6"
-      - name: Install
-        run: bun install --frozen-lockfile
-      - name: Lint
-        run: bun run lint
-      - name: Format
-        run: bun run format:check
-
-  test:
-    name: test (${{ matrix.os }})
-    runs-on: ${{ matrix.os }}
-    strategy:
-      fail-fast: false
-      matrix:
-        os: [ubuntu-latest, macos-latest, windows-latest]
-
-    env:
-      CI: true
-      TUI_TEST_PTY_BACKEND: ${{ runner.os == 'Windows' && 'bun-pty' || 'auto' }}
-
-    steps:
-      - uses: actions/checkout@v4
-
-      - uses: oven-sh/setup-bun@v1
-        with:
-          bun-version: "1.3.6"
-
-      - name: Install
-        run: bun install --frozen-lockfile
-
-      - name: Test (Unit + MCP Smoke)
-        run: bun test
+  ci:
+    uses: kingsword09/workflows/.github/workflows/cli-ci.yml@v1
+    with:
+      packageManager: bun
+      nodeVersion: 22
+      workingDirectory: .
+      testCommand: "bun test"

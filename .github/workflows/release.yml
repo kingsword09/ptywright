@@ -1,0 +1,17 @@
+name: Release
+
+on:
+  push:
+    branches: [main]
+
+jobs:
+  release:
+    permissions:
+      contents: write
+      id-token: write
+    uses: kingsword09/workflows/.github/workflows/cli-release.yml@v1
+    with:
+      packageManager: bun
+      nodeVersion: 22
+      workingDirectory: .
+      trustedPublishing: true

@@ -46,14 +46,14 @@
     "test": "bun test",
     "test:mcp-all-tools": "bun test tests/mcp_all_tools_smoke.test.ts",
     "lint": "oxlint --type-aware --type-check .",
-    "format": "oxfmt src tests '!tests/fixtures/**'",
-    "format:check": "oxfmt --check src tests '!tests/fixtures/**'",
+    "fmt": "oxfmt src tests '!tests/fixtures/**'",
+    "fmt:check": "oxfmt --check src tests '!tests/fixtures/**'",
     "trace:report": "bun run src/trace/report.ts",
     "trace:cast-to-txt": "bun run src/trace/cast_to_txt.ts",
     "script:run": "bun run src/script/run.ts",
     "script:run-all": "bun run src/script/run_all.ts",
     "script:m5-mask-demo": "bun run src/script/run.ts scripts/m5_mask_demo.json",
-    "prepublishOnly": "bun run format:check && bun run lint && bun test"
+    "prepublishOnly": "bun run fmt:check && bun run lint && bun test"
   },
   "dependencies": {
     "@modelcontextprotocol/sdk": "^1.25.2",
