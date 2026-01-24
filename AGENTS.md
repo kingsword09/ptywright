@@ -16,7 +16,7 @@
 - 启动 MCP server（stdio）：`bun run src/index.ts`
 - 单测：`bun test`
 - Lint（type-aware + type-check）：`bun run lint`
-- 格式化：`bun run fmt` / `bun run fmt:check`
+- 格式化：`bun run format` / `bun run format:check`
 
 ## 目录结构
 - `src/mcp/`：MCP server 与 tools 定义
