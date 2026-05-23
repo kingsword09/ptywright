@@ -22,13 +22,6 @@
     "type": "git",
     "url": "git+https://github.com/kingsword09/ptywright.git"
   },
-  "main": "src/index.ts",
-  "exports": {
-    ".": "./src/index.ts",
-    "./mcp": "./src/mcp/server.ts",
-    "./session": "./src/session/terminal_session.ts",
-    "./script": "./src/script/runner.ts"
-  },
   "bin": {
     "ptywright": "bin/ptywright"
   },
@@ -41,13 +34,23 @@
     "LICENSE"
   ],
   "type": "module",
+  "main": "src/cli.ts",
+  "exports": {
+    ".": "./src/cli.ts",
+    "./agent": "./src/agent/runner.ts",
+    "./mcp": "./src/mcp/server.ts",
+    "./session": "./src/session/terminal_session.ts",
+    "./script": "./src/script/runner.ts"
+  },
   "scripts": {
-    "dev": "bun run src/index.ts",
+    "dev": "vp dev",
+    "mcp": "bun run src/index.ts",
+    "agent": "bun run src/cli.ts agent",
     "test": "bun test",
     "test:mcp-all-tools": "bun test tests/mcp_all_tools_smoke.test.ts",
-    "lint": "oxlint --type-aware --type-check .",
-    "format": "oxfmt src tests '!tests/fixtures/**'",
-    "format:check": "oxfmt --check src tests '!tests/fixtures/**'",
+    "lint": "vp lint src tests examples package.json tsconfig.json vite.config.ts",
+    "format": "vp fmt src tests examples package.json tsconfig.json vite.config.ts '!tests/fixtures/**' '!tests/golden/**' '!tests/agent-snapshots/**'",
+    "format:check": "vp fmt --check src tests examples package.json tsconfig.json vite.config.ts '!tests/fixtures/**' '!tests/golden/**' '!tests/agent-snapshots/**'",
     "trace:report": "bun run src/trace/report.ts",
     "trace:cast-to-txt": "bun run src/trace/cast_to_txt.ts",
     "script:run": "bun run src/script/run.ts",
@@ -60,14 +63,15 @@
     "@xterm/headless": "^6.0.0",
     "asciinema-player": "3.9.0",
     "bun-pty": "^0.4.7",
+    "playwright": "^1.60.0",
     "zod": "^3.25.76"
   },
   "devDependencies": {
     "bun-types": "^1.3.6",
-    "oxfmt": "^0.24.0",
-    "oxlint": "^1.39.0",
-    "oxlint-tsgolint": "^0.11.1",
-    "typescript": "^5.9.2"
+    "typescript": "^5.9.2",
+    "vite": "^8.0.14",
+    "vite-plus": "^0.1.22",
+    "vitest": "^4.1.7"
   },
   "engines": {
     "bun": ">=1.3.6"

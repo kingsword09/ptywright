@@ -213,6 +213,33 @@ Recording artifacts are best for failure diagnosis or manual review; prefer `sna
 - SVG: `bunx svg-term --in <castPath> --out <outSvg>`
 - GIF: `agg --fps 30 <castPath> <outGif>` (requires [asciinema/agg](https://github.com/asciinema/agg))
 
+## Browser Agent Regression
+
+The new destructive path is browser-first: ptywright can launch an agent through
+`@aitty/cli`, drive the browser-hosted wterm DOM with Playwright, and persist a
+replayable run artifact plus terminal/DOM snapshots.
+
+```bash
+# First run records snapshots, screenshots, replay metadata, and report.
+bun run bin/ptywright agent run examples/agent_deterministic.json --update-snapshots
+
+# Later runs compare terminal + DOM snapshots like a test snapshot.
+bun run bin/ptywright agent run examples/agent_deterministic.json
+
+# Replay does not need AI; it uses the recorded flow artifact.
+bun run bin/ptywright agent replay .tmp/agent/agent_deterministic/agent_deterministic.agent-run.json
+```
+
+Artifacts are split intentionally:
+- `.tmp/agent/<name>/` contains run output, screenshots, `*.flow.json`,
+  `*.agent-run.json`, and `index.html`.
+- `tests/agent-snapshots/<name>/` contains stable terminal/DOM baselines.
+- `--update-snapshots` is the explicit update path for intentional UI changes.
+
+`launch.mode=aitty` runs `aitty exec --launch print -- <agent>`. By default
+ptywright resolves the sibling `../aitty/packages/cli/dist/cli.js`; set
+`PTYWRIGHT_AITTY_CLI` or `launch.aitty.command` to override it.
+
 ## Development
 
 ```bash
@@ -231,6 +258,9 @@ bun run format:check
 # Run scripts
 bun run bin/ptywright run scripts/m5_mask_demo.json
 bun run bin/ptywright run-all
+
+# Run browser agent regression
+bun run bin/ptywright agent run examples/agent_deterministic.json --update-snapshots
 ```
 
 ## Environment Variables

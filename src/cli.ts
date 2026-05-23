@@ -2,6 +2,7 @@ import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js"
 
 import type { PtywrightCapability } from "./mcp/server";
 import { createPtywrightServer } from "./mcp/server";
+import { replayAgentRecordPath, runAgentSpecPath } from "./agent/runner";
 import { startPtywrightHttpServer } from "./mcp/http_server";
 import { runAllScripts } from "./script/run_all";
 import { runScriptPath } from "./script/path";
@@ -13,6 +14,8 @@ function usage(): string {
     "Commands:",
     "  mcp                 Start the MCP server over stdio (default)",
     "  mcp-http            Start the MCP server over Streamable HTTP",
+    "  agent run <file>    Run a browser-hosted terminal-agent flow",
+    "  agent replay <run>  Replay a recorded terminal-agent flow without AI",
     "  run <file>           Run one script (JSON/TS) and write artifacts",
     "  run-all [dir]        Run all scripts in a directory and write a suite report",
     "  help                Show help",
@@ -27,6 +30,11 @@ function usage(): string {
     "  --artifacts-root <dir>   Suite artifacts root (default: .tmp/run-all)",
     "  --steps <module.ts>      Inject custom step handlers",
     "  --update-goldens         Update golden snapshots",
+    "",
+    "Agent options:",
+    "  --artifacts-dir <dir>    Override agent run artifact directory",
+    "  --update-snapshots       Update terminal/DOM snapshots",
+    "  --headed                 Show the browser while running",
     "",
     "MCP options:",
     "  --caps <list>            Capabilities: all|core|debug|script|recording",
@@ -366,6 +374,94 @@ async function cmdRunAll(argv: string[]): Promise<number> {
   return 1;
 }
 
+function parseAgentArgs(argv: string[]): {
+  mode: "run" | "replay";
+  path: string;
+  artifactsDir?: string;
+  updateSnapshots: boolean;
+  headed: boolean;
+} {
+  const [mode, ...rest] = argv;
+  if (mode !== "run" && mode !== "replay") {
+    throw new Error("missing agent subcommand: run|replay\n\n" + usage());
+  }
+
+  const out: {
+    path?: string;
+    artifactsDir?: string;
+    updateSnapshots: boolean;
+    headed: boolean;
+  } = { updateSnapshots: false, headed: false };
+
+  for (let i = 0; i < rest.length; i += 1) {
+    const arg = rest[i];
+    const next = rest[i + 1];
+
+    if (!out.path && arg && !arg.startsWith("-")) {
+      out.path = arg;
+      continue;
+    }
+
+    if (arg === "--artifacts-dir" && next) {
+      out.artifactsDir = next;
+      i += 1;
+      continue;
+    }
+
+    if (arg === "--update-snapshots") {
+      out.updateSnapshots = true;
+      continue;
+    }
+
+    if (arg === "--headed") {
+      out.headed = true;
+      continue;
+    }
+
+    throw new Error(`unknown arg: ${arg ?? ""}`);
+  }
+
+  if (!out.path) {
+    throw new Error(`missing <file> for agent ${mode}\n\n` + usage());
+  }
+
+  return {
+    mode,
+    path: out.path,
+    artifactsDir: out.artifactsDir,
+    updateSnapshots: out.updateSnapshots,
+    headed: out.headed,
+  };
+}
+
+async function cmdAgent(argv: string[]): Promise<number> {
+  const args = parseAgentArgs(argv);
+  const options = {
+    artifactsDir: args.artifactsDir,
+    updateSnapshots: args.updateSnapshots,
+    headless: !args.headed,
+  };
+  const result =
+    args.mode === "run"
+      ? await runAgentSpecPath(args.path, options)
+      : await replayAgentRecordPath(args.path, options);
+
+  logLines(
+    [
+      `${result.ok ? "ok" : "failed"} agent=${result.name}`,
+      `report=${result.reportPath}`,
+      `record=${result.recordPath}`,
+      `flow=${result.flowPath}`,
+      `snapshots=${result.snapshotDir}`,
+      result.replayCommand ? `replay=${result.replayCommand}` : null,
+      ...result.errors.map((error) => `error=${error}`),
+    ],
+    !result.ok,
+  );
+
+  return result.ok ? 0 : 1;
+}
+
 export async function main(argv: string[] = process.argv.slice(2)): Promise<void> {
   const [command, ...rest] = argv;
 
@@ -387,6 +483,11 @@ export async function main(argv: string[] = process.argv.slice(2)): Promise<void
 
   if (command === "mcp-http") {
     await cmdMcpHttp(rest);
+    return;
+  }
+
+  if (command === "agent") {
+    process.exitCode = await cmdAgent(rest);
     return;
   }
 

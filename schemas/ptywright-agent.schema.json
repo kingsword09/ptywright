@@ -1,0 +1,181 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://ptywright.local/schemas/ptywright-agent.schema.json",
+  "title": "ptywright agent browser flow",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["launch", "steps"],
+  "properties": {
+    "$schema": { "type": "string" },
+    "name": { "type": "string", "minLength": 1 },
+    "artifactsDir": { "type": "string" },
+    "snapshotDir": { "type": "string" },
+    "launch": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "mode": { "type": "string", "enum": ["aitty", "url"] },
+        "command": { "type": "string", "minLength": 1 },
+        "args": { "type": "array", "items": { "type": "string" } },
+        "cwd": { "type": "string" },
+        "env": { "type": "object", "additionalProperties": { "type": "string" } },
+        "url": { "type": "string" },
+        "aitty": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "command": { "type": "string", "minLength": 1 },
+            "args": { "type": "array", "items": { "type": "string" } },
+            "project": { "type": "string", "minLength": 1 },
+            "label": { "type": "string", "minLength": 1 },
+            "title": { "type": "string", "minLength": 1 },
+            "subtitle": { "type": "string", "minLength": 1 },
+            "theme": { "type": "string", "enum": ["dark", "light", "auto"] },
+            "fontSize": { "type": "integer", "minimum": 11, "maximum": 24 },
+            "screenMode": { "type": "string", "enum": ["termvision"] },
+            "port": { "type": "integer", "minimum": 0, "maximum": 65535 },
+            "host": { "type": "string", "minLength": 1 },
+            "waitForUrlMs": { "type": "integer", "minimum": 1 }
+          }
+        }
+      }
+    },
+    "viewports": {
+      "type": "array",
+      "minItems": 1,
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["name", "width", "height"],
+        "properties": {
+          "name": { "type": "string", "minLength": 1 },
+          "width": { "type": "integer", "minimum": 1 },
+          "height": { "type": "integer", "minimum": 1 },
+          "deviceScaleFactor": { "type": "number", "exclusiveMinimum": 0 },
+          "isMobile": { "type": "boolean" },
+          "hasTouch": { "type": "boolean" }
+        }
+      }
+    },
+    "defaults": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "timeoutMs": { "type": "integer", "minimum": 1 },
+        "screenshot": { "type": "boolean" },
+        "mask": {
+          "type": "array",
+          "items": { "$ref": "#/$defs/maskRule" }
+        }
+      }
+    },
+    "steps": {
+      "type": "array",
+      "minItems": 1,
+      "items": {
+        "oneOf": [
+          {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["type"],
+            "properties": {
+              "type": { "const": "waitForText" },
+              "text": { "type": "string" },
+              "regex": { "type": "string" },
+              "timeoutMs": { "type": "integer", "minimum": 1 }
+            }
+          },
+          {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["type", "text"],
+            "properties": {
+              "type": { "const": "typeText" },
+              "text": { "type": "string" },
+              "enter": { "type": "boolean" },
+              "delayMs": { "type": "integer", "minimum": 0 }
+            }
+          },
+          {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["type", "key"],
+            "properties": {
+              "type": { "const": "pressKey" },
+              "key": { "type": "string", "minLength": 1 }
+            }
+          },
+          {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["type"],
+            "properties": {
+              "type": { "const": "click" },
+              "selector": { "type": "string", "minLength": 1 },
+              "text": { "type": "string", "minLength": 1 },
+              "x": { "type": "integer", "minimum": 0 },
+              "y": { "type": "integer", "minimum": 0 }
+            }
+          },
+          {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["type"],
+            "properties": {
+              "type": { "const": "waitForStableDom" },
+              "timeoutMs": { "type": "integer", "minimum": 1 },
+              "quietMs": { "type": "integer", "minimum": 1 },
+              "intervalMs": { "type": "integer", "minimum": 1 }
+            }
+          },
+          {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["type", "name"],
+            "properties": {
+              "type": { "const": "snapshot" },
+              "name": { "type": "string", "minLength": 1 },
+              "compare": { "type": "boolean" },
+              "targets": {
+                "type": "array",
+                "items": { "type": "string", "enum": ["terminal", "dom", "screenshot"] }
+              },
+              "fullPage": { "type": "boolean" }
+            }
+          },
+          {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["type"],
+            "properties": {
+              "type": { "const": "mark" },
+              "label": { "type": "string" }
+            }
+          },
+          {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["type", "ms"],
+            "properties": {
+              "type": { "const": "sleep" },
+              "ms": { "type": "integer", "minimum": 0 }
+            }
+          }
+        ]
+      }
+    }
+  },
+  "$defs": {
+    "maskRule": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["regex"],
+      "properties": {
+        "regex": { "type": "string", "minLength": 1 },
+        "flags": { "type": "string" },
+        "replacement": { "type": "string" },
+        "preserveLength": { "type": "boolean" }
+      }
+    }
+  }
+}

@@ -1,0 +1,44 @@
+{
+  "$schema": "../schemas/ptywright-agent.schema.json",
+  "name": "agent_deterministic",
+  "artifactsDir": ".tmp/agent/agent_deterministic",
+  "snapshotDir": "tests/agent-snapshots/agent_deterministic",
+  "launch": {
+    "mode": "aitty",
+    "command": "bun",
+    "args": ["run", "tests/fixtures/deterministic_agent.ts"],
+    "aitty": {
+      "project": "ptywright",
+      "label": "deterministic-agent",
+      "title": "deterministic agent",
+      "subtitle": "browser regression fixture",
+      "theme": "light",
+      "fontSize": 14,
+      "waitForUrlMs": 15000
+    }
+  },
+  "viewports": [
+    { "name": "desktop", "width": 1280, "height": 820 },
+    { "name": "mobile", "width": 390, "height": 844, "isMobile": true, "hasTouch": true }
+  ],
+  "defaults": {
+    "timeoutMs": 30000,
+    "screenshot": true
+  },
+  "steps": [
+    { "type": "waitForText", "text": "Deterministic Agent Ready" },
+    {
+      "type": "snapshot",
+      "name": "ready",
+      "targets": ["terminal", "dom", "screenshot"]
+    },
+    { "type": "typeText", "text": "status", "enter": true },
+    { "type": "waitForText", "text": "Status: stable" },
+    { "type": "waitForStableDom" },
+    {
+      "type": "snapshot",
+      "name": "status",
+      "targets": ["terminal", "dom", "screenshot"]
+    }
+  ]
+}
