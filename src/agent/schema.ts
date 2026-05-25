@@ -16,44 +16,42 @@ export const agentViewportSchema = z.object({
   hasTouch: z.boolean().optional(),
 });
 
+const agentLaunchModeSchema = z.enum(["command", "url"]);
+
+function inferAgentLaunchMode(value: {
+  mode?: "command" | "url";
+  url?: string;
+}): "command" | "url" {
+  if (value.mode) return value.mode;
+  if (value.url) return "url";
+  return "command";
+}
+
 export const agentLaunchSchema = z
   .object({
-    mode: z.enum(["aitty", "url"]).optional(),
+    mode: agentLaunchModeSchema.optional(),
     agentFlavor: z.enum(["codex", "claude", "droid", "generic"]).optional(),
     command: z.string().min(1).optional(),
     args: z.array(z.string()).optional(),
     cwd: z.string().optional(),
     env: z.record(z.string()).optional(),
     url: z.string().url().optional(),
-    aitty: z
-      .object({
-        command: z.string().min(1).optional(),
-        args: z.array(z.string()).optional(),
-        project: z.string().min(1).optional(),
-        label: z.string().min(1).optional(),
-        title: z.string().min(1).optional(),
-        subtitle: z.string().min(1).optional(),
-        theme: z.enum(["dark", "light", "auto"]).optional(),
-        fontSize: z.number().int().min(11).max(24).optional(),
-        screenMode: z.enum(["termvision"]).optional(),
-        port: z.number().int().min(0).max(65535).optional(),
-        host: z.string().min(1).optional(),
-        waitForUrlMs: z.number().int().positive().optional(),
-      })
-      .optional(),
+    urlRegex: z.string().min(1).optional(),
+    waitForUrlMs: z.number().int().positive().optional(),
   })
+  .strict()
   .superRefine((value, ctx) => {
-    const mode = value.mode ?? (value.url ? "url" : "aitty");
+    const mode = inferAgentLaunchMode(value);
     if (mode === "url" && !value.url) {
       ctx.addIssue({
         code: z.ZodIssueCode.custom,
         message: "launch.url is required when launch.mode is 'url'",
       });
     }
-    if (mode === "aitty" && !value.command) {
+    if (mode === "command" && !value.command) {
       ctx.addIssue({
         code: z.ZodIssueCode.custom,
-        message: "launch.command is required when launch.mode is 'aitty'",
+        message: "launch.command is required when launch.mode is 'command'",
       });
     }
   });
@@ -157,6 +155,7 @@ export const agentFlowSpecSchema = z.object({
 
 export type AgentTextMaskRule = z.infer<typeof agentTextMaskRuleSchema>;
 export type AgentViewport = z.infer<typeof agentViewportSchema>;
+export type AgentLaunchMode = z.infer<typeof agentLaunchModeSchema>;
 export type AgentLaunch = z.infer<typeof agentLaunchSchema>;
 export type AgentFlowStep = z.infer<typeof agentFlowStepSchema>;
 export type AgentFlowSpec = z.infer<typeof agentFlowSpecSchema>;
@@ -172,4 +171,8 @@ export function normalizeAgentFlowSpec(input: unknown): AgentFlowSpec {
     name: spec.name ?? "agent-flow",
     viewports: spec.viewports?.length ? spec.viewports : [...DEFAULT_AGENT_VIEWPORTS],
   };
+}
+
+export function resolveAgentLaunchMode(launch: AgentLaunch): AgentLaunchMode {
+  return inferAgentLaunchMode(launch);
 }

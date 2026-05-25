@@ -18,6 +18,8 @@ test("agent init writes a schema-valid starter spec", async () => {
   const spec = normalizeAgentFlowSpec(raw);
 
   expect(spec.launch.agentFlavor).toBe("codex");
-  expect(spec.launch.command).toBe("codex");
+  expect(spec.launch.mode).toBe("command");
+  expect(spec.launch.command).toBe("your-browser-terminal-launcher");
+  expect(spec.launch.args).toEqual(["--agent", "codex", "--print-url"]);
   expect(spec.steps.at(-1)).toMatchObject({ type: "snapshot", name: "launch" });
 });

@@ -104,19 +104,11 @@ export function createAgentTemplateSpec(flavor: AgentFlavor): AgentFlowSpec {
     artifactsDir: `.tmp/agent/${name}`,
     snapshotDir: `tests/agent-snapshots/${name}`,
     launch: {
-      mode: "aitty",
+      mode: "command",
       agentFlavor: flavor,
-      command,
-      args: [],
-      aitty: {
-        project: "ptywright",
-        label: command,
-        title: `${command} browser smoke`,
-        subtitle: "browser-hosted terminal agent regression",
-        theme: "light",
-        fontSize: 14,
-        waitForUrlMs: 15_000,
-      },
+      command: "your-browser-terminal-launcher",
+      args: ["--agent", command, "--print-url"],
+      waitForUrlMs: 15_000,
     },
     viewports: DEFAULT_VIEWPORTS.map((viewport) => ({ ...viewport })),
     defaults: {

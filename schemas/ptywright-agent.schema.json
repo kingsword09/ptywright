@@ -14,31 +14,15 @@
       "type": "object",
       "additionalProperties": false,
       "properties": {
-        "mode": { "type": "string", "enum": ["aitty", "url"] },
+        "mode": { "type": "string", "enum": ["command", "url"] },
         "agentFlavor": { "type": "string", "enum": ["codex", "claude", "droid", "generic"] },
         "command": { "type": "string", "minLength": 1 },
         "args": { "type": "array", "items": { "type": "string" } },
         "cwd": { "type": "string" },
         "env": { "type": "object", "additionalProperties": { "type": "string" } },
         "url": { "type": "string" },
-        "aitty": {
-          "type": "object",
-          "additionalProperties": false,
-          "properties": {
-            "command": { "type": "string", "minLength": 1 },
-            "args": { "type": "array", "items": { "type": "string" } },
-            "project": { "type": "string", "minLength": 1 },
-            "label": { "type": "string", "minLength": 1 },
-            "title": { "type": "string", "minLength": 1 },
-            "subtitle": { "type": "string", "minLength": 1 },
-            "theme": { "type": "string", "enum": ["dark", "light", "auto"] },
-            "fontSize": { "type": "integer", "minimum": 11, "maximum": 24 },
-            "screenMode": { "type": "string", "enum": ["termvision"] },
-            "port": { "type": "integer", "minimum": 0, "maximum": 65535 },
-            "host": { "type": "string", "minLength": 1 },
-            "waitForUrlMs": { "type": "integer", "minimum": 1 }
-          }
-        }
+        "urlRegex": { "type": "string", "minLength": 1 },
+        "waitForUrlMs": { "type": "integer", "minimum": 1 }
       }
     },
     "viewports": {

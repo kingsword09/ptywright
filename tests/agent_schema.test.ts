@@ -3,14 +3,15 @@ import { resolve } from "node:path";
 
 import { expect, test } from "bun:test";
 
-import { buildAittyExecCommand, extractAittyUrlFromOutput } from "../src/agent/aitty";
+import { buildCommandLaunchCommand, extractUrlFromOutput } from "../src/agent/command_launch";
+import { formatAgentLaunchCommand } from "../src/agent/launch";
 import { applyAgentMasks } from "../src/agent/normalize";
 import {
   createAgentTemplateSpec,
   resolveAgentFlavor,
   resolveAgentMasks,
 } from "../src/agent/presets";
-import { normalizeAgentFlowSpec } from "../src/agent/schema";
+import { normalizeAgentFlowSpec, resolveAgentLaunchMode } from "../src/agent/schema";
 
 test("agent flow schema normalizes default viewport", () => {
   const spec = normalizeAgentFlowSpec({
@@ -22,36 +23,72 @@ test("agent flow schema normalizes default viewport", () => {
 
   expect(spec.name).toBe("agent-flow");
   expect(spec.viewports?.[0]?.name).toBe("desktop-1440");
+  expect(resolveAgentLaunchMode(spec.launch)).toBe("command");
 });
 
-test("aitty launch command uses print mode and keeps agent args after --", () => {
-  const command = buildAittyExecCommand(
+test("generic command launch preserves command process options", () => {
+  const command = buildCommandLaunchCommand(
     {
-      command: "codex",
-      args: ["resume", "--last"],
-      cwd: ".",
-      aitty: {
-        command: "aitty",
-        project: "demo",
-        label: "codex",
-        theme: "light",
-        fontSize: 14,
-      },
+      mode: "command",
+      command: "serve-browser-terminal",
+      args: ["--port", "0"],
+      cwd: "packages/demo",
+      env: { DEMO: "1" },
+      urlRegex: "url=(https?://\\S+)",
+      waitForUrlMs: 1234,
     },
-    { rootDir: "/repo", env: {} },
+    { rootDir: "/repo", env: { BASE: "1" } },
   );
 
-  expect(command.file).toBe("aitty");
-  expect(command.args).toContain("exec");
-  expect(command.args).toContain("--launch");
-  expect(command.args).toContain("print");
-  expect(command.args.slice(-4)).toEqual(["--", "codex", "resume", "--last"]);
+  expect(command).toMatchObject({
+    file: "serve-browser-terminal",
+    args: ["--port", "0"],
+    cwd: "/repo/packages/demo",
+    label: "serve-browser-terminal",
+    urlRegex: "url=(https?://\\S+)",
+    waitForUrlMs: 1234,
+  });
+  expect(command.env?.BASE).toBe("1");
+  expect(command.env?.DEMO).toBe("1");
 });
 
-test("aitty URL parser extracts first printed session URL", () => {
+test("generic URL parser extracts printed browser URL", () => {
+  expect(extractUrlFromOutput("noise\nurl=http://localhost:1234/session\n")).toBe(
+    "http://localhost:1234/session",
+  );
+  expect(extractUrlFromOutput("ready url=https://example.test/s/1\n", "url=(https?://\\S+)")).toBe(
+    "https://example.test/s/1",
+  );
+});
+
+test("launch command formatter uses generic command mode by default", () => {
   expect(
-    extractAittyUrlFromOutput("noise\nhttp://codex.aitty.localhost:1234/s/p/c?t=token\n"),
-  ).toBe("http://codex.aitty.localhost:1234/s/p/c?t=token");
+    formatAgentLaunchCommand({
+      command: "serve-browser-terminal",
+      args: ["--launch", "print"],
+    }),
+  ).toBe("serve-browser-terminal --launch print");
+});
+
+test("agent launch schema rejects unsupported launch modes and fields", () => {
+  expect(() =>
+    normalizeAgentFlowSpec({
+      launch: {
+        mode: "legacy",
+        command: "codex",
+      },
+      steps: [{ type: "waitForStableDom" }],
+    }),
+  ).toThrow();
+  expect(() =>
+    normalizeAgentFlowSpec({
+      launch: {
+        command: "codex",
+        launcherOptions: { project: "demo" },
+      },
+      steps: [{ type: "waitForStableDom" }],
+    }),
+  ).toThrow();
 });
 
 test("agent flavor is inferred from common agent command names", () => {
@@ -88,9 +125,11 @@ test("agent template specs provide starter launch snapshots for real agent flavo
   const claude = createAgentTemplateSpec("claude");
   const droid = createAgentTemplateSpec("droid");
 
-  expect(codex.launch.command).toBe("codex");
+  expect(codex.launch.mode).toBe("command");
+  expect(codex.launch.command).toBe("your-browser-terminal-launcher");
+  expect(codex.launch.args).toEqual(["--agent", "codex", "--print-url"]);
   expect(claude.launch.agentFlavor).toBe("claude");
-  expect(droid.launch.command).toBe("droidx");
+  expect(droid.launch.args).toContain("droidx");
   expect(codex.steps.at(-1)).toMatchObject({
     type: "snapshot",
     name: "launch",
