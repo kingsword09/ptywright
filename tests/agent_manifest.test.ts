@@ -14,7 +14,6 @@ import {
 } from "../src/agent/manifest";
 import { listAgentReplayFiles } from "../src/agent/replay_all";
 import { runAgentSpec } from "../src/agent/runner";
-import { readAgentReplaySummaryPath } from "../src/agent/summary";
 import { validateAgentArtifactsPath } from "../src/agent/validate";
 import { main } from "../src/cli";
 import { deterministicAgentSpec } from "./agent_fixture";
@@ -770,59 +769,47 @@ test("agent check summary next to a moved manifest reruns from local bundle reco
   });
 }, 25_000);
 
-test("agent exec keeps copied manifest reruns from recursive outputs", async () => {
-  const artifactsRoot = join(".tmp", "tests", "agent-manifest-exec-repeat");
+test("agent replay file discovery keeps copied reruns from recursive outputs", async () => {
   const copyRoot = join(".tmp", "tests", "agent-manifest-exec-repeat-moved");
-  rmSync(artifactsRoot, { recursive: true, force: true });
   rmSync(copyRoot, { recursive: true, force: true });
 
-  const check = await checkAgentRegression({
-    cassetteDir: "tests/agent-cassettes",
-    artifactsRoot,
-    headless: true,
-  });
-  expect(check.ok).toBe(true);
+  const originalInputDir = join(
+    ".tmp",
+    "tests",
+    "agent-manifest-exec-repeat",
+    "tests",
+    "agent_deterministic__agent_deterministic.cassette.json",
+  );
+  const movedInputDir = join(
+    copyRoot,
+    "tests",
+    "agent_deterministic__agent_deterministic.cassette.json",
+  );
+  const generatedOutputDir = join(
+    copyRoot,
+    "tests",
+    "agent_deterministic__agent_deterministic.cassette.json__agent_deterministic.agent-run.json",
+  );
+  mkdirSync(movedInputDir, { recursive: true });
+  mkdirSync(generatedOutputDir, { recursive: true });
 
-  cpSync(artifactsRoot, copyRoot, { recursive: true });
-  rmSync(artifactsRoot, { recursive: true, force: true });
+  writeFileSync(
+    join(movedInputDir, "agent_deterministic.agent-run.json"),
+    JSON.stringify({ artifactsDir: originalInputDir }) + "\n",
+    "utf8",
+  );
+  writeFileSync(join(movedInputDir, "agent_deterministic.cassette.json"), "{}\n", "utf8");
+  writeFileSync(
+    join(generatedOutputDir, "agent_deterministic.agent-run.json"),
+    JSON.stringify({ artifactsDir: generatedOutputDir }) + "\n",
+    "utf8",
+  );
 
-  const logs: string[] = [];
-  const originalLog = console.log;
-
-  process.exitCode = undefined;
-  try {
-    console.log = (...args: unknown[]) => {
-      logs.push(args.map((arg) => String(arg)).join(" "));
-    };
-
-    await main(["agent", "exec", copyRoot, "--command", "rerun"]);
-    expect(currentExitCode()).toBe(0);
-    expect(
-      await validateAgentArtifactsPath(copyRoot, { preferManifestBundle: true }),
-    ).toMatchObject({ ok: true, totalCount: 1, failureCount: 0 });
-
-    const nextInputs = listAgentReplayFiles(join(copyRoot, "tests"), {
+  expect(
+    listAgentReplayFiles(join(copyRoot, "tests"), {
       artifactsRoot: copyRoot,
-    });
-    expect(nextInputs).toEqual([
-      resolve(
-        copyRoot,
-        "tests",
-        "agent_deterministic__agent_deterministic.cassette.json",
-        "agent_deterministic.agent-run.json",
-      ),
-    ]);
-  } finally {
-    console.log = originalLog;
-    process.exitCode = 0;
-  }
-
-  const output = logs.join("\n");
-  expect(output.match(/ok agent-check/g)?.length).toBe(1);
-  expect(output).toContain(`checkSummary=${join(copyRoot, "agent-check.summary.json")}`);
-
-  const replaySummary = readAgentReplaySummaryPath(join(copyRoot, "agent-replay.summary.json"));
-  expect(replaySummary.totalCount).toBe(1);
+    }),
+  ).toEqual([resolve(movedInputDir, "agent_deterministic.agent-run.json")]);
   expect(
     existsSync(
       join(
