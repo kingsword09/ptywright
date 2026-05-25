@@ -343,6 +343,42 @@ bun run bin/ptywright agent rerun .tmp/agent-check/agent-replay.summary.json --u
 `--update-snapshots` 是唯一的显式更新入口；默认 replay/check 都是对比模式，
 用于像 Vitest snapshot 一样阻止特定流程回归。
 
+### 项目配置
+
+如果一个项目里会持续维护 agent 回归，可以把公共路径和浏览器默认值放到
+`ptywright.config.ts`，避免每个 flow 里重复写。CLI 会从当前目录向上查找
+`ptywright.config.ts|mts|cts|js|mjs|cjs`，也可以用 `--config <file>` 显式指定。
+
+```ts
+import { defineConfig } from "ptywright/config";
+
+export default defineConfig({
+  agent: {
+    artifactsRoot: ".tmp/agent",
+    cassetteDir: "tests/agent-cassettes",
+    snapshotDir: "tests/agent-snapshots",
+    defaults: {
+      headless: true,
+      timeoutMs: 45_000,
+      screenshot: false,
+      viewports: [{ name: "desktop", width: 1280, height: 820 }],
+      mask: [{ regex: "session_[a-z0-9]+", replacement: "<session>" }],
+    },
+  },
+});
+```
+
+```bash
+ptywright agent run tests/agents/codex.flow.json --update-snapshots
+ptywright agent check
+ptywright agent replay-all --update-snapshots
+ptywright agent promote .tmp/agent/codex/codex.cassette.json --update-snapshots
+```
+
+配置里的相对路径都按配置文件所在目录解析。CLI 显式参数优先级最高，flow 文件
+内字段优先于配置默认值。flow 仍然是测试用例本身；配置文件只负责项目级默认
+值和公共产物路径，不承担第二套测试 DSL。
+
 ## Cast -> SVG/GIF (可选)
 
 录像类产物建议只用于失败诊断或人工验收；稳定回归优先用 `snapshot_grid` 做 diff。

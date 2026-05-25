@@ -3,6 +3,7 @@ import { basename, dirname, extname, isAbsolute, join, relative, resolve } from 
 
 import type { Browser, Page } from "playwright";
 
+import type { ResolvedPtywrightConfig } from "../config";
 import { launchAgentBrowser } from "./browser";
 import {
   createAgentCassette,
@@ -14,6 +15,7 @@ import {
   type AgentCassette,
   type MutableAgentCassette,
 } from "./cassette";
+import { normalizeAgentFlowSpecWithConfig } from "./config_defaults";
 import {
   normalizeDomSnapshot,
   normalizeTerminalText,
@@ -49,6 +51,7 @@ export type AgentRunnerOptions = {
   updateSnapshots?: boolean;
   headless?: boolean;
   rootDir?: string;
+  config?: ResolvedPtywrightConfig;
   replayCassette?: AgentCassette;
   replaySourceCassettePath?: string;
 };
@@ -105,7 +108,7 @@ export async function runAgentSpecPath(
   options: AgentRunnerOptions = {},
 ): Promise<AgentRunResult> {
   const loaded = await loadAgentSpec(specPath);
-  return runAgentSpec(loaded.spec, options);
+  return runAgentSpec(loaded.raw, options);
 }
 
 export async function replayAgentRecordPath(
@@ -133,7 +136,7 @@ export async function replayAgentRecordPath(
   }
 
   if (record.spec) {
-    return runAgentSpec(record.spec, options);
+    return runAgentSpec(record.spec, { ...options, config: undefined });
   }
 
   if (!record.flowPath) {
@@ -142,7 +145,7 @@ export async function replayAgentRecordPath(
   const flowPath = isAbsolute(record.flowPath)
     ? record.flowPath
     : resolve(dirname(recordPath), record.flowPath);
-  return runAgentSpecPath(flowPath, options);
+  return runAgentSpecPath(flowPath, { ...options, config: undefined });
 }
 
 export async function runAgentSpec(
@@ -151,7 +154,10 @@ export async function runAgentSpec(
 ): Promise<AgentRunResult> {
   const startedAt = Date.now();
   const rootDir = options.rootDir ? resolve(process.cwd(), options.rootDir) : process.cwd();
-  const spec = normalizeAgentFlowSpec(input);
+  const spec = normalizeAgentFlowSpecWithConfig(
+    input,
+    options.replayCassette ? undefined : options.config,
+  );
   const name = sanitizeArtifactName(spec.name ?? "agent-flow");
   const artifactsDir = resolve(
     rootDir,

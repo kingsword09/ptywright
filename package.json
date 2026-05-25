@@ -37,6 +37,7 @@
   "exports": {
     ".": "./dist/cli.mjs",
     "./agent": "./dist/agent.mjs",
+    "./config": "./dist/config.mjs",
     "./mcp": "./dist/mcp.mjs",
     "./pty-cassette": "./dist/pty-cassette.mjs",
     "./session": "./dist/session.mjs",

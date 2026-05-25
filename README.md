@@ -380,6 +380,44 @@ Artifacts are split intentionally:
 - `tests/agent-snapshots/<name>/` contains stable terminal/DOM baselines.
 - `--update-snapshots` is the explicit update path for intentional UI changes.
 
+### Project Config
+
+For repeated agent regression work, put project-level defaults in
+`ptywright.config.ts` instead of repeating paths and browser defaults in every
+flow file. The CLI discovers `ptywright.config.ts|mts|cts|js|mjs|cjs` from the
+current directory upward, and `--config <file>` selects one explicitly.
+
+```ts
+import { defineConfig } from "ptywright/config";
+
+export default defineConfig({
+  agent: {
+    artifactsRoot: ".tmp/agent",
+    cassetteDir: "tests/agent-cassettes",
+    snapshotDir: "tests/agent-snapshots",
+    defaults: {
+      headless: true,
+      timeoutMs: 45_000,
+      screenshot: false,
+      viewports: [{ name: "desktop", width: 1280, height: 820 }],
+      mask: [{ regex: "session_[a-z0-9]+", replacement: "<session>" }],
+    },
+  },
+});
+```
+
+```bash
+ptywright agent run tests/agents/codex.flow.json --update-snapshots
+ptywright agent check
+ptywright agent replay-all --update-snapshots
+ptywright agent promote .tmp/agent/codex/codex.cassette.json --update-snapshots
+```
+
+Config paths are resolved relative to the config file directory. CLI arguments
+override config defaults, and fields written in a flow file override config
+defaults for that flow. The flow file remains the test case; the config file is
+only for shared project defaults and common artifact locations.
+
 `launch.mode=command` is the recommended integration contract. `command` and
 `args` are spawned directly, and ptywright reads the first URL printed to stdout
 or stderr. Use `waitForUrlMs` to tune startup timeouts and `urlRegex` when the

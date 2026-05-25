@@ -3,9 +3,11 @@ import { dirname, isAbsolute, resolve } from "node:path";
 
 import type { Browser, Page } from "playwright";
 
+import type { ResolvedPtywrightConfig } from "../config";
 import { launchAgentBrowser } from "./browser";
+import { normalizeAgentFlowSpecWithConfig } from "./config_defaults";
 import { resolveAgentLaunchTarget } from "./launch";
-import { normalizeAgentFlowSpec, type AgentFlowSpec, type AgentFlowStep } from "./schema";
+import { type AgentFlowSpec, type AgentFlowStep } from "./schema";
 import { loadAgentSpec } from "./spec_loader";
 
 export type AgentRecordOptions = {
@@ -13,6 +15,7 @@ export type AgentRecordOptions = {
   durationMs?: number;
   headless?: boolean;
   rootDir?: string;
+  config?: ResolvedPtywrightConfig;
   includeSnapshot?: boolean;
 };
 
@@ -29,14 +32,14 @@ export async function recordAgentSpecPath(
   options: AgentRecordOptions,
 ): Promise<AgentRecordResult> {
   const loaded = await loadAgentSpec(specPath);
-  return recordAgentSpec(loaded.spec, options);
+  return recordAgentSpec(loaded.raw, options);
 }
 
 export async function recordAgentSpec(
   input: unknown,
   options: AgentRecordOptions,
 ): Promise<AgentRecordResult> {
-  const spec = normalizeAgentFlowSpec(input);
+  const spec = normalizeAgentFlowSpecWithConfig(input, options.config);
   const rootDir = options.rootDir ? resolve(process.cwd(), options.rootDir) : process.cwd();
   const outPath = isAbsolute(options.outPath)
     ? options.outPath

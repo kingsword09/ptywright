@@ -22,6 +22,7 @@ export default defineConfig({
       cli: "src/cli.ts",
       index: "src/index.ts",
       agent: "src/agent/runner.ts",
+      config: "src/config.ts",
       mcp: "src/mcp/server.ts",
       "pty-cassette": "src/pty-cassette/index.ts",
       script: "src/script/runner.ts",
