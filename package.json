@@ -59,7 +59,7 @@
     "script:run": "bun run src/script/run.ts",
     "script:run-all": "bun run src/script/run_all.ts",
     "script:m5-mask-demo": "bun run src/script/run.ts scripts/m5_mask_demo.json",
-    "prepublishOnly": "bun run check"
+    "prepublishOnly": "bun run build"
   },
   "dependencies": {
     "@modelcontextprotocol/sdk": "^1.25.2",
