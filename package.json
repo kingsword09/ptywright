@@ -1,6 +1,6 @@
 {
   "name": "ptywright",
-  "version": "0.1.1",
+  "version": "0.2.0",
   "description": "Terminal/TUI automation driver over PTY + xterm, exposed as MCP tools",
   "keywords": [
     "agent",
