@@ -7,15 +7,56 @@ export const textMaskRuleSchema = z.object({
   preserveLength: z.boolean().optional(),
 });
 
-export const launchConfigSchema = z.object({
-  command: z.string().min(1),
-  args: z.array(z.string()).optional(),
-  cwd: z.string().optional(),
-  env: z.record(z.string()).optional(),
-  cols: z.number().int().positive().optional(),
-  rows: z.number().int().positive().optional(),
-  name: z.string().optional(),
-});
+export const launchConfigSchema = z
+  .object({
+    backend: z.enum(["pty", "frames", "ink", "ratatui"]).optional(),
+    command: z.string().min(1).optional(),
+    args: z.array(z.string()).optional(),
+    cwd: z.string().optional(),
+    env: z.record(z.string()).optional(),
+    cols: z.number().int().positive().optional(),
+    rows: z.number().int().positive().optional(),
+    name: z.string().optional(),
+    frame: z.string().optional(),
+    frames: z
+      .array(
+        z.union([
+          z.string(),
+          z.object({
+            name: z.string().optional(),
+            text: z.string().optional(),
+            frame: z.string().optional(),
+            snapshot: z.string().optional(),
+            lastFrame: z.string().optional(),
+          }),
+        ]),
+      )
+      .optional(),
+    framePath: z.string().optional(),
+    frameModule: z.string().optional(),
+    advanceOnInput: z.boolean().optional(),
+  })
+  .superRefine((value, ctx) => {
+    const backend = value.backend ?? "pty";
+    if (backend === "pty") {
+      if (!value.command) {
+        ctx.addIssue({
+          code: z.ZodIssueCode.custom,
+          path: ["command"],
+          message: "launch.command is required when backend=pty",
+        });
+      }
+      return;
+    }
+
+    if (!value.frame && !value.frames?.length && !value.framePath && !value.frameModule) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        message:
+          "framework launch requires one of frame, frames, framePath, or frameModule when backend is not pty",
+      });
+    }
+  });
 
 export const scriptTraceSchema = z.object({
   saveCast: z.boolean().optional(),

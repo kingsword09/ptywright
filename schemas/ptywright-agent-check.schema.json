@@ -1,0 +1,122 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://ptywright.local/schemas/ptywright-agent-check.schema.json",
+  "title": "ptywright agent check summary",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "version",
+    "ok",
+    "cassetteDir",
+    "artifactsRoot",
+    "summaryPath",
+    "commands",
+    "inputs",
+    "replay",
+    "outputs",
+    "failures"
+  ],
+  "properties": {
+    "$schema": { "type": "string" },
+    "version": { "const": 1 },
+    "ok": { "type": "boolean" },
+    "cassetteDir": { "type": "string", "minLength": 1 },
+    "artifactsRoot": { "type": "string", "minLength": 1 },
+    "summaryPath": { "type": "string", "minLength": 1 },
+    "commands": { "$ref": "#/$defs/commands" },
+    "inputs": { "$ref": "#/$defs/counts" },
+    "replay": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["ok", "totalCount", "failureCount", "reportPath", "summaryPath"],
+      "properties": {
+        "ok": { "type": "boolean" },
+        "totalCount": { "type": "integer", "minimum": 0 },
+        "failureCount": { "type": "integer", "minimum": 0 },
+        "reportPath": { "type": "string" },
+        "summaryPath": { "type": "string" }
+      }
+    },
+    "outputs": { "$ref": "#/$defs/counts" },
+    "failures": {
+      "type": "array",
+      "items": { "$ref": "#/$defs/failure" }
+    }
+  },
+  "$defs": {
+    "checkCommand": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["argv"],
+      "properties": {
+        "argv": { "$ref": "#/$defs/checkArgv" }
+      }
+    },
+    "checkUpdateCommand": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["argv"],
+      "properties": {
+        "argv": {
+          "allOf": [
+            { "$ref": "#/$defs/checkArgv" },
+            { "contains": { "const": "--update-snapshots" } }
+          ]
+        }
+      }
+    },
+    "rerunCommand": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["argv"],
+      "properties": {
+        "argv": { "$ref": "#/$defs/rerunArgv" }
+      }
+    },
+    "checkArgv": {
+      "type": "array",
+      "minItems": 4,
+      "prefixItems": [{ "const": "ptywright" }, { "const": "agent" }, { "const": "check" }],
+      "items": { "type": "string", "minLength": 1 }
+    },
+    "rerunArgv": {
+      "type": "array",
+      "minItems": 4,
+      "prefixItems": [{ "const": "ptywright" }, { "const": "agent" }, { "const": "rerun" }],
+      "items": { "type": "string", "minLength": 1 }
+    },
+    "commands": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["check", "updateSnapshots", "rerun"],
+      "properties": {
+        "check": { "$ref": "#/$defs/checkCommand" },
+        "updateSnapshots": { "$ref": "#/$defs/checkUpdateCommand" },
+        "rerun": { "$ref": "#/$defs/rerunCommand" }
+      }
+    },
+    "counts": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["totalCount", "failureCount"],
+      "properties": {
+        "totalCount": { "type": "integer", "minimum": 0 },
+        "failureCount": { "type": "integer", "minimum": 0 }
+      }
+    },
+    "failure": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["stage", "filePath", "errors"],
+      "properties": {
+        "stage": { "type": "string", "enum": ["input", "replay", "output"] },
+        "filePath": { "type": "string", "minLength": 1 },
+        "kind": { "type": "string" },
+        "errors": {
+          "type": "array",
+          "items": { "type": "string" }
+        }
+      }
+    }
+  }
+}

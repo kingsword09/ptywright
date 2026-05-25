@@ -1,0 +1,7 @@
+Deterministic Agent Ready
+Type help or status. Ctrl+C exits.
+agent[1]> status
+
+Status: stable
+Mode: browser regression
+agent[2]>

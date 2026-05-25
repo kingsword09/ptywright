@@ -1,0 +1,86 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://ptywright.local/schemas/ptywright-pty-cassette.schema.json",
+  "title": "ptywright raw PTY cassette",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["version", "createdAt", "durationMs", "terminal", "events"],
+  "properties": {
+    "$schema": { "type": "string" },
+    "version": { "const": 1 },
+    "createdAt": { "type": "string", "minLength": 1 },
+    "durationMs": { "type": "integer", "minimum": 0 },
+    "terminal": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["cols", "rows"],
+      "properties": {
+        "cols": { "type": "integer", "minimum": 1 },
+        "rows": { "type": "integer", "minimum": 1 },
+        "term": { "type": "string", "minLength": 1 }
+      }
+    },
+    "command": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["file"],
+      "properties": {
+        "file": { "type": "string", "minLength": 1 },
+        "args": { "type": "array", "items": { "type": "string" } },
+        "cwd": { "type": "string" },
+        "env": {
+          "type": "object",
+          "additionalProperties": { "type": "string" }
+        }
+      }
+    },
+    "metadata": {
+      "type": "object",
+      "additionalProperties": {
+        "type": ["string", "number", "boolean", "null"]
+      }
+    },
+    "events": {
+      "type": "array",
+      "items": {
+        "oneOf": [
+          {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["atMs", "type", "dataBase64"],
+            "properties": {
+              "atMs": { "type": "integer", "minimum": 0 },
+              "type": { "enum": ["output", "input"] },
+              "dataBase64": {
+                "type": "string",
+                "pattern": "^[A-Za-z0-9+/]*={0,2}$"
+              }
+            }
+          },
+          {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["atMs", "type", "cols", "rows"],
+            "properties": {
+              "atMs": { "type": "integer", "minimum": 0 },
+              "type": { "const": "resize" },
+              "cols": { "type": "integer", "minimum": 1 },
+              "rows": { "type": "integer", "minimum": 1 }
+            }
+          },
+          {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["atMs", "type", "exitCode"],
+            "properties": {
+              "atMs": { "type": "integer", "minimum": 0 },
+              "type": { "const": "exit" },
+              "exitCode": { "type": "integer" },
+              "signal": { "type": ["integer", "string", "null"] }
+            }
+          }
+        ]
+      }
+    }
+  }
+}

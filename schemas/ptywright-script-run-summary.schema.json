@@ -1,0 +1,114 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://ptywright.local/schemas/ptywright-script-run-summary.schema.json",
+  "title": "ptywright script run summary",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "version",
+    "ok",
+    "dir",
+    "suiteDir",
+    "commands",
+    "totalCount",
+    "failureCount",
+    "durationMs",
+    "reportPath",
+    "summaryPath",
+    "entries"
+  ],
+  "properties": {
+    "$schema": { "type": "string" },
+    "version": { "const": 1 },
+    "ok": { "type": "boolean" },
+    "dir": { "type": "string", "minLength": 1 },
+    "suiteDir": { "type": "string", "minLength": 1 },
+    "commands": { "$ref": "#/$defs/commands" },
+    "totalCount": { "type": "integer", "minimum": 0 },
+    "failureCount": { "type": "integer", "minimum": 0 },
+    "durationMs": { "type": "integer", "minimum": 0 },
+    "reportPath": { "type": "string", "minLength": 1 },
+    "summaryPath": { "type": "string", "minLength": 1 },
+    "entries": {
+      "type": "array",
+      "items": { "$ref": "#/$defs/entry" }
+    }
+  },
+  "$defs": {
+    "command": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["argv"],
+      "properties": {
+        "argv": {
+          "type": "array",
+          "minItems": 1,
+          "items": { "type": "string", "minLength": 1 }
+        }
+      }
+    },
+    "runAllArgv": {
+      "type": "array",
+      "minItems": 5,
+      "prefixItems": [{ "const": "ptywright" }, { "const": "run-all" }],
+      "contains": { "const": "--artifacts-root" },
+      "items": { "type": "string", "minLength": 1 }
+    },
+    "updateGoldensArgv": {
+      "allOf": [{ "$ref": "#/$defs/runAllArgv" }, { "contains": { "const": "--update-goldens" } }]
+    },
+    "commands": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["runAll", "updateGoldens"],
+      "properties": {
+        "runAll": {
+          "allOf": [
+            { "$ref": "#/$defs/command" },
+            {
+              "type": "object",
+              "properties": { "argv": { "$ref": "#/$defs/runAllArgv" } }
+            }
+          ]
+        },
+        "updateGoldens": {
+          "allOf": [
+            { "$ref": "#/$defs/command" },
+            {
+              "type": "object",
+              "properties": { "argv": { "$ref": "#/$defs/updateGoldensArgv" } }
+            }
+          ]
+        }
+      }
+    },
+    "entry": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["filePath", "filePathRel", "scriptName", "ok", "durationMs"],
+      "properties": {
+        "filePath": { "type": "string", "minLength": 1 },
+        "filePathRel": { "type": "string", "minLength": 1 },
+        "scriptName": { "type": "string", "minLength": 1 },
+        "ok": { "type": "boolean" },
+        "durationMs": { "type": "integer", "minimum": 0 },
+        "artifactsDir": { "type": "string", "minLength": 1 },
+        "reportPath": { "type": "string", "minLength": 1 },
+        "castPath": { "type": "string", "minLength": 1 },
+        "error": { "type": "string" },
+        "failureArtifacts": { "$ref": "#/$defs/failureArtifacts" }
+      }
+    },
+    "failureArtifacts": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["lastTextPath", "lastViewPath", "stepPath", "errorPath"],
+      "properties": {
+        "lastTextPath": { "type": "string", "minLength": 1 },
+        "lastViewPath": { "type": "string", "minLength": 1 },
+        "stepPath": { "type": "string", "minLength": 1 },
+        "errorPath": { "type": "string", "minLength": 1 }
+      }
+    }
+  }
+}

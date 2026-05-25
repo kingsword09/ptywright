@@ -1,0 +1,107 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://ptywright.local/schemas/ptywright-agent-manifest.schema.json",
+  "title": "ptywright agent artifact manifest",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "version",
+    "kind",
+    "ok",
+    "generatedAt",
+    "rootDir",
+    "primaryPath",
+    "commands",
+    "files"
+  ],
+  "properties": {
+    "$schema": { "type": "string" },
+    "version": { "const": 1 },
+    "kind": { "type": "string", "enum": ["run", "replay-suite", "check", "promote"] },
+    "ok": { "type": "boolean" },
+    "generatedAt": { "type": "string", "minLength": 1 },
+    "rootDir": { "type": "string", "minLength": 1 },
+    "primaryPath": { "type": "string", "minLength": 1 },
+    "commands": {
+      "type": "object",
+      "additionalProperties": { "$ref": "#/$defs/command" },
+      "minProperties": 1
+    },
+    "validation": { "$ref": "#/$defs/validation" },
+    "files": {
+      "type": "array",
+      "items": { "$ref": "#/$defs/file" }
+    }
+  },
+  "$defs": {
+    "command": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["argv"],
+      "properties": {
+        "argv": { "$ref": "#/$defs/agentArgv" }
+      }
+    },
+    "agentArgv": {
+      "type": "array",
+      "minItems": 3,
+      "prefixItems": [{ "const": "ptywright" }, { "const": "agent" }],
+      "items": { "type": "string", "minLength": 1 }
+    },
+    "validation": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["ok", "stages"],
+      "properties": {
+        "ok": { "type": "boolean" },
+        "stages": {
+          "type": "array",
+          "items": { "$ref": "#/$defs/validationStage" }
+        }
+      }
+    },
+    "validationStage": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["name", "ok", "totalCount", "failureCount"],
+      "properties": {
+        "name": { "type": "string", "minLength": 1 },
+        "ok": { "type": "boolean" },
+        "totalCount": { "type": "integer", "minimum": 0 },
+        "failureCount": { "type": "integer", "minimum": 0 }
+      }
+    },
+    "file": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["path", "kind", "bytes", "sha256"],
+      "properties": {
+        "path": {
+          "type": "string",
+          "minLength": 1,
+          "description": "Path to the artifact file, relative to the manifest directory when the file is inside the artifact root."
+        },
+        "kind": {
+          "type": "string",
+          "enum": [
+            "flow",
+            "cassette",
+            "run-record",
+            "replay-summary",
+            "check-summary",
+            "promote-summary",
+            "report",
+            "terminal",
+            "dom",
+            "screenshot",
+            "diff"
+          ]
+        },
+        "role": { "type": "string", "minLength": 1 },
+        "ok": { "type": "boolean" },
+        "bytes": { "type": "integer", "minimum": 0 },
+        "sha256": { "type": "string", "pattern": "^[a-f0-9]{64}$" }
+      }
+    }
+  }
+}

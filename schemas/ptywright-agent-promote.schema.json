@@ -1,0 +1,146 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://ptywright.local/schemas/ptywright-agent-promote.schema.json",
+  "title": "ptywright agent promote summary",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "version",
+    "ok",
+    "sourcePath",
+    "cassetteDir",
+    "targetDir",
+    "targetCassettePath",
+    "snapshotDir",
+    "artifactsRoot",
+    "summaryPath",
+    "updateSnapshots",
+    "commands",
+    "validation",
+    "replay",
+    "failures"
+  ],
+  "properties": {
+    "$schema": { "type": "string" },
+    "version": { "const": 1 },
+    "ok": { "type": "boolean" },
+    "sourcePath": { "type": "string", "minLength": 1 },
+    "cassetteDir": { "type": "string", "minLength": 1 },
+    "targetDir": { "type": "string", "minLength": 1 },
+    "targetCassettePath": { "type": "string", "minLength": 1 },
+    "snapshotDir": { "type": "string", "minLength": 1 },
+    "artifactsRoot": { "type": "string", "minLength": 1 },
+    "summaryPath": { "type": "string", "minLength": 1 },
+    "updateSnapshots": { "type": "boolean" },
+    "commands": { "$ref": "#/$defs/commands" },
+    "validation": { "$ref": "#/$defs/countsWithOk" },
+    "replay": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["ok", "totalCount", "failureCount", "reportPath", "summaryPath"],
+      "properties": {
+        "ok": { "type": "boolean" },
+        "totalCount": { "type": "integer", "minimum": 0 },
+        "failureCount": { "type": "integer", "minimum": 0 },
+        "reportPath": { "type": "string" },
+        "summaryPath": { "type": "string" }
+      }
+    },
+    "failures": {
+      "type": "array",
+      "items": { "$ref": "#/$defs/failure" }
+    }
+  },
+  "$defs": {
+    "promoteCommand": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["argv"],
+      "properties": {
+        "argv": { "$ref": "#/$defs/promoteArgv" }
+      }
+    },
+    "checkCommand": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["argv"],
+      "properties": {
+        "argv": { "$ref": "#/$defs/checkArgv" }
+      }
+    },
+    "checkUpdateCommand": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["argv"],
+      "properties": {
+        "argv": {
+          "allOf": [
+            { "$ref": "#/$defs/checkArgv" },
+            { "contains": { "const": "--update-snapshots" } }
+          ]
+        }
+      }
+    },
+    "rerunCommand": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["argv"],
+      "properties": {
+        "argv": { "$ref": "#/$defs/rerunArgv" }
+      }
+    },
+    "promoteArgv": {
+      "type": "array",
+      "minItems": 4,
+      "prefixItems": [{ "const": "ptywright" }, { "const": "agent" }, { "const": "promote" }],
+      "items": { "type": "string", "minLength": 1 }
+    },
+    "checkArgv": {
+      "type": "array",
+      "minItems": 4,
+      "prefixItems": [{ "const": "ptywright" }, { "const": "agent" }, { "const": "check" }],
+      "items": { "type": "string", "minLength": 1 }
+    },
+    "rerunArgv": {
+      "type": "array",
+      "minItems": 4,
+      "prefixItems": [{ "const": "ptywright" }, { "const": "agent" }, { "const": "rerun" }],
+      "items": { "type": "string", "minLength": 1 }
+    },
+    "commands": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["promote", "check", "updateSnapshots", "rerun"],
+      "properties": {
+        "promote": { "$ref": "#/$defs/promoteCommand" },
+        "check": { "$ref": "#/$defs/checkCommand" },
+        "updateSnapshots": { "$ref": "#/$defs/checkUpdateCommand" },
+        "rerun": { "$ref": "#/$defs/rerunCommand" }
+      }
+    },
+    "countsWithOk": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["ok", "totalCount", "failureCount"],
+      "properties": {
+        "ok": { "type": "boolean" },
+        "totalCount": { "type": "integer", "minimum": 0 },
+        "failureCount": { "type": "integer", "minimum": 0 }
+      }
+    },
+    "failure": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["stage", "filePath", "errors"],
+      "properties": {
+        "stage": { "type": "string", "enum": ["validation", "replay"] },
+        "filePath": { "type": "string", "minLength": 1 },
+        "kind": { "type": "string" },
+        "errors": {
+          "type": "array",
+          "items": { "type": "string" }
+        }
+      }
+    }
+  }
+}
