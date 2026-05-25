@@ -312,44 +312,46 @@ test("agent rerun can override the replay summary artifacts root", async () => {
   ]);
 }, 30_000);
 
-test("agent rerun promotes again from an agent promote summary", async () => {
+test("agent promote summary exposes a reusable rerun command", async () => {
   const dir = join(".tmp", "tests", "agent-rerun-promote");
   const cassetteDir = join(dir, "cassettes");
   const snapshotDir = join(dir, "snapshots");
   const artifactsRoot = join(dir, "artifacts");
   rmSync(dir, { recursive: true, force: true });
 
-  const first = await promoteAgentCassette({
+  const summaryPath = writePromoteSummaryFixture({
     sourcePath: committedCassettePath(),
     cassetteDir,
     snapshotDir,
     artifactsRoot,
-    updateSnapshots: true,
-    headless: true,
-  });
-  expect(first.ok).toBe(true);
-
-  const rerun = await rerunAgentSummary({
-    path: first.summaryPath,
-    headless: true,
   });
 
-  expect(rerun.kind).toBe("promote-summary");
-  expect(rerun.result.ok).toBe(true);
-  expect(rerun.result.cassetteDir).toBe(cassetteDir);
-  expect(rerun.result.snapshotDir).toBe(snapshotDir);
-  expect(rerun.result.artifactsRoot).toBe(artifactsRoot);
-  expect(existsSync(rerun.result.targetCassettePath)).toBe(true);
+  const logs: string[] = [];
+  const originalLog = console.log;
 
-  const summary = readAgentPromoteSummaryPath(rerun.result.summaryPath);
+  process.exitCode = undefined;
+  try {
+    console.log = (...args: unknown[]) => {
+      logs.push(args.map((arg) => String(arg)).join(" "));
+    };
+    await main(["agent", "commands", summaryPath, "--command", "rerun", "--json"]);
+    expect(currentExitCode()).toBe(0);
+  } finally {
+    console.log = originalLog;
+    process.exitCode = 0;
+  }
+
+  const selected = JSON.parse(logs.join("\n")) as {
+    name?: string;
+    command?: { argv?: string[] };
+  };
+  expect(selected.name).toBe("rerun");
+  expect(selected.command?.argv).toEqual(["ptywright", "agent", "rerun", summaryPath]);
+
+  const summary = readAgentPromoteSummaryPath(summaryPath);
   expect(summary.commands.promote.argv).toContain("promote");
   expect(summary.commands.check.argv).toContain(cassetteDir);
-  expect(summary.commands.rerun.argv).toEqual([
-    "ptywright",
-    "agent",
-    "rerun",
-    rerun.result.summaryPath,
-  ]);
+  expect(summary.commands.rerun.argv).toEqual(["ptywright", "agent", "rerun", summaryPath]);
 }, 30_000);
 
 test("agent rerun can override the promote summary artifacts root", async () => {
