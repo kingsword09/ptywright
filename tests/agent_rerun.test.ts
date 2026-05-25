@@ -6,7 +6,6 @@ import { expect, test } from "bun:test";
 import { checkAgentRegression } from "../src/agent/check";
 import { rerunAgentSummary } from "../src/agent/rerun";
 import { readAgentCheckSummaryPath, writeAgentCheckSummaryPath } from "../src/agent/check_summary";
-import { promoteAgentCassette } from "../src/agent/promote";
 import {
   normalizeAgentPromoteSummary,
   readAgentPromoteSummaryPath,
@@ -362,18 +361,15 @@ test("agent rerun can override the promote summary artifacts root", async () => 
   const rerunRoot = join(dir, "rerun-artifacts");
   rmSync(dir, { recursive: true, force: true });
 
-  const first = await promoteAgentCassette({
+  const summaryPath = writePromoteSummaryFixture({
     sourcePath: committedCassettePath(),
     cassetteDir,
     snapshotDir,
     artifactsRoot,
-    updateSnapshots: true,
-    headless: true,
   });
-  expect(first.ok).toBe(true);
 
   const rerun = await rerunAgentSummary({
-    path: first.summaryPath,
+    path: summaryPath,
     artifactsRoot: rerunRoot,
     headless: true,
   });
