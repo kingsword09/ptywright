@@ -18,6 +18,7 @@ export type AgentPromoteOptions = {
   sourcePath: string;
   cassetteDir?: string;
   snapshotDir?: string;
+  snapshotRoot?: string;
   artifactsRoot?: string;
   updateSnapshots?: boolean;
   headless?: boolean;
@@ -45,7 +46,8 @@ export async function promoteAgentCassette(
   const sourceCassette = readAgentCassettePath(sourceCassettePath);
   const name = sanitizeArtifactName(sourceCassette.name);
   const cassetteDir = options.cassetteDir ?? "tests/agent-cassettes";
-  const snapshotDir = options.snapshotDir ?? join("tests", "agent-snapshots", name);
+  const snapshotDir =
+    options.snapshotDir ?? join(options.snapshotRoot ?? "tests/agent-snapshots", name);
   const artifactsRoot = options.artifactsRoot ?? join(".tmp", "agent-promote", name);
   const targetDir = join(cassetteDir, name);
   const targetCassettePath = join(targetDir, `${name}.cassette.json`);

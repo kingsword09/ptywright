@@ -6,14 +6,17 @@ import { normalizeAgentFlowSpec, type AgentFlowSpec } from "./schema";
 
 export type LoadedAgentSpec = {
   spec: AgentFlowSpec;
+  raw: unknown;
   path: string;
 };
 
 export async function loadAgentSpec(specPath: string): Promise<LoadedAgentSpec> {
   const resolved = resolve(process.cwd(), specPath);
   if (resolved.endsWith(".json")) {
+    const raw = JSON.parse(readFileSync(resolved, "utf8")) as unknown;
     return {
-      spec: normalizeAgentFlowSpec(JSON.parse(readFileSync(resolved, "utf8"))),
+      spec: normalizeAgentFlowSpec(raw),
+      raw,
       path: resolved,
     };
   }
@@ -22,8 +25,10 @@ export async function loadAgentSpec(specPath: string): Promise<LoadedAgentSpec> 
     default?: unknown;
     spec?: unknown;
   };
+  const raw = mod.default ?? mod.spec;
   return {
-    spec: normalizeAgentFlowSpec(mod.default ?? mod.spec),
+    spec: normalizeAgentFlowSpec(raw),
+    raw,
     path: resolved,
   };
 }

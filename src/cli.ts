@@ -3,7 +3,7 @@ import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js"
 import type { PtywrightCapability } from "./mcp/server";
 import { createPtywrightServer } from "./mcp/server";
 import { mkdirSync, writeFileSync } from "node:fs";
-import { dirname } from "node:path";
+import { dirname, isAbsolute, resolve } from "node:path";
 
 import { checkAgentRegression, formatAgentCheckJson, formatAgentCheckLines } from "./agent/check";
 import {
@@ -27,6 +27,7 @@ import { rerunAgentSummary } from "./agent/rerun";
 import { readAgentRunRecordPath } from "./agent/run_record";
 import { replayAgentRecordPath, runAgentSpecPath } from "./agent/runner";
 import { validateAgentArtifactsPath } from "./agent/validate";
+import { loadPtywrightConfig, type ResolvedPtywrightConfig } from "./config";
 import { startPtywrightHttpServer } from "./mcp/http_server";
 import { cmdPty } from "./pty-cassette/cli";
 import {
@@ -93,6 +94,7 @@ function usage(): string {
     "  --json                   Print machine-readable script artifact output",
     "",
     "Agent options:",
+    "  --config <file>          Use a ptywright.config.* file",
     "  --artifacts-dir <dir>    Override agent run artifact directory",
     "  --cassette-dir <dir>     Committed cassette directory for promote/check",
     "  --snapshot-dir <dir>     Snapshot directory for promoted cassettes",
@@ -626,6 +628,7 @@ function parseAgentArgs(argv: string[]): {
   outPath?: string;
   durationMs?: number;
   commandName?: string;
+  configPath?: string;
   updateSnapshots: boolean;
   headed: boolean;
   json: boolean;
@@ -661,6 +664,7 @@ function parseAgentArgs(argv: string[]): {
     outPath?: string;
     durationMs?: number;
     commandName?: string;
+    configPath?: string;
     updateSnapshots: boolean;
     headed: boolean;
     json: boolean;
@@ -672,6 +676,15 @@ function parseAgentArgs(argv: string[]): {
 
     if (mode === "init" && !out.flavor && arg && !arg.startsWith("-")) {
       out.flavor = parseAgentFlavor(arg);
+      continue;
+    }
+
+    if (arg === "--config") {
+      if (!next) {
+        throw new Error(`missing <file> for --config`);
+      }
+      out.configPath = next;
+      i += 1;
       continue;
     }
 
@@ -777,14 +790,53 @@ function parseAgentArgs(argv: string[]): {
     outPath: out.outPath,
     durationMs: out.durationMs,
     commandName: out.commandName,
+    configPath: out.configPath,
     updateSnapshots: out.updateSnapshots,
     headed: out.headed,
     json: out.json,
   };
 }
 
+function shouldLoadAgentConfig(mode: ReturnType<typeof parseAgentArgs>["mode"]): boolean {
+  return (
+    mode === "run" ||
+    mode === "record" ||
+    mode === "replay" ||
+    mode === "promote" ||
+    mode === "replay-all" ||
+    mode === "rerun" ||
+    mode === "check"
+  );
+}
+
+function resolveAgentHeadless(
+  args: Pick<ReturnType<typeof parseAgentArgs>, "headed">,
+  config?: ResolvedPtywrightConfig,
+): boolean {
+  if (args.headed) return false;
+  return config?.agent?.defaults?.headless ?? true;
+}
+
+function resolveAgentConfigPath(
+  config: ResolvedPtywrightConfig | undefined,
+  path: string | undefined,
+): string | undefined {
+  if (!path) return undefined;
+  if (isAbsolute(path)) return path;
+  return resolve(config?.rootDir ?? process.cwd(), path);
+}
+
+function resolveCliPath(path: string | undefined): string | undefined {
+  if (!path) return undefined;
+  return isAbsolute(path) ? path : resolve(process.cwd(), path);
+}
+
 async function cmdAgent(argv: string[]): Promise<number> {
   const args = parseAgentArgs(argv);
+  const config = shouldLoadAgentConfig(args.mode)
+    ? await loadPtywrightConfig({ configPath: args.configPath })
+    : undefined;
+  const headless = resolveAgentHeadless(args, config);
   if (args.mode === "init") {
     const spec = createAgentTemplateSpec(args.flavor ?? "generic");
     const path = args.path!;
@@ -809,7 +861,8 @@ async function cmdAgent(argv: string[]): Promise<number> {
     const result = await recordAgentSpecPath(args.path!, {
       outPath: args.outPath!,
       durationMs: args.durationMs,
-      headless: !args.headed,
+      headless,
+      config,
     });
     logLines(
       [
@@ -894,14 +947,20 @@ async function cmdAgent(argv: string[]): Promise<number> {
     const argv = selected.command.argv;
     validateAgentCommandArgv(argv, selected.name);
     const [, , subcommand, ...rest] = argv;
-    return cmdAgent([subcommand ?? "", ...rest]);
+    return cmdAgent([
+      subcommand ?? "",
+      ...rest,
+      ...(args.configPath ? ["--config", args.configPath] : []),
+    ]);
   }
 
   if (args.mode === "check") {
     const result = await checkAgentRegression({
-      cassetteDir: args.path ?? args.cassetteDir,
-      artifactsRoot: args.artifactsRoot,
-      headless: !args.headed,
+      cassetteDir:
+        args.path ?? args.cassetteDir ?? resolveAgentConfigPath(config, config?.agent?.cassetteDir),
+      artifactsRoot:
+        args.artifactsRoot ?? resolveAgentConfigPath(config, config?.agent?.artifactsRoot),
+      headless,
       updateSnapshots: args.updateSnapshots,
     });
     if (args.json) {
@@ -915,10 +974,14 @@ async function cmdAgent(argv: string[]): Promise<number> {
   if (args.mode === "promote") {
     const result = await promoteAgentCassette({
       sourcePath: args.path!,
-      cassetteDir: args.cassetteDir,
+      cassetteDir: args.cassetteDir ?? resolveAgentConfigPath(config, config?.agent?.cassetteDir),
       snapshotDir: args.snapshotDir,
-      artifactsRoot: args.artifactsRoot,
-      headless: !args.headed,
+      snapshotRoot: args.snapshotDir
+        ? undefined
+        : resolveAgentConfigPath(config, config?.agent?.snapshotDir),
+      artifactsRoot:
+        args.artifactsRoot ?? resolveAgentConfigPath(config, config?.agent?.artifactsRoot),
+      headless,
       updateSnapshots: args.updateSnapshots,
     });
     if (args.json) {
@@ -932,8 +995,9 @@ async function cmdAgent(argv: string[]): Promise<number> {
   if (args.mode === "rerun") {
     const rerun = await rerunAgentSummary({
       path: args.path!,
-      artifactsRoot: args.artifactsRoot,
-      headless: !args.headed,
+      artifactsRoot:
+        args.artifactsRoot ?? resolveAgentConfigPath(config, config?.agent?.artifactsRoot),
+      headless,
       updateSnapshots: args.updateSnapshots,
     });
 
@@ -980,9 +1044,10 @@ async function cmdAgent(argv: string[]): Promise<number> {
 
   if (args.mode === "replay-all") {
     const result = await replayAllAgentRecords({
-      dir: args.path,
-      artifactsRoot: args.artifactsRoot,
-      headless: !args.headed,
+      dir: args.path ?? resolveAgentConfigPath(config, config?.agent?.cassetteDir),
+      artifactsRoot:
+        args.artifactsRoot ?? resolveAgentConfigPath(config, config?.agent?.artifactsRoot),
+      headless,
       updateSnapshots: args.updateSnapshots,
     });
     const failures = result.entries.filter((entry) => !entry.result.ok);
@@ -1019,9 +1084,10 @@ async function cmdAgent(argv: string[]): Promise<number> {
   }
 
   const options = {
-    artifactsDir: args.artifactsDir,
+    artifactsDir: resolveCliPath(args.artifactsDir),
     updateSnapshots: args.updateSnapshots,
-    headless: !args.headed,
+    headless,
+    config,
   };
   const result =
     args.mode === "run"
