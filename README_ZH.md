@@ -107,7 +107,7 @@ bunx ptywright@latest pty validate tests/cassettes/codex.pty.json
 bunx ptywright@latest pty inspect tests/cassettes/codex.pty.json
 ```
 
-外部项目不需要依赖 aitty。`node-pty` / `bun-pty` 这类对象可直接用结构化
+外部项目不需要依赖 ptywright 专属 PTY 包装器。`node-pty` / `bun-pty` 这类对象可直接用结构化
 `wrapPtyLike` 接入：
 
 ```ts

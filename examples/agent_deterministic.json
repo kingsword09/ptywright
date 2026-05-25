@@ -4,18 +4,10 @@
   "artifactsDir": ".tmp/agent/agent_deterministic",
   "snapshotDir": "tests/agent-snapshots/agent_deterministic",
   "launch": {
-    "mode": "aitty",
+    "mode": "command",
     "command": "bun",
-    "args": ["run", "tests/fixtures/deterministic_agent.ts"],
-    "aitty": {
-      "project": "ptywright",
-      "label": "deterministic-agent",
-      "title": "deterministic agent",
-      "subtitle": "browser regression fixture",
-      "theme": "light",
-      "fontSize": 14,
-      "waitForUrlMs": 15000
-    }
+    "args": ["run", "tests/fixtures/browser_terminal_server.ts"],
+    "waitForUrlMs": 15000
   },
   "viewports": [
     { "name": "desktop", "width": 1280, "height": 820 },

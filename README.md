@@ -107,7 +107,7 @@ bunx ptywright@latest pty validate tests/cassettes/codex.pty.json
 bunx ptywright@latest pty inspect tests/cassettes/codex.pty.json
 ```
 
-External projects do not need to depend on aitty. Use the structural
+External projects do not need a ptywright-specific PTY wrapper. Use the structural
 `wrapPtyLike` API for `node-pty`/`bun-pty` style objects:
 
 ```ts
@@ -308,9 +308,10 @@ Recording artifacts are best for failure diagnosis or manual review; prefer `sna
 
 ## Browser Agent Regression
 
-The new destructive path is browser-first: ptywright can launch an agent through
-`@aitty/cli`, drive the browser-hosted wterm DOM with Playwright, and persist a
-replayable run artifact plus terminal/DOM snapshots.
+The browser-first path is integration-agnostic: ptywright launches any command
+that prints a browser URL, drives the terminal DOM with Playwright, and persists
+a replayable run artifact plus terminal/DOM snapshots. The browser page must
+expose the terminal root as `[data-terminal-root]`.
 
 ```bash
 # First run records snapshots, screenshots, replay metadata, and report.
@@ -379,9 +380,39 @@ Artifacts are split intentionally:
 - `tests/agent-snapshots/<name>/` contains stable terminal/DOM baselines.
 - `--update-snapshots` is the explicit update path for intentional UI changes.
 
-`launch.mode=aitty` runs `aitty exec --launch print -- <agent>`. By default
-ptywright resolves the sibling `../aitty/packages/cli/dist/cli.js`; set
-`PTYWRIGHT_AITTY_CLI` or `launch.aitty.command` to override it.
+`launch.mode=command` is the recommended integration contract. `command` and
+`args` are spawned directly, and ptywright reads the first URL printed to stdout
+or stderr. Use `waitForUrlMs` to tune startup timeouts and `urlRegex` when the
+URL is embedded in structured output. Set `launch.agentFlavor` explicitly when
+the command is a wrapper, so mask presets still match the underlying agent.
+
+`launch.mode=url` skips process launch and points ptywright at an already
+running browser terminal.
+
+A wrapper integration is just a normal command that prints its browser URL:
+
+```json
+{
+  "name": "codex_browser_replay",
+  "launch": {
+    "mode": "command",
+    "agentFlavor": "codex",
+    "command": "node_modules/.bin/browser-terminal-launcher",
+    "args": [
+      "--replay",
+      "test/recordings/codex-yolo.pty.json",
+      "--speed",
+      "0",
+      "--print-url"
+    ],
+    "waitForUrlMs": 15000
+  },
+  "steps": [
+    { "type": "waitForStableDom" },
+    { "type": "snapshot", "name": "codex", "targets": ["terminal", "dom"] }
+  ]
+}
+```
 
 Set `launch.agentFlavor` to `codex`, `claude`, `droid`, or `generic` to opt
 into built-in mask presets for timestamps, generated ids, model names, token

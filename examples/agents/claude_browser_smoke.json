@@ -4,19 +4,11 @@
   "artifactsDir": ".tmp/agent/claude_browser_smoke",
   "snapshotDir": "tests/agent-snapshots/claude_browser_smoke",
   "launch": {
-    "mode": "aitty",
+    "mode": "command",
     "agentFlavor": "claude",
-    "command": "claude",
-    "args": [],
-    "aitty": {
-      "project": "ptywright",
-      "label": "claude",
-      "title": "claude browser smoke",
-      "subtitle": "browser-hosted terminal agent regression",
-      "theme": "light",
-      "fontSize": 14,
-      "waitForUrlMs": 15000
-    }
+    "command": "your-browser-terminal-launcher",
+    "args": ["--agent", "claude", "--print-url"],
+    "waitForUrlMs": 15000
   },
   "viewports": [
     { "name": "desktop", "width": 1280, "height": 820 },

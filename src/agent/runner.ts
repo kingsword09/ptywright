@@ -3,7 +3,6 @@ import { basename, dirname, extname, isAbsolute, join, relative, resolve } from 
 
 import type { Browser, Page } from "playwright";
 
-import { buildAittyExecCommand, launchAittyBrowserSession } from "./aitty";
 import { launchAgentBrowser } from "./browser";
 import {
   createAgentCassette,
@@ -22,6 +21,7 @@ import {
   shortHash,
 } from "./normalize";
 import { agentManifestPath, writeAgentManifestPath } from "./manifest";
+import { formatAgentLaunchCommand, resolveAgentLaunchTarget } from "./launch";
 import { resolveAgentFlavor, resolveAgentMasks } from "./presets";
 import { writeAgentReport } from "./report";
 import {
@@ -259,10 +259,7 @@ async function runViewport(args: {
     cassette,
     result,
   } = args;
-  const launchMode = spec.launch.mode ?? (spec.launch.url ? "url" : "aitty");
-  const session =
-    launchMode === "aitty" ? await launchAittyBrowserSession(spec.launch, { rootDir }) : null;
-  const url = launchMode === "url" ? spec.launch.url! : session!.url;
+  const launchTarget = await resolveAgentLaunchTarget(spec.launch, { rootDir });
   const context = await browser.newContext({
     viewport: { width: viewport.width, height: viewport.height },
     deviceScaleFactor: viewport.deviceScaleFactor,
@@ -286,7 +283,7 @@ async function runViewport(args: {
   };
 
   try {
-    await page.goto(url, {
+    await page.goto(launchTarget.url, {
       waitUntil: "domcontentloaded",
       timeout: spec.defaults?.timeoutMs ?? 30_000,
     });
@@ -332,7 +329,7 @@ async function runViewport(args: {
       context.close().catch(() => undefined),
       5_000,
     );
-    await session?.close();
+    await launchTarget.session?.close();
   }
 }
 
@@ -828,13 +825,9 @@ function envTruthy(value: string | undefined): boolean {
   return value === "1" || value === "true" || value === "yes";
 }
 
-export function printAittyLaunchPlan(input: unknown): string {
+export function printAgentLaunchPlan(input: unknown): string {
   const spec = normalizeAgentFlowSpec(input);
-  if ((spec.launch.mode ?? "aitty") !== "aitty") {
-    return "launch.mode=url";
-  }
-  const command = buildAittyExecCommand(spec.launch);
-  return [command.file, ...command.args].join(" ");
+  return formatAgentLaunchCommand(spec.launch);
 }
 
 export function defaultSpecNameForPath(path: string): string {

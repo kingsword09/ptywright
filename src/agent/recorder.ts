@@ -4,7 +4,7 @@ import { dirname, isAbsolute, resolve } from "node:path";
 import type { Browser, Page } from "playwright";
 
 import { launchAgentBrowser } from "./browser";
-import { launchAittyBrowserSession } from "./aitty";
+import { resolveAgentLaunchTarget } from "./launch";
 import { normalizeAgentFlowSpec, type AgentFlowSpec, type AgentFlowStep } from "./schema";
 import { loadAgentSpec } from "./spec_loader";
 
@@ -38,7 +38,6 @@ export async function recordAgentSpec(
 ): Promise<AgentRecordResult> {
   const spec = normalizeAgentFlowSpec(input);
   const rootDir = options.rootDir ? resolve(process.cwd(), options.rootDir) : process.cwd();
-  const launchMode = spec.launch.mode ?? (spec.launch.url ? "url" : "aitty");
   const outPath = isAbsolute(options.outPath)
     ? options.outPath
     : resolve(process.cwd(), options.outPath);
@@ -46,9 +45,7 @@ export async function recordAgentSpec(
   const steps: AgentFlowStep[] = [];
 
   let browser: Browser | null = null;
-  const session =
-    launchMode === "aitty" ? await launchAittyBrowserSession(spec.launch, { rootDir }) : null;
-  const url = launchMode === "url" ? spec.launch.url! : session!.url;
+  const launchTarget = await resolveAgentLaunchTarget(spec.launch, { rootDir });
 
   try {
     browser = await launchAgentBrowser({ headless: options.headless ?? false });
@@ -61,7 +58,7 @@ export async function recordAgentSpec(
     });
     const page = await context.newPage();
     await installRecorderHooks(page);
-    await page.goto(url, {
+    await page.goto(launchTarget.url, {
       waitUntil: "domcontentloaded",
       timeout: spec.defaults?.timeoutMs ?? 30_000,
     });
@@ -98,18 +95,18 @@ export async function recordAgentSpec(
     mkdirSync(dirname(outPath), { recursive: true });
     writeFileSync(outPath, JSON.stringify(recorded, null, 2) + "\n", "utf8");
 
-    return { ok: true, outPath, stepCount: recorded.steps.length, url };
+    return { ok: true, outPath, stepCount: recorded.steps.length, url: launchTarget.url };
   } catch (error) {
     return {
       ok: false,
       outPath,
       stepCount: steps.length,
-      url,
+      url: launchTarget.url,
       error: error instanceof Error ? error.message : String(error),
     };
   } finally {
     await browser?.close();
-    await session?.close();
+    await launchTarget.session?.close();
   }
 }
 
