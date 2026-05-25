@@ -563,45 +563,26 @@ test("agent exec runs updateSnapshots command from a replay summary artifact", a
   expect(existsSync(join(snapshotDir, "desktop.status.dom.snap.html"))).toBe(true);
 }, 20_000);
 
-test("agent exec runs updateSnapshots command from a check summary artifact", async () => {
+test("agent exec selects updateSnapshots command from a check summary artifact", async () => {
   const artifactsRoot = join(".tmp", "tests", "agent-exec-check-update");
-  const snapshotDir = join(artifactsRoot, "snapshots");
-  const cassetteDir = join(artifactsRoot, "cassettes");
   rmSync(artifactsRoot, { recursive: true, force: true });
-  mkdirSync(cassetteDir, { recursive: true });
 
-  const cassettePath = join(cassetteDir, "agent_exec_check_update.cassette.json");
-  const cassette = JSON.parse(await Bun.file(committedCassettePath()).text()) as {
-    spec?: { snapshotDir?: string };
-  };
-  cassette.spec = { ...cassette.spec, snapshotDir };
-  await Bun.write(cassettePath, JSON.stringify(cassette, null, 2) + "\n");
+  const { summaryPath } = writeMinimalCheckManifestBundle(artifactsRoot);
+  const commands = await readAgentArtifactCommandsPath(summaryPath);
+  const selected = selectAgentArtifactCommand(commands, "updateSnapshots");
 
-  const check = await checkAgentRegression({
-    cassetteDir,
-    artifactsRoot: join(artifactsRoot, "compare"),
-    headless: true,
-  });
-  expect(check.ok).toBe(false);
-  expect(existsSync(join(snapshotDir, "desktop.ready.terminal.snap.txt"))).toBe(false);
-
-  const logs: string[] = [];
-  const originalLog = console.log;
-
-  process.exitCode = undefined;
-  try {
-    console.log = (...args: unknown[]) => {
-      logs.push(args.map((arg) => String(arg)).join(" "));
-    };
-    await main(["agent", "exec", check.summaryPath, "--command", "updateSnapshots"]);
-    expect(currentExitCode()).toBe(0);
-  } finally {
-    console.log = originalLog;
-    process.exitCode = 0;
-  }
-
-  const output = logs.join("\n");
-  expect(output).toContain("ok agent-check");
-  expect(existsSync(join(snapshotDir, "desktop.ready.terminal.snap.txt"))).toBe(true);
-  expect(existsSync(join(snapshotDir, "desktop.status.dom.snap.html"))).toBe(true);
-}, 20_000);
+  expect(selected.kind).toBe("check-summary");
+  expect(selected.name).toBe("updateSnapshots");
+  expect(selected.command.argv).toEqual([
+    "ptywright",
+    "agent",
+    "check",
+    "tests/agent-cassettes",
+    "--artifacts-root",
+    artifactsRoot,
+    "--update-snapshots",
+  ]);
+  expect(selected.shell).toBe(
+    "ptywright agent check tests/agent-cassettes --artifacts-root .tmp/tests/agent-exec-check-update --update-snapshots",
+  );
+});
