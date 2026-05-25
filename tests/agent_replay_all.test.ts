@@ -4,8 +4,13 @@ import { dirname, join, resolve } from "node:path";
 import { expect, test } from "bun:test";
 
 import { readAgentArtifactCommandsPath } from "../src/agent/commands";
+import { agentManifestPath, writeAgentManifestPath } from "../src/agent/manifest";
 import { replayAllAgentRecords } from "../src/agent/replay_all";
-import { normalizeAgentReplaySummary, readAgentReplaySummaryPath } from "../src/agent/summary";
+import {
+  normalizeAgentReplaySummary,
+  readAgentReplaySummaryPath,
+  writeAgentReplaySummaryPath,
+} from "../src/agent/summary";
 import { validateAgentArtifactsPath } from "../src/agent/validate";
 import { main } from "../src/cli";
 
@@ -29,6 +34,58 @@ function copyCommittedCassette(targetPath: string, overrides: { snapshotDir?: st
     cassette.spec.snapshotDir = overrides.snapshotDir;
   }
   writeFileSync(targetPath, JSON.stringify(cassette, null, 2) + "\n", "utf8");
+}
+
+function writeMinimalReplayManifestBundle(artifactsRoot: string): { summaryPath: string } {
+  mkdirSync(artifactsRoot, { recursive: true });
+  const summaryPath = join(artifactsRoot, "agent-replay.summary.json");
+  const replayDir = join(artifactsRoot, "tests");
+  const replayAll = [
+    "ptywright",
+    "agent",
+    "replay-all",
+    replayDir,
+    "--artifacts-root",
+    artifactsRoot,
+  ];
+
+  writeAgentReplaySummaryPath(summaryPath, {
+    version: 1,
+    ok: true,
+    dir: replayDir,
+    suiteDir: artifactsRoot,
+    durationMs: 0,
+    reportPath: join(artifactsRoot, "index.html"),
+    summaryPath,
+    commands: {
+      replayAll: { argv: replayAll },
+      updateSnapshots: { argv: [...replayAll, "--update-snapshots"] },
+      rerun: { argv: ["ptywright", "agent", "rerun", summaryPath] },
+    },
+    updateSnapshots: false,
+    totalCount: 0,
+    failureCount: 0,
+    entries: [],
+  });
+
+  writeAgentManifestPath(agentManifestPath(artifactsRoot), {
+    kind: "replay-suite",
+    ok: true,
+    rootDir: artifactsRoot,
+    primaryPath: summaryPath,
+    commands: {
+      replayAll: { argv: replayAll },
+      updateSnapshots: { argv: [...replayAll, "--update-snapshots"] },
+      rerun: { argv: ["ptywright", "agent", "rerun", summaryPath] },
+    },
+    validation: {
+      ok: true,
+      stages: [{ name: "replay", ok: true, totalCount: 0, failureCount: 0 }],
+    },
+    files: [{ path: summaryPath, kind: "replay-summary", role: "summary", ok: true }],
+  });
+
+  return { summaryPath };
 }
 
 test("agent replay-all runs copied cassettes as a regression suite", async () => {
@@ -264,20 +321,10 @@ test("agent replay summary next to a moved manifest reruns from local bundle rec
 
 test("agent exec validates a moved replay summary manifest before dispatch", async () => {
   const dir = join(".tmp", "tests", "agent-replay-summary-copy-tamper");
-  const cassetteDir = join(dir, "cassettes");
   const suiteDir = join(dir, "suite");
   const copyRoot = join(dir, "suite-moved");
   rmSync(dir, { recursive: true, force: true });
-  mkdirSync(cassetteDir, { recursive: true });
-
-  copyCommittedCassette(join(cassetteDir, "agent_replay_summary_copy_tamper.cassette.json"));
-
-  const result = await replayAllAgentRecords({
-    dir: cassetteDir,
-    artifactsRoot: suiteDir,
-    headless: true,
-  });
-  expect(result.ok).toBe(true);
+  writeMinimalReplayManifestBundle(suiteDir);
 
   cpSync(suiteDir, copyRoot, { recursive: true });
   rmSync(suiteDir, { recursive: true, force: true });
