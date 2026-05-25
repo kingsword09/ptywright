@@ -447,21 +447,11 @@ test("agent exec refuses a manifest when indexed files were tampered", async () 
 });
 
 test("agent manifest validation rejects unsupported stored commands", async () => {
-  const dir = join(".tmp", "tests", "agent-manifest-bad-command");
-  rmSync(dir, { recursive: true, force: true });
+  const artifactsRoot = join(".tmp", "tests", "agent-manifest-bad-command");
+  rmSync(artifactsRoot, { recursive: true, force: true });
+  writeMinimalCheckManifestBundle(artifactsRoot);
 
-  const run = await runAgentSpec(
-    deterministicAgentSpec({
-      name: "agent_manifest_bad_command",
-      artifactsDir: join(dir, "run"),
-      snapshotDir: join(dir, "snapshots"),
-      targets: ["terminal"],
-    }),
-    { updateSnapshots: true, headless: true },
-  );
-  expect(run.ok).toBe(true);
-
-  const manifestPath = agentManifestPath(run.artifactsDir);
+  const manifestPath = agentManifestPath(artifactsRoot);
   const manifest = JSON.parse(readFileSync(manifestPath, "utf8")) as {
     commands?: Record<string, { argv: string[] }>;
   };

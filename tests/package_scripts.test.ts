@@ -16,7 +16,7 @@ test("package check script includes committed agent cassette regression", () => 
   expect(pkg.scripts?.check).toContain("bun run build");
   expect(pkg.scripts?.check).toContain("bun run agent:check");
   expect(pkg.scripts?.check).toContain("bun run test");
-  expect(pkg.scripts?.prepublishOnly).toBe("bun run check");
+  expect(pkg.scripts?.prepublishOnly).toBe("bun run build");
   expect(readme).toContain("bun run test");
   expect(readme).not.toContain("\n# Run tests\nbun test\n");
 });
