@@ -56,9 +56,7 @@ export async function replayAllAgentRecords(
   const suiteDir = resolve(
     options.artifactsRoot?.trim() ? options.artifactsRoot.trim() : join(".tmp", "agent-replay-all"),
   );
-  const filePaths = listReplayFiles(dir, {
-    skipGeneratedOutputDirs: isSubpath(dir, suiteDir),
-  });
+  const filePaths = listAgentReplayFiles(dir, { artifactsRoot: suiteDir });
   const entries: AgentReplayAllEntry[] = [];
   const startedAt = Date.now();
   const updateSnapshots = options.updateSnapshots ?? false;
@@ -279,7 +277,21 @@ function renderFailedEntryReport(result: AgentRunResult): string {
 </html>`;
 }
 
-function listReplayFiles(
+export function listAgentReplayFiles(
+  dir: string,
+  options: { artifactsRoot?: string } = {},
+): string[] {
+  const resolvedDir = resolve(process.cwd(), dir);
+  const suiteDir = options.artifactsRoot?.trim()
+    ? resolve(process.cwd(), options.artifactsRoot)
+    : null;
+
+  return collectReplayFiles(resolvedDir, {
+    skipGeneratedOutputDirs: suiteDir ? isSubpath(resolvedDir, suiteDir) : false,
+  });
+}
+
+function collectReplayFiles(
   dir: string,
   options: { skipGeneratedOutputDirs?: boolean } = {},
 ): string[] {
@@ -293,7 +305,7 @@ function listReplayFiles(
     if (stat.isDirectory()) {
       if (entry === "replay") continue;
       if (options.skipGeneratedOutputDirs && isGeneratedReplayOutputDir(abs)) continue;
-      out.push(...listReplayFiles(abs, options));
+      out.push(...collectReplayFiles(abs, options));
       continue;
     }
 

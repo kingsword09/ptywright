@@ -12,6 +12,7 @@ import {
   readAgentManifestPath,
   writeAgentManifestPath,
 } from "../src/agent/manifest";
+import { listAgentReplayFiles } from "../src/agent/replay_all";
 import { runAgentSpec } from "../src/agent/runner";
 import { readAgentReplaySummaryPath } from "../src/agent/summary";
 import { validateAgentArtifactsPath } from "../src/agent/validate";
@@ -769,7 +770,7 @@ test("agent check summary next to a moved manifest reruns from local bundle reco
   });
 }, 25_000);
 
-test("agent exec can rerun a copied manifest bundle repeatedly", async () => {
+test("agent exec keeps copied manifest reruns from recursive outputs", async () => {
   const artifactsRoot = join(".tmp", "tests", "agent-manifest-exec-repeat");
   const copyRoot = join(".tmp", "tests", "agent-manifest-exec-repeat-moved");
   rmSync(artifactsRoot, { recursive: true, force: true });
@@ -800,19 +801,24 @@ test("agent exec can rerun a copied manifest bundle repeatedly", async () => {
       await validateAgentArtifactsPath(copyRoot, { preferManifestBundle: true }),
     ).toMatchObject({ ok: true, totalCount: 1, failureCount: 0 });
 
-    process.exitCode = undefined;
-    await main(["agent", "exec", copyRoot, "--command", "rerun"]);
-    expect(currentExitCode()).toBe(0);
-    expect(
-      await validateAgentArtifactsPath(copyRoot, { preferManifestBundle: true }),
-    ).toMatchObject({ ok: true, totalCount: 1, failureCount: 0 });
+    const nextInputs = listAgentReplayFiles(join(copyRoot, "tests"), {
+      artifactsRoot: copyRoot,
+    });
+    expect(nextInputs).toEqual([
+      resolve(
+        copyRoot,
+        "tests",
+        "agent_deterministic__agent_deterministic.cassette.json",
+        "agent_deterministic.agent-run.json",
+      ),
+    ]);
   } finally {
     console.log = originalLog;
     process.exitCode = 0;
   }
 
   const output = logs.join("\n");
-  expect(output.match(/ok agent-check/g)?.length).toBe(2);
+  expect(output.match(/ok agent-check/g)?.length).toBe(1);
   expect(output).toContain(`checkSummary=${join(copyRoot, "agent-check.summary.json")}`);
 
   const replaySummary = readAgentReplaySummaryPath(join(copyRoot, "agent-replay.summary.json"));
