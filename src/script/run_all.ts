@@ -62,6 +62,7 @@ export async function runAllScripts(options?: RunAllScriptsOptions): Promise<Run
   const { reportPath, summaryPath } = writeSuiteReportArtifacts({
     dir,
     suiteDir,
+    stepsPath,
     durationMs,
     entries,
   });

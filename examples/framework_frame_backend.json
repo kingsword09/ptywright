@@ -1,0 +1,20 @@
+{
+  "$schema": "../schemas/ptywright-script.schema.json",
+  "name": "framework_frame_backend",
+  "launch": {
+    "backend": "ratatui",
+    "cols": 60,
+    "rows": 12,
+    "frames": [
+      "PTYWRIGHT TUI DEMO\n\nScreen: Dashboard\nMode: HIGH\nstatus: ok selected=dashboard mode=high",
+      "PTYWRIGHT TUI DEMO\n\nScreen: Permissions\nMode: LOW\nstatus: ok selected=permissions mode=low"
+    ]
+  },
+  "steps": [
+    { "type": "waitForText", "text": "Screen: Dashboard" },
+    { "type": "pressKey", "key": "Enter" },
+    { "type": "waitForText", "text": "Screen: Permissions" },
+    { "type": "snapshot", "kind": "text", "saveAs": "final" },
+    { "type": "expect", "from": "final", "contains": ["mode=low"] }
+  ]
+}

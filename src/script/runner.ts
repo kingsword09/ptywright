@@ -9,6 +9,7 @@ import type { TraceReportArtifacts, TraceReportResult } from "../trace/report";
 import { sleep } from "../util/sleep";
 
 import type { TextMaskRule } from "../terminal/mask";
+import { createFrameSessionFromLaunch, type ScriptSession } from "./frame_session";
 import { scriptSchema } from "./schema";
 import type { Script, ScriptStep } from "./schema";
 
@@ -25,7 +26,7 @@ export type ScriptCustomStep<Name extends string = string, Payload = unknown> = 
 };
 
 export type ScriptRunnerContext = {
-  session: ReturnType<SessionManager["launchSession"]>;
+  session: ScriptSession;
   stepIndex: number;
   last: SnapshotRecord | null;
   snapshots: Map<string, SnapshotRecord>;
@@ -85,20 +86,43 @@ export async function runScript(
 
   mkdirSync(artifactsDir, { recursive: true });
 
-  const sessions = new SessionManager({ snapshotRingSize: 50 });
   const launch = parsed.launch;
   // Resolve relative paths from the runner's working directory (not the script file).
   const cwd = launch.cwd ? resolve(process.cwd(), launch.cwd) : process.cwd();
 
-  const session = sessions.launchSession({
-    command: launch.command,
-    args: launch.args ?? [],
-    cwd,
-    env: launch.env,
-    cols: launch.cols,
-    rows: launch.rows,
-    name: launch.name,
-  });
+  const backend = launch.backend ?? "pty";
+  let sessions: SessionManager | null = null;
+  let session: ScriptSession;
+
+  if (backend === "pty") {
+    sessions = new SessionManager({ snapshotRingSize: 50 });
+    if (!launch.command) {
+      throw new Error("launch.command is required when backend=pty");
+    }
+    session = sessions.launchSession({
+      command: launch.command,
+      args: launch.args ?? [],
+      cwd,
+      env: launch.env,
+      cols: launch.cols,
+      rows: launch.rows,
+      name: launch.name,
+    });
+  } else {
+    session = await createFrameSessionFromLaunch({
+      launch,
+      cwd,
+      title: scriptName,
+    });
+  }
+
+  const closeSession = () => {
+    if (sessions) {
+      sessions.closeAll();
+      return;
+    }
+    session.close();
+  };
 
   const snapshots = new Map<string, SnapshotRecord>();
   let last: SnapshotRecord | null = null;
@@ -228,7 +252,7 @@ export async function runScript(
       resolveArtifactPath,
     });
 
-    sessions.closeAll();
+    closeSession();
     return { ok: true, artifactsDir };
   } catch (error) {
     try {
@@ -271,7 +295,7 @@ export async function runScript(
     } catch {
       // ignore best-effort artifact writing
     } finally {
-      sessions.closeAll();
+      closeSession();
     }
 
     throw error;
@@ -287,7 +311,7 @@ function resolveArtifactsDir(script: Script, scriptName: string, override?: stri
 async function runStep(args: {
   step: ScriptStep;
   stepIndex: number;
-  session: ReturnType<SessionManager["launchSession"]>;
+  session: ScriptSession;
   snapshots: Map<string, SnapshotRecord>;
   last: SnapshotRecord | null;
   resolveGoldenPath: (path: string) => string;
@@ -643,7 +667,7 @@ function assertGoldenText(path: string, text: string, update: boolean): void {
 }
 
 async function writeFailureArtifacts(args: {
-  session: ReturnType<SessionManager["launchSession"]>;
+  session: ScriptSession;
   artifactsDir: string;
   scriptName: string;
   stepIndex: number;
@@ -703,7 +727,7 @@ async function writeFailureArtifacts(args: {
 }
 
 async function snapshotStep(
-  session: ReturnType<SessionManager["launchSession"]>,
+  session: ScriptSession,
   step: Extract<ScriptStep, { type: "snapshot" }>,
 ): Promise<SnapshotRecord> {
   if (step.kind === "grid") {
@@ -771,7 +795,7 @@ async function snapshotStep(
 }
 
 async function writeTraceArtifacts(args: {
-  session: ReturnType<SessionManager["launchSession"]>;
+  session: ScriptSession;
   artifactsDir: string;
   saveCast: boolean;
   castPath: string;

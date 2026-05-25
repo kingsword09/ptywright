@@ -1,6 +1,7 @@
 import { mkdirSync, writeFileSync } from "node:fs";
 import { dirname } from "node:path";
 
+import { formatAgentArgv } from "./run_record";
 import type { AgentRunArtifact, AgentRunResult } from "./runner";
 
 export function writeAgentReport(path: string, result: AgentRunResult): void {
@@ -174,6 +175,19 @@ export function renderAgentReportHtml(result: AgentRunResult): string {
         background: color-mix(in oklch, var(--good) 12%, var(--panel));
         color: var(--good);
       }
+      .commands {
+        display: grid;
+        gap: 10px;
+      }
+      .command {
+        display: grid;
+        gap: 5px;
+      }
+      .command span {
+        color: var(--muted);
+        font-size: 13px;
+        font-weight: 700;
+      }
       pre {
         overflow: auto;
         margin: 0;
@@ -205,6 +219,8 @@ export function renderAgentReportHtml(result: AgentRunResult): string {
           <h1>${escapeHtml(result.name)}</h1>
           <div class="meta">
             <span class="status">${status}</span>
+            <span class="pill">${escapeHtml(result.mode)}</span>
+            <span class="pill">${escapeHtml(result.agentFlavor)}</span>
             ${viewportTabs}
             <span class="pill">${escapeHtml(new Date(result.startedAt).toISOString())}</span>
           </div>
@@ -214,12 +230,24 @@ export function renderAgentReportHtml(result: AgentRunResult): string {
       <section class="summary">
         <div class="metric"><strong>${result.steps.length}</strong><span>Recorded steps</span></div>
         <div class="metric"><strong>${result.artifacts.length}</strong><span>Snapshot artifacts</span></div>
+        <div class="metric"><strong>${result.cassetteFrameCount}</strong><span>Cassette frames</span></div>
         <div class="metric"><strong>${result.durationMs}ms</strong><span>Wall time</span></div>
       </section>
 
       <section class="panel">
-        <h2>Replay</h2>
-        <pre>${escapeHtml(result.replayCommand)}</pre>
+        <h2>Commands</h2>
+        <div class="commands">
+          ${renderCommandBlock("replay", result.commands.replay.argv)}
+          ${renderCommandBlock("update snapshots", result.commands.updateSnapshots.argv)}
+          ${renderCommandBlock("inspect commands", [
+            "ptywright",
+            "agent",
+            "commands",
+            result.recordPath,
+            "--json",
+          ])}
+        </div>
+        <p><code>${escapeHtml(result.replaySourceCassettePath ?? result.cassettePath)}</code></p>
       </section>
 
       <section class="panel">
@@ -233,6 +261,13 @@ export function renderAgentReportHtml(result: AgentRunResult): string {
 </html>`;
 }
 
+function renderCommandBlock(label: string, argv: readonly string[]): string {
+  return `<div class="command">
+    <span>${escapeHtml(label)}</span>
+    <pre>${escapeHtml(formatAgentArgv(argv))}</pre>
+  </div>`;
+}
+
 function renderArtifactRow(
   artifact: AgentRunArtifact,
   artifactsDir: string,
@@ -242,6 +277,9 @@ function renderArtifactRow(
   const href = relativeHref(reportPath, artifact.path, artifactsDir);
   const baselineHref = artifact.baselinePath
     ? relativeHref(reportPath, artifact.baselinePath, artifactsDir)
+    : "";
+  const diffHref = artifact.diffPath
+    ? relativeHref(reportPath, artifact.diffPath, artifactsDir)
     : "";
   const screenshot =
     artifact.kind === "screenshot" && artifact.path
@@ -254,6 +292,7 @@ function renderArtifactRow(
       ${screenshot}
       <div><code>${escapeHtml(artifact.viewport)} / ${escapeHtml(artifact.name)}</code></div>
       ${baselineHref ? `<div><code>baseline ${escapeHtml(baselineHref)}</code></div>` : ""}
+      ${diffHref ? `<div><a href="${escapeAttribute(diffHref)}">diff</a></div>` : ""}
       ${artifact.error ? `<div><code>${escapeHtml(artifact.error)}</code></div>` : ""}
     </div>
     <code>${escapeHtml(artifact.hash ?? "")}</code>

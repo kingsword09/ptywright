@@ -19,6 +19,7 @@ export const agentViewportSchema = z.object({
 export const agentLaunchSchema = z
   .object({
     mode: z.enum(["aitty", "url"]).optional(),
+    agentFlavor: z.enum(["codex", "claude", "droid", "generic"]).optional(),
     command: z.string().min(1).optional(),
     args: z.array(z.string()).optional(),
     cwd: z.string().optional(),

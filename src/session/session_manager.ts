@@ -1,5 +1,4 @@
-import { BunPtyAdapter } from "../pty/bun_pty_adapter";
-import { BunTerminalAdapter } from "../pty/bun_terminal_adapter";
+import { createDefaultPtyAdapter } from "../pty/default_adapter";
 import type { PtyAdapter } from "../pty/pty_adapter";
 import { TerminalSession } from "./terminal_session";
 
@@ -90,16 +89,6 @@ export class SessionManager {
       this.sessions.delete(id);
     }
   }
-}
-
-function createDefaultPtyAdapter(): PtyAdapter {
-  const backend = (process.env.TUI_TEST_PTY_BACKEND ?? "auto").toLowerCase();
-
-  if (backend === "bun-pty") return new BunPtyAdapter();
-  if (backend === "bun-terminal") return new BunTerminalAdapter();
-
-  // auto
-  return process.platform === "win32" ? new BunPtyAdapter() : new BunTerminalAdapter();
 }
 
 function clampInt(value: number, min: number, max: number): number {

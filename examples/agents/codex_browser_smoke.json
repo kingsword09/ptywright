@@ -1,0 +1,33 @@
+{
+  "$schema": "../../schemas/ptywright-agent.schema.json",
+  "name": "codex_browser_smoke",
+  "artifactsDir": ".tmp/agent/codex_browser_smoke",
+  "snapshotDir": "tests/agent-snapshots/codex_browser_smoke",
+  "launch": {
+    "mode": "aitty",
+    "agentFlavor": "codex",
+    "command": "codex",
+    "args": [],
+    "aitty": {
+      "project": "ptywright",
+      "label": "codex",
+      "title": "codex browser smoke",
+      "subtitle": "browser-hosted terminal agent regression",
+      "theme": "light",
+      "fontSize": 14,
+      "waitForUrlMs": 15000
+    }
+  },
+  "viewports": [
+    { "name": "desktop", "width": 1280, "height": 820 },
+    { "name": "mobile", "width": 390, "height": 844, "isMobile": true, "hasTouch": true }
+  ],
+  "defaults": {
+    "timeoutMs": 45000,
+    "screenshot": true
+  },
+  "steps": [
+    { "type": "waitForStableDom", "timeoutMs": 45000, "quietMs": 600, "intervalMs": 150 },
+    { "type": "snapshot", "name": "launch", "targets": ["terminal", "dom", "screenshot"] }
+  ]
+}

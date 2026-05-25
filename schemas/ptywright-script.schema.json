@@ -31,8 +31,12 @@
     "launch": {
       "type": "object",
       "additionalProperties": false,
-      "required": ["command"],
       "properties": {
+        "backend": {
+          "type": "string",
+          "enum": ["pty", "frames", "ink", "ratatui"],
+          "default": "pty"
+        },
         "command": { "type": "string", "minLength": 1 },
         "args": { "type": "array", "items": { "type": "string" } },
         "cwd": { "type": "string" },
@@ -42,8 +46,56 @@
         },
         "cols": { "type": "integer", "minimum": 1 },
         "rows": { "type": "integer", "minimum": 1 },
-        "name": { "type": "string" }
-      }
+        "name": { "type": "string" },
+        "frame": { "type": "string" },
+        "frames": {
+          "type": "array",
+          "items": {
+            "oneOf": [
+              { "type": "string" },
+              {
+                "type": "object",
+                "additionalProperties": false,
+                "properties": {
+                  "name": { "type": "string" },
+                  "text": { "type": "string" },
+                  "frame": { "type": "string" },
+                  "snapshot": { "type": "string" },
+                  "lastFrame": { "type": "string" }
+                },
+                "anyOf": [
+                  { "required": ["text"] },
+                  { "required": ["frame"] },
+                  { "required": ["snapshot"] },
+                  { "required": ["lastFrame"] }
+                ]
+              }
+            ]
+          }
+        },
+        "framePath": { "type": "string" },
+        "frameModule": { "type": "string" },
+        "advanceOnInput": { "type": "boolean" }
+      },
+      "allOf": [
+        {
+          "if": {
+            "anyOf": [
+              { "not": { "required": ["backend"] } },
+              { "properties": { "backend": { "const": "pty" } }, "required": ["backend"] }
+            ]
+          },
+          "then": { "required": ["command"] },
+          "else": {
+            "anyOf": [
+              { "required": ["frame"] },
+              { "required": ["frames"] },
+              { "required": ["framePath"] },
+              { "required": ["frameModule"] }
+            ]
+          }
+        }
+      ]
     },
     "trace": {
       "type": "object",

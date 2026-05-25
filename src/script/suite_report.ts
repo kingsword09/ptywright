@@ -2,6 +2,14 @@ import { mkdirSync, writeFileSync } from "node:fs";
 import { basename, dirname, join, relative } from "node:path";
 
 import type { RunScriptPathResult } from "./path";
+import { scriptManifestPath, writeScriptManifestPath } from "./manifest";
+import {
+  makeScriptRunSummaryCommands,
+  writeScriptRunSummaryPath,
+  type ScriptRunFailureArtifacts,
+  type ScriptRunSummary,
+  type ScriptRunSummaryEntry,
+} from "./summary";
 
 export type SuiteReportEntry = {
   filePath: string;
@@ -9,40 +17,10 @@ export type SuiteReportEntry = {
   result: RunScriptPathResult;
 };
 
-export type SuiteRunFailureArtifacts = {
-  lastTextPath: string;
-  lastViewPath: string;
-  stepPath: string;
-  errorPath: string;
-};
-
-export type SuiteRunSummary = {
-  version: 1;
-  ok: boolean;
-  dir: string;
-  suiteDir: string;
-  totalCount: number;
-  failureCount: number;
-  durationMs: number;
-  reportPath: string;
-  summaryPath: string;
-  entries: Array<{
-    filePath: string;
-    filePathRel: string;
-    scriptName: string;
-    ok: boolean;
-    durationMs: number;
-    artifactsDir?: string;
-    reportPath?: string;
-    castPath?: string;
-    error?: string;
-    failureArtifacts?: SuiteRunFailureArtifacts;
-  }>;
-};
-
 export function writeSuiteReportArtifacts(args: {
   dir: string;
   suiteDir: string;
+  stepsPath?: string;
   durationMs: number;
   entries: SuiteReportEntry[];
 }): { reportPath: string; summaryPath: string } {
@@ -53,17 +31,18 @@ export function writeSuiteReportArtifacts(args: {
 
   const failures = args.entries.filter((e) => !e.result.ok);
 
-  const summary: SuiteRunSummary = {
+  const summary: ScriptRunSummary = {
     version: 1,
     ok: failures.length === 0,
     dir: args.dir,
     suiteDir: args.suiteDir,
+    commands: makeScriptRunSummaryCommands(args),
     totalCount: args.entries.length,
     failureCount: failures.length,
     durationMs: args.durationMs,
     reportPath,
     summaryPath,
-    entries: args.entries.map((entry) => {
+    entries: args.entries.map((entry): ScriptRunSummaryEntry => {
       const filePathRel = normalizePath(relative(process.cwd(), entry.filePath));
       const scriptName =
         entry.result.scriptName ?? basename(entry.filePath).replace(/\.(json|ts)$/i, "");
@@ -85,23 +64,80 @@ export function writeSuiteReportArtifacts(args: {
         ...common,
         ok: false,
         error: entry.result.error,
-        failureArtifacts: entry.result.failureArtifacts as SuiteRunFailureArtifacts | undefined,
+        failureArtifacts: entry.result.failureArtifacts as ScriptRunFailureArtifacts | undefined,
       };
     }),
   };
 
-  writeFileSync(summaryPath, `${JSON.stringify(summary, null, 2)}\n`, "utf8");
+  writeScriptRunSummaryPath(summaryPath, summary);
 
   const html = renderSuiteReportHtml({ reportPath, summaryPath, summary });
   writeFileSync(reportPath, html, "utf8");
+  writeSuiteManifest({
+    suiteDir: args.suiteDir,
+    summary,
+  });
 
   return { reportPath, summaryPath };
+}
+
+function writeSuiteManifest(args: { suiteDir: string; summary: ScriptRunSummary }): void {
+  writeScriptManifestPath(scriptManifestPath(args.suiteDir), {
+    ok: args.summary.ok,
+    rootDir: args.suiteDir,
+    primaryPath: args.summary.summaryPath,
+    commands: args.summary.commands,
+    totalCount: args.summary.totalCount,
+    failureCount: args.summary.failureCount,
+    files: [
+      { path: args.summary.summaryPath, kind: "run-summary", role: "summary", ok: args.summary.ok },
+      { path: args.summary.reportPath, kind: "report", role: "suite-report", ok: args.summary.ok },
+      ...args.summary.entries.flatMap((entry) => [
+        { path: entry.reportPath, kind: "report" as const, role: "entry-report", ok: entry.ok },
+        { path: entry.castPath, kind: "cast" as const, role: "cast", ok: entry.ok },
+        {
+          path: entry.artifactsDir ? join(entry.artifactsDir, "test.data.js") : undefined,
+          kind: "data" as const,
+          role: "test-data",
+          ok: entry.ok,
+        },
+        ...(!entry.ok && entry.failureArtifacts
+          ? [
+              {
+                path: entry.failureArtifacts.lastTextPath,
+                kind: "failure" as const,
+                role: "last-text",
+                ok: false,
+              },
+              {
+                path: entry.failureArtifacts.lastViewPath,
+                kind: "failure" as const,
+                role: "last-view",
+                ok: false,
+              },
+              {
+                path: entry.failureArtifacts.stepPath,
+                kind: "failure" as const,
+                role: "step",
+                ok: false,
+              },
+              {
+                path: entry.failureArtifacts.errorPath,
+                kind: "failure" as const,
+                role: "error",
+                ok: false,
+              },
+            ]
+          : []),
+      ]),
+    ],
+  });
 }
 
 function renderSuiteReportHtml(args: {
   reportPath: string;
   summaryPath: string;
-  summary: SuiteRunSummary;
+  summary: ScriptRunSummary;
 }): string {
   const title = "ptywright script report";
 

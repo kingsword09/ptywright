@@ -62,12 +62,18 @@
 - [x] M1：确定性 UI 回归（grid style-runs + golden + 边界 fixtures）
 - [x] M2：Trace/录像产物（cast + report + 可选 gif/svg）
 - [x] M3：交互增强（鼠标/点击）
-- [ ] M4：框架特化加速（ratatui/ink adapters）
-- [ ] M5：Agent/LLM 测试分层（stub/record-replay + live smoke）
+- [x] M4：框架特化加速（ratatui/ink adapters）
+- [x] M5：Agent/LLM 测试分层（stub/record-replay + live smoke）
   - [x] M5.1：快照 mask/normalize（避免断言不稳定文案）
   - [x] M5.2：Script runner（JSON 脚本化用例 + report/golden）
-  - [ ] M5.3：LLM cassette（record/replay + live smoke）
+  - [x] M5.3：LLM cassette（record/replay + live smoke）
+  - [x] M5.4：可搬运回归产物（本地 cassette 副本 + manifest/hash/commands）
 - [x] M6：文档驱动测试生成（doc → script generator）
+- [x] M7：Raw PTY cassette（通用 PTY stream record/replay）
+  - [x] M7.1：base64 output/input/resize/exit schema
+  - [x] M7.2：`node-pty`/`bun-pty` style `wrapPtyLike`
+  - [x] M7.3：Bun Terminal callback hooks
+  - [x] M7.4：`pty record/replay/inspect/validate` CLI
 
 ## Surprises & Discoveries
 - 有 Rust TUI 项目通过 `vt100` 虚拟终端后端做快照测试，证明“字符栅格快照”是稳定且高性价比的回归手段。

@@ -1,0 +1,75 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://ptywright.local/schemas/ptywright-script-manifest.schema.json",
+  "title": "ptywright script artifact manifest",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "version",
+    "kind",
+    "ok",
+    "generatedAt",
+    "rootDir",
+    "primaryPath",
+    "commands",
+    "totalCount",
+    "failureCount",
+    "files"
+  ],
+  "properties": {
+    "$schema": { "type": "string" },
+    "version": { "const": 1 },
+    "kind": { "const": "run-suite" },
+    "ok": { "type": "boolean" },
+    "generatedAt": { "type": "string", "minLength": 1 },
+    "rootDir": { "type": "string", "minLength": 1 },
+    "primaryPath": { "type": "string", "minLength": 1 },
+    "commands": {
+      "type": "object",
+      "additionalProperties": { "$ref": "#/$defs/command" },
+      "minProperties": 1
+    },
+    "totalCount": { "type": "integer", "minimum": 0 },
+    "failureCount": { "type": "integer", "minimum": 0 },
+    "files": {
+      "type": "array",
+      "items": { "$ref": "#/$defs/file" }
+    }
+  },
+  "$defs": {
+    "command": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["argv"],
+      "properties": {
+        "argv": { "$ref": "#/$defs/runAllArgv" }
+      }
+    },
+    "runAllArgv": {
+      "type": "array",
+      "minItems": 2,
+      "prefixItems": [{ "const": "ptywright" }, { "const": "run-all" }],
+      "items": { "type": "string", "minLength": 1 }
+    },
+    "file": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["path", "kind", "bytes", "sha256"],
+      "properties": {
+        "path": {
+          "type": "string",
+          "minLength": 1,
+          "description": "Path to the artifact file, relative to the manifest directory when the file is inside the artifact root."
+        },
+        "kind": {
+          "type": "string",
+          "enum": ["run-summary", "report", "cast", "data", "failure"]
+        },
+        "role": { "type": "string", "minLength": 1 },
+        "ok": { "type": "boolean" },
+        "bytes": { "type": "integer", "minimum": 0 },
+        "sha256": { "type": "string", "pattern": "^[a-f0-9]{64}$" }
+      }
+    }
+  }
+}

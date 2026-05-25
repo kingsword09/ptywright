@@ -88,6 +88,46 @@ bunx ptywright@latest run-all --dir scripts
 bunx ptywright@latest --help
 ```
 
+### Raw PTY Cassette
+
+`ptywright pty` 可以把一次真实 PTY 会话的原始 output/input/resize/exit
+事件固化成 JSON，之后不再重新运行原命令，直接回放同一段原始终端流。它用于
+给浏览器终端渲染器做稳定回归：例如先录一次 Codex，再反复用同一份 cassette
+验证网页端 DOM/text snapshot 是否一致。
+
+```bash
+# 录制为 base64 PTY 事件
+bunx ptywright@latest pty record --out tests/cassettes/codex.pty.json -- codex
+
+# 不重新启动 codex，直接回放同一段输出流
+bunx ptywright@latest pty replay tests/cassettes/codex.pty.json
+
+# 校验或查看可搬运产物
+bunx ptywright@latest pty validate tests/cassettes/codex.pty.json
+bunx ptywright@latest pty inspect tests/cassettes/codex.pty.json
+```
+
+外部项目不需要依赖 aitty。`node-pty` / `bun-pty` 这类对象可直接用结构化
+`wrapPtyLike` 接入：
+
+```ts
+import { wrapPtyLike } from "ptywright/pty-cassette";
+
+const recorded = wrapPtyLike(pty, {
+  path: "tests/cassettes/session.pty.json",
+  terminal: { cols: 120, rows: 40, term: "xterm-256color" },
+  command: { file: "codex", args: [] },
+});
+
+recorded.write("hello\r");
+// output 和 exit 会从 pty.onData/onExit 自动捕获
+```
+
+Bun Terminal 这类 callback 风格也能接：创建 recorder 后在 `data` hook
+里调用 `recordOutput`，或使用 `wrapBunTerminalOptions`。回放时把同一份
+cassette 喂给任意浏览器终端渲染器，再由该项目的 DOM/text snapshot 测试自动
+比较即可。
+
 ## Tools
 
 工具默认全量开启（等价 `--caps all`）。如需减少 tool 数量，可设置 `--caps core` 或按需组合：
@@ -162,6 +202,23 @@ bunx ptywright@latest run-all --dir scripts
 批量运行会生成总览报告：
 - 默认：`.tmp/run-all/index.html` + `.tmp/run-all/run.summary.json`
 - 若传入 `--artifacts-root <dir>`：写到 `<dir>/index.html` + `<dir>/run.summary.json`
+- `run.summary.json` 会保存 `commands.runAll.argv` 与
+  `commands.updateGoldens.argv`，后续自动化可以直接重跑套件或更新
+  goldens，无需重新拼 CLI 参数。
+
+可以直接从产物读取、校验或执行这些命令：
+
+```bash
+bunx ptywright@latest script commands .tmp/run-all --json
+bunx ptywright@latest script inspect .tmp/run-all
+bunx ptywright@latest script validate .tmp/run-all
+bunx ptywright@latest script exec .tmp/run-all --command updateGoldens
+```
+
+批量产物目录还会包含 `ptywright-script.manifest.json`，用
+`bytes`/`sha256` 索引 summary、report、cast、data 与失败产物。`script
+validate` / `script inspect` / `script commands` / `script exec` 在使用目录
+bundle 前都会先校验 manifest，便于把测试产物复制到其他位置后继续回放或更新。
 
 失败时会额外落盘：
 - `failure.error.txt`（错误堆栈）
@@ -177,6 +234,39 @@ bunx ptywright@latest run-all --dir scripts
 - `expectMeta`：断言终端 meta
 - `waitForExit`：等待进程退出
 - `sendMouse`：发送 SGR 鼠标事件
+
+### 框架内 Backends
+
+`launch.backend` 默认是 `pty`。如果要做更快、更确定的框架内回归，可以用
+`frames`、`ratatui` 或 `ink`，不启动 PTY，直接让同一套 script steps 对
+deterministic frame 做断言：
+
+```json
+{
+  "$schema": "../schemas/ptywright-script.schema.json",
+  "name": "ratatui_snapshot",
+  "launch": {
+    "backend": "ratatui",
+    "cols": 60,
+    "rows": 12,
+    "frames": [
+      "Screen: Dashboard\nMode: HIGH",
+      "Screen: Permissions\nMode: LOW"
+    ]
+  },
+  "steps": [
+    { "type": "waitForText", "text": "Dashboard" },
+    { "type": "pressKey", "key": "Enter" },
+    { "type": "snapshot", "kind": "text", "saveAs": "final" },
+    { "type": "expect", "from": "final", "contains": ["Mode: LOW"] }
+  ]
+}
+```
+
+`ratatui` 用于接入 `TestBackend` / insta 风格的文本快照；`ink` 可以通过
+`frameModule` 加载导出 `frames`、`frame`、`snapshot` 或 `lastFrame` 的 TS
+模块。`pressKey` / `sendText` 默认会推进到下一帧，因此端到端 PTY 脚本和
+框架内快速回归可以复用同一套断言步骤。
 
 如果 JSON 里用到了 `type:"custom"`，用 `--steps <module.ts>` 注入 handlers：
 
@@ -206,6 +296,53 @@ bunx ptywright@latest run scripts/demo.ts
 - 可选导出 `steps`（custom step handlers），用于执行 `type:"custom"` 的步骤。
 - 需要测试"粘贴"时可用 `pasteText("...", { bracketed: true })`（bracketed paste）。
 
+## Browser Agent 回归
+
+ptywright 可以启动浏览器里的终端 agent 页面，录制终端/DOM snapshot 与
+cassette。一次 live run 通过后，可以把 cassette 固化为不依赖 AI 的回归
+用例，后续直接用命令重放、对比或更新快照。
+
+```bash
+# 首次 live run：写入 snapshot、cassette、run record、report。
+bun run bin/ptywright agent run examples/agent_deterministic.json --update-snapshots
+
+# 非 AI 单用例回放：可传 run record 或 cassette。
+bun run bin/ptywright agent replay .tmp/agent/agent_deterministic/agent_deterministic.agent-run.json
+bun run bin/ptywright agent replay .tmp/agent/agent_deterministic/agent_deterministic.cassette.json
+
+# 把一次成功的 live run/cassette 提升为提交内回归套件。
+bun run bin/ptywright agent promote \
+  .tmp/agent/agent_deterministic/agent_deterministic.cassette.json \
+  --update-snapshots
+
+# 批量回放已提交 cassette，并在有意变更时更新 terminal/DOM baseline。
+bun run bin/ptywright agent check
+bun run bin/ptywright agent replay-all tests/agent-cassettes --update-snapshots
+
+# 从产物读取、校验或直接执行可复用命令。
+bun run bin/ptywright agent commands .tmp/agent-check --json
+bun run bin/ptywright agent inspect .tmp/agent-check
+bun run bin/ptywright agent validate .tmp/agent-check
+bun run bin/ptywright agent exec .tmp/agent-check --command rerun
+bun run bin/ptywright agent exec .tmp/agent-check --command updateSnapshots
+
+# 从 summary 产物重新执行，不需要 live agent。
+bun run bin/ptywright agent rerun .tmp/agent-check/agent-check.summary.json
+bun run bin/ptywright agent rerun .tmp/agent-check/agent-replay.summary.json --update-snapshots
+```
+
+关键产物：
+- `.agent-run.json`：每次运行的结构化记录，包含 `commands.replay.argv`
+  与 `commands.updateSnapshots.argv`。
+- `.cassette.json`：包含标准化 flow spec、terminal/DOM 帧与 hash，可直接回放。
+- `agent-replay.summary.json` / `agent-check.summary.json` /
+  `agent-promote.summary.json`：批量回放、提交检查、提升操作的 summary。
+- `ptywright-agent.manifest.json`：索引目录内产物及 hash，使复制后的产物目录仍可
+  `agent inspect` / `agent commands` / `agent exec` / `agent validate`。
+
+`--update-snapshots` 是唯一的显式更新入口；默认 replay/check 都是对比模式，
+用于像 Vitest snapshot 一样阻止特定流程回归。
+
 ## Cast -> SVG/GIF (可选)
 
 录像类产物建议只用于失败诊断或人工验收；稳定回归优先用 `snapshot_grid` 做 diff。
@@ -221,8 +358,10 @@ bun install
 # 启动 MCP server
 bun run bin/ptywright mcp
 
-# 运行测试
-bun test
+# 运行测试与提交前检查
+bun run test
+bun run agent:check
+bun run check
 
 # Lint & Format
 bun run lint
@@ -231,6 +370,9 @@ bun run format:check
 # 运行脚本
 bun run bin/ptywright run scripts/m5_mask_demo.json
 bun run bin/ptywright run-all
+
+# 运行 browser agent 回归
+bun run bin/ptywright agent run examples/agent_deterministic.json --update-snapshots
 ```
 
 ## 环境变量

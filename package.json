@@ -39,6 +39,7 @@
     ".": "./src/cli.ts",
     "./agent": "./src/agent/runner.ts",
     "./mcp": "./src/mcp/server.ts",
+    "./pty-cassette": "./src/pty-cassette/index.ts",
     "./session": "./src/session/terminal_session.ts",
     "./script": "./src/script/runner.ts"
   },
@@ -46,17 +47,19 @@
     "dev": "vp dev",
     "mcp": "bun run src/index.ts",
     "agent": "bun run src/cli.ts agent",
-    "test": "bun test",
+    "agent:check": "bun run src/cli.ts agent check",
+    "check": "bun run format:check && bun run lint && bun run test && bun run agent:check",
+    "test": "bun run scripts/test_all.ts",
     "test:mcp-all-tools": "bun test tests/mcp_all_tools_smoke.test.ts",
     "lint": "vp lint src tests examples package.json tsconfig.json vite.config.ts",
-    "format": "vp fmt src tests examples package.json tsconfig.json vite.config.ts '!tests/fixtures/**' '!tests/golden/**' '!tests/agent-snapshots/**'",
-    "format:check": "vp fmt --check src tests examples package.json tsconfig.json vite.config.ts '!tests/fixtures/**' '!tests/golden/**' '!tests/agent-snapshots/**'",
+    "format": "vp fmt src tests examples schemas package.json tsconfig.json vite.config.ts '!tests/fixtures/**' '!tests/golden/**' '!tests/agent-snapshots/**'",
+    "format:check": "vp fmt --check src tests examples schemas package.json tsconfig.json vite.config.ts '!tests/fixtures/**' '!tests/golden/**' '!tests/agent-snapshots/**'",
     "trace:report": "bun run src/trace/report.ts",
     "trace:cast-to-txt": "bun run src/trace/cast_to_txt.ts",
     "script:run": "bun run src/script/run.ts",
     "script:run-all": "bun run src/script/run_all.ts",
     "script:m5-mask-demo": "bun run src/script/run.ts scripts/m5_mask_demo.json",
-    "prepublishOnly": "bun run format:check && bun run lint && bun test"
+    "prepublishOnly": "bun run check"
   },
   "dependencies": {
     "@modelcontextprotocol/sdk": "^1.25.2",

@@ -1,0 +1,5 @@
+PTYWRIGHT TUI DEMO
+
+Screen: Permissions
+Mode: LOW
+status: ok selected=permissions mode=low

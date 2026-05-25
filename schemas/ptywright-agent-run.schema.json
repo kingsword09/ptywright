@@ -1,0 +1,126 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://ptywright.local/schemas/ptywright-agent-run.schema.json",
+  "title": "ptywright agent run record",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "version",
+    "name",
+    "ok",
+    "startedAt",
+    "durationMs",
+    "mode",
+    "artifactsDir",
+    "snapshotDir",
+    "reportPath",
+    "cassetteFrameCount",
+    "replayCommand",
+    "commands",
+    "steps",
+    "artifacts",
+    "errors"
+  ],
+  "anyOf": [
+    { "required": ["cassettePath"] },
+    { "required": ["flowPath"] },
+    { "required": ["spec"] }
+  ],
+  "properties": {
+    "$schema": { "type": "string" },
+    "version": { "const": 1 },
+    "name": { "type": "string", "minLength": 1 },
+    "ok": { "type": "boolean" },
+    "startedAt": { "type": "string", "minLength": 1 },
+    "durationMs": { "type": "integer", "minimum": 0 },
+    "mode": { "type": "string", "enum": ["live", "replay"] },
+    "spec": { "$ref": "./ptywright-agent.schema.json" },
+    "flowPath": { "type": "string", "minLength": 1 },
+    "artifactsDir": { "type": "string", "minLength": 1 },
+    "snapshotDir": { "type": "string", "minLength": 1 },
+    "reportPath": { "type": "string", "minLength": 1 },
+    "cassettePath": { "type": "string", "minLength": 1 },
+    "cassetteFrameCount": { "type": "integer", "minimum": 0 },
+    "replayCommand": { "type": "string", "minLength": 1 },
+    "commands": { "$ref": "#/$defs/commands" },
+    "steps": {
+      "type": "array",
+      "items": { "$ref": "#/$defs/step" }
+    },
+    "artifacts": {
+      "type": "array",
+      "items": { "$ref": "#/$defs/artifact" }
+    },
+    "errors": {
+      "type": "array",
+      "items": { "type": "string" }
+    }
+  },
+  "$defs": {
+    "replayCommand": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["argv"],
+      "properties": {
+        "argv": { "$ref": "#/$defs/replayArgv" }
+      }
+    },
+    "replayUpdateCommand": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["argv"],
+      "properties": {
+        "argv": {
+          "allOf": [
+            { "$ref": "#/$defs/replayArgv" },
+            { "contains": { "const": "--update-snapshots" } }
+          ]
+        }
+      }
+    },
+    "replayArgv": {
+      "type": "array",
+      "minItems": 4,
+      "prefixItems": [{ "const": "ptywright" }, { "const": "agent" }, { "const": "replay" }],
+      "items": { "type": "string", "minLength": 1 }
+    },
+    "commands": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["replay", "updateSnapshots"],
+      "properties": {
+        "replay": { "$ref": "#/$defs/replayCommand" },
+        "updateSnapshots": { "$ref": "#/$defs/replayUpdateCommand" }
+      }
+    },
+    "step": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["index", "type", "label", "durationMs", "ok"],
+      "properties": {
+        "index": { "type": "integer", "minimum": 0 },
+        "type": { "type": "string", "minLength": 1 },
+        "label": { "type": "string" },
+        "durationMs": { "type": "integer", "minimum": 0 },
+        "ok": { "type": "boolean" },
+        "error": { "type": "string" }
+      }
+    },
+    "artifact": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["name", "viewport", "kind", "path", "ok"],
+      "properties": {
+        "name": { "type": "string", "minLength": 1 },
+        "viewport": { "type": "string", "minLength": 1 },
+        "kind": { "type": "string", "enum": ["terminal", "dom", "screenshot"] },
+        "path": { "type": "string", "minLength": 1 },
+        "baselinePath": { "type": "string", "minLength": 1 },
+        "diffPath": { "type": "string", "minLength": 1 },
+        "hash": { "type": "string", "minLength": 1 },
+        "ok": { "type": "boolean" },
+        "error": { "type": "string" }
+      }
+    }
+  }
+}

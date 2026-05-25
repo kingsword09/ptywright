@@ -1,17 +1,40 @@
 import { mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { basename, dirname, extname, isAbsolute, join, relative, resolve } from "node:path";
-import { pathToFileURL } from "node:url";
 
-import { chromium, type Browser, type Page } from "playwright";
+import type { Browser, Page } from "playwright";
 
 import { buildAittyExecCommand, launchAittyBrowserSession } from "./aitty";
+import { launchAgentBrowser } from "./browser";
+import {
+  createAgentCassette,
+  isAgentCassetteLike,
+  normalizeAgentCassette,
+  readAgentCassettePath,
+  startAgentCassetteServer,
+  upsertAgentCassetteFrame,
+  type AgentCassette,
+  type MutableAgentCassette,
+} from "./cassette";
 import {
   normalizeDomSnapshot,
   normalizeTerminalText,
   sanitizeArtifactName,
   shortHash,
 } from "./normalize";
+import { agentManifestPath, writeAgentManifestPath } from "./manifest";
+import { resolveAgentFlavor, resolveAgentMasks } from "./presets";
 import { writeAgentReport } from "./report";
+import {
+  AGENT_RUN_RECORD_SCHEMA_URL,
+  formatAgentArgv,
+  readAgentRunRecordPath,
+  writeAgentRunRecordPath,
+  type AgentCommandRecord,
+  type AgentRunRecord,
+  type AgentRunArtifactRecord,
+  type AgentRunRecordMode,
+  type AgentRecordedStepRecord,
+} from "./run_record";
 import {
   normalizeAgentFlowSpec,
   type AgentFlowSpec,
@@ -19,37 +42,28 @@ import {
   type AgentTextMaskRule,
   type AgentViewport,
 } from "./schema";
+import { loadAgentSpec } from "./spec_loader";
 
 export type AgentRunnerOptions = {
   artifactsDir?: string;
   updateSnapshots?: boolean;
   headless?: boolean;
   rootDir?: string;
+  replayCassette?: AgentCassette;
+  replaySourceCassettePath?: string;
 };
 
-export type AgentRunArtifact = {
-  name: string;
-  viewport: string;
-  kind: "terminal" | "dom" | "screenshot";
-  path: string;
-  baselinePath?: string;
-  hash?: string;
-  ok: boolean;
-  error?: string;
-};
+export type AgentRunArtifact = AgentRunArtifactRecord;
 
-export type AgentRecordedStep = {
-  index: number;
-  type: AgentFlowStep["type"];
-  label: string;
-  durationMs: number;
-  ok: boolean;
-  error?: string;
-};
+export type AgentRecordedStep = AgentRecordedStepRecord;
+
+export type AgentRunMode = AgentRunRecordMode;
 
 export type AgentRunResult = {
   ok: boolean;
   name: string;
+  mode: AgentRunMode;
+  agentFlavor: string;
   startedAt: number;
   durationMs: number;
   artifactsDir: string;
@@ -57,16 +71,18 @@ export type AgentRunResult = {
   reportPath: string;
   recordPath: string;
   flowPath: string;
+  cassettePath: string;
+  replaySourceCassettePath?: string;
   replayCommand: string;
+  commands: {
+    replay: AgentCommandRecord;
+    updateSnapshots: AgentCommandRecord;
+  };
   viewports: AgentViewport[];
+  cassetteFrameCount: number;
   steps: AgentRecordedStep[];
   artifacts: AgentRunArtifact[];
   errors: string[];
-};
-
-type LoadedAgentSpec = {
-  spec: AgentFlowSpec;
-  path: string;
 };
 
 type RunContext = {
@@ -76,8 +92,12 @@ type RunContext = {
   artifactsDir: string;
   snapshotDir: string;
   updateSnapshots: boolean;
+  recordCassette: boolean;
   masks: readonly AgentTextMaskRule[];
   artifacts: AgentRunArtifact[];
+  replay: boolean;
+  cassette?: MutableAgentCassette;
+  nextReplayPhase: number;
 };
 
 export async function runAgentSpecPath(
@@ -92,17 +112,33 @@ export async function replayAgentRecordPath(
   recordPath: string,
   options: AgentRunnerOptions = {},
 ): Promise<AgentRunResult> {
-  const record = JSON.parse(readFileSync(recordPath, "utf8")) as {
-    flowPath?: unknown;
-    spec?: unknown;
-  };
-  if (typeof record.flowPath !== "string") {
-    if (record.spec && typeof record.spec === "object") {
-      return runAgentSpec(record.spec, options);
-    }
-    throw new Error(`invalid agent record: missing flowPath in ${recordPath}`);
+  const raw = JSON.parse(readFileSync(recordPath, "utf8")) as unknown;
+
+  if (isAgentCassetteLike(raw)) {
+    const cassette = normalizeAgentCassette(raw);
+    return replayAgentCassette(cassette, recordPath, options);
   }
 
+  const record = readAgentRunRecordPath(recordPath);
+
+  if (record.cassettePath) {
+    const cassettePath = isAbsolute(record.cassettePath)
+      ? record.cassettePath
+      : resolve(dirname(recordPath), record.cassettePath);
+    const cassette = readAgentCassettePath(cassettePath, record.spec);
+    return replayAgentCassette(cassette, cassettePath, {
+      ...options,
+      artifactsDir: options.artifactsDir ?? join(dirname(recordPath), "replay"),
+    });
+  }
+
+  if (record.spec) {
+    return runAgentSpec(record.spec, options);
+  }
+
+  if (!record.flowPath) {
+    throw new Error(`invalid agent run record: missing replay source in ${recordPath}`);
+  }
   const flowPath = isAbsolute(record.flowPath)
     ? record.flowPath
     : resolve(dirname(recordPath), record.flowPath);
@@ -125,14 +161,18 @@ export async function runAgentSpec(
   const reportPath = join(artifactsDir, "index.html");
   const recordPath = join(artifactsDir, `${name}.agent-run.json`);
   const flowPath = join(artifactsDir, `${name}.flow.json`);
+  const cassettePath = join(artifactsDir, `${name}.cassette.json`);
   const updateSnapshots = options.updateSnapshots ?? envTruthy(process.env.UPDATE_SNAPSHOTS);
+  const cassette = options.replayCassette ?? createAgentCassette(name, spec);
 
   mkdirSync(artifactsDir, { recursive: true });
   mkdirSync(snapshotDir, { recursive: true });
 
+  const replayArgv = ["ptywright", "agent", "replay", relative(process.cwd(), recordPath)];
   const result: AgentRunResult = {
     ok: true,
     name,
+    mode: options.replayCassette ? "replay" : "live",
     startedAt,
     durationMs: 0,
     artifactsDir,
@@ -140,8 +180,16 @@ export async function runAgentSpec(
     reportPath,
     recordPath,
     flowPath,
-    replayCommand: `ptywright agent replay ${relative(process.cwd(), recordPath)}`,
+    cassettePath,
+    replaySourceCassettePath: options.replaySourceCassettePath,
+    replayCommand: formatAgentArgv(replayArgv),
+    commands: {
+      replay: { argv: replayArgv },
+      updateSnapshots: { argv: [...replayArgv, "--update-snapshots"] },
+    },
+    agentFlavor: resolveAgentFlavor(spec),
     viewports: spec.viewports ?? [],
+    cassetteFrameCount: cassette.frames.length,
     steps: [],
     artifacts: [],
     errors: [],
@@ -151,7 +199,7 @@ export async function runAgentSpec(
 
   let browser: Browser | null = null;
   try {
-    browser = await chromium.launch({ headless: options.headless ?? true });
+    browser = await launchAgentBrowser({ headless: options.headless ?? true });
 
     for (const viewport of spec.viewports ?? []) {
       await runViewport({
@@ -162,6 +210,8 @@ export async function runAgentSpec(
         artifactsDir,
         snapshotDir,
         updateSnapshots,
+        recordCassette: !options.replayCassette,
+        cassette,
         result,
       });
     }
@@ -171,8 +221,15 @@ export async function runAgentSpec(
   } finally {
     await browser?.close();
     result.durationMs = Date.now() - startedAt;
+    if (options.replaySourceCassettePath) {
+      writeFileSync(cassettePath, readFileSync(options.replaySourceCassettePath, "utf8"), "utf8");
+    } else {
+      writeFileSync(cassettePath, JSON.stringify(cassette, null, 2) + "\n", "utf8");
+    }
+    result.cassetteFrameCount = cassette.frames.length;
     writeRunRecord(result, spec);
     writeAgentReport(reportPath, result);
+    writeRunManifest(result);
   }
 
   return result;
@@ -186,10 +243,22 @@ async function runViewport(args: {
   artifactsDir: string;
   snapshotDir: string;
   updateSnapshots: boolean;
+  recordCassette: boolean;
+  cassette?: MutableAgentCassette;
   result: AgentRunResult;
 }): Promise<void> {
-  const { browser, spec, viewport, rootDir, artifactsDir, snapshotDir, updateSnapshots, result } =
-    args;
+  const {
+    browser,
+    spec,
+    viewport,
+    rootDir,
+    artifactsDir,
+    snapshotDir,
+    updateSnapshots,
+    recordCassette,
+    cassette,
+    result,
+  } = args;
   const launchMode = spec.launch.mode ?? (spec.launch.url ? "url" : "aitty");
   const session =
     launchMode === "aitty" ? await launchAittyBrowserSession(spec.launch, { rootDir }) : null;
@@ -208,8 +277,12 @@ async function runViewport(args: {
     artifactsDir,
     snapshotDir,
     updateSnapshots,
-    masks: spec.defaults?.mask ?? [],
+    recordCassette,
+    masks: resolveAgentMasks(spec),
     artifacts: result.artifacts,
+    replay: Boolean(args.cassette && !args.recordCassette),
+    cassette,
+    nextReplayPhase: 0,
   };
 
   try {
@@ -218,6 +291,10 @@ async function runViewport(args: {
       timeout: spec.defaults?.timeoutMs ?? 30_000,
     });
     await waitForTerminalRoot(page, spec.defaults?.timeoutMs ?? 30_000);
+    await captureCassetteFrame(ctx, {
+      stepIndex: null,
+      stepType: "initial",
+    });
 
     for (let i = 0; i < spec.steps.length; i += 1) {
       const step = spec.steps[i]!;
@@ -230,6 +307,10 @@ async function runViewport(args: {
           label: formatStepLabel(step),
           durationMs: Date.now() - started,
           ok: true,
+        });
+        await captureCassetteFrame(ctx, {
+          stepIndex: i,
+          stepType: step.type,
         });
       } catch (error) {
         const message = error instanceof Error ? error.message : String(error);
@@ -252,6 +333,36 @@ async function runViewport(args: {
   }
 }
 
+async function replayAgentCassette(
+  cassette: AgentCassette,
+  cassettePath: string,
+  options: AgentRunnerOptions,
+): Promise<AgentRunResult> {
+  const server = await startAgentCassetteServer(cassette);
+  try {
+    const replaySpec = structuredClone(cassette.spec);
+    const replayCassette = structuredClone(cassette);
+    return await runAgentSpec(
+      {
+        ...replaySpec,
+        launch: {
+          mode: "url",
+          url: server.url,
+          agentFlavor: replaySpec.launch.agentFlavor,
+        },
+      },
+      {
+        ...options,
+        artifactsDir: options.artifactsDir ?? join(dirname(cassettePath), "replay"),
+        replayCassette,
+        replaySourceCassettePath: cassettePath,
+      },
+    );
+  } finally {
+    await server.close();
+  }
+}
+
 async function runStep(ctx: RunContext, step: AgentFlowStep): Promise<void> {
   const timeout = ctx.spec.defaults?.timeoutMs ?? 30_000;
 
@@ -265,21 +376,31 @@ async function runStep(ctx: RunContext, step: AgentFlowStep): Promise<void> {
   }
 
   if (step.type === "typeText") {
-    const root = ctx.page.locator("[data-terminal-root]").first();
-    await root.click({ timeout });
-    await ctx.page.keyboard.type(step.text, { delay: step.delayMs });
-    if (step.enter) {
-      await ctx.page.keyboard.press("Enter");
+    await advanceReplayPhase(ctx);
+    if (!ctx.replay) {
+      const root = ctx.page.locator("[data-terminal-root]").first();
+      await root.click({ timeout });
+      await ctx.page.keyboard.type(step.text, { delay: step.delayMs });
+      if (step.enter) {
+        await ctx.page.keyboard.press("Enter");
+      }
     }
     return;
   }
 
   if (step.type === "pressKey") {
-    await ctx.page.keyboard.press(step.key);
+    await advanceReplayPhase(ctx);
+    if (!ctx.replay) {
+      await ctx.page.keyboard.press(step.key);
+    }
     return;
   }
 
   if (step.type === "click") {
+    await advanceReplayPhase(ctx);
+    if (ctx.replay) {
+      return;
+    }
     if (step.selector) {
       await ctx.page.locator(step.selector).first().click({ timeout });
       return;
@@ -307,13 +428,54 @@ async function runStep(ctx: RunContext, step: AgentFlowStep): Promise<void> {
   }
 
   if (step.type === "sleep") {
-    await new Promise((resolveSleep) => setTimeout(resolveSleep, step.ms));
+    if (!ctx.replay) {
+      await new Promise((resolveSleep) => setTimeout(resolveSleep, step.ms));
+    }
     return;
   }
 
   if (step.type === "mark") {
     return;
   }
+}
+
+async function captureCassetteFrame(
+  ctx: RunContext,
+  frame: {
+    stepIndex: number | null;
+    stepType: string;
+  },
+): Promise<void> {
+  if (!ctx.cassette || !ctx.recordCassette) {
+    return;
+  }
+
+  const phase = ctx.nextReplayPhase;
+  upsertAgentCassetteFrame(ctx.cassette, {
+    viewport: ctx.viewport,
+    phase,
+    stepIndex: frame.stepIndex,
+    stepType: frame.stepType,
+    terminalText: normalizeTerminalText(await readTerminalText(ctx.page), ctx.masks),
+    dom: normalizeDomSnapshot(await readTerminalDom(ctx.page), ctx.masks),
+    capturedAt: new Date().toISOString(),
+  });
+}
+
+async function advanceReplayPhase(ctx: RunContext): Promise<void> {
+  if (!ctx.replay) {
+    ctx.nextReplayPhase += 1;
+    return;
+  }
+
+  ctx.nextReplayPhase += 1;
+  await ctx.page.evaluate((phase) => {
+    const replay = window as Window &
+      typeof globalThis & {
+        __ptywrightReplaySetPhase?: (nextPhase: number) => void;
+      };
+    replay.__ptywrightReplaySetPhase?.(phase);
+  }, ctx.nextReplayPhase);
 }
 
 async function captureSnapshotStep(
@@ -335,6 +497,7 @@ async function captureSnapshotStep(
         kind: "terminal",
         relativePath: `${base}.terminal.txt`,
         baselineRelativePath: `${base}.terminal.snap.txt`,
+        diffRelativePath: `${base}.terminal.diff.txt`,
         content: text + "\n",
         compare: step.compare ?? true,
       });
@@ -348,6 +511,7 @@ async function captureSnapshotStep(
         kind: "dom",
         relativePath: `${base}.dom.html`,
         baselineRelativePath: `${base}.dom.snap.html`,
+        diffRelativePath: `${base}.dom.diff.txt`,
         content: dom + "\n",
         compare: step.compare ?? true,
       });
@@ -373,12 +537,14 @@ async function writeComparableArtifact(
     kind: "terminal" | "dom";
     relativePath: string;
     baselineRelativePath: string;
+    diffRelativePath: string;
     content: string;
     compare: boolean;
   },
 ): Promise<void> {
   const artifactPath = join(ctx.artifactsDir, artifact.relativePath);
   const baselinePath = join(ctx.snapshotDir, artifact.baselineRelativePath);
+  const diffPath = join(ctx.artifactsDir, artifact.diffRelativePath);
   const hash = shortHash(artifact.content);
 
   writeFileSync(artifactPath, artifact.content, "utf8");
@@ -431,12 +597,14 @@ async function writeComparableArtifact(
 
   if (baseline !== artifact.content) {
     const message = `snapshot mismatch ${baselinePath}; rerun with --update-snapshots if intentional`;
+    writeFileSync(diffPath, renderSnapshotDiff(baseline, artifact.content), "utf8");
     ctx.artifacts.push({
       name: artifact.name,
       viewport: ctx.viewport.name,
       kind: artifact.kind,
       path: artifactPath,
       baselinePath,
+      diffPath,
       hash,
       ok: false,
       error: message,
@@ -453,6 +621,26 @@ async function writeComparableArtifact(
     hash,
     ok: true,
   });
+}
+
+function renderSnapshotDiff(expected: string, received: string): string {
+  const expectedLines = expected.split("\n");
+  const receivedLines = received.split("\n");
+  const max = Math.max(expectedLines.length, receivedLines.length);
+  const out = ["--- expected", "+++ received"];
+
+  for (let i = 0; i < max; i += 1) {
+    const before = expectedLines[i];
+    const after = receivedLines[i];
+    if (before === after) {
+      if (before !== undefined) out.push(`  ${before}`);
+      continue;
+    }
+    if (before !== undefined) out.push(`- ${before}`);
+    if (after !== undefined) out.push(`+ ${after}`);
+  }
+
+  return out.join("\n") + "\n";
 }
 
 async function waitForTerminalRoot(page: Page, timeoutMs: number): Promise<void> {
@@ -521,44 +709,71 @@ async function readTerminalDom(page: Page): Promise<string> {
     .evaluate((node) => node.innerHTML);
 }
 
-async function loadAgentSpec(specPath: string): Promise<LoadedAgentSpec> {
-  const resolved = resolve(process.cwd(), specPath);
-  if (resolved.endsWith(".json")) {
-    return {
-      spec: normalizeAgentFlowSpec(JSON.parse(readFileSync(resolved, "utf8"))),
-      path: resolved,
-    };
-  }
-
-  const mod = (await import(`${pathToFileURL(resolved).href}?t=${Date.now()}`)) as {
-    default?: unknown;
-    spec?: unknown;
-  };
-  return {
-    spec: normalizeAgentFlowSpec(mod.default ?? mod.spec),
-    path: resolved,
-  };
-}
-
 function writeRunRecord(result: AgentRunResult, spec: AgentFlowSpec): void {
-  const record = {
+  const record: AgentRunRecord = {
+    $schema: AGENT_RUN_RECORD_SCHEMA_URL,
     version: 1,
     name: result.name,
     ok: result.ok,
     startedAt: new Date(result.startedAt).toISOString(),
     durationMs: result.durationMs,
+    mode: result.mode,
     spec,
     flowPath: relative(dirname(result.recordPath), result.flowPath),
     artifactsDir: result.artifactsDir,
     snapshotDir: result.snapshotDir,
     reportPath: result.reportPath,
+    cassettePath: relative(dirname(result.recordPath), result.cassettePath),
+    cassetteFrameCount: result.cassetteFrameCount,
     replayCommand: result.replayCommand,
+    commands: result.commands,
     steps: result.steps,
     artifacts: result.artifacts,
     errors: result.errors,
   };
 
-  writeFileSync(result.recordPath, JSON.stringify(record, null, 2) + "\n", "utf8");
+  writeAgentRunRecordPath(result.recordPath, record);
+}
+
+function writeRunManifest(result: AgentRunResult): void {
+  writeAgentManifestPath(agentManifestPath(result.artifactsDir), {
+    kind: "run",
+    ok: result.ok,
+    rootDir: result.artifactsDir,
+    primaryPath: result.recordPath,
+    commands: result.commands,
+    validation: {
+      ok: result.ok,
+      stages: [
+        {
+          name: "run",
+          ok: result.ok,
+          totalCount: result.artifacts.length,
+          failureCount: result.artifacts.filter((artifact) => !artifact.ok).length,
+        },
+      ],
+    },
+    files: [
+      { path: result.flowPath, kind: "flow", role: "flow" },
+      { path: result.cassettePath, kind: "cassette", role: "cassette" },
+      { path: result.recordPath, kind: "run-record", role: "record", ok: result.ok },
+      { path: result.reportPath, kind: "report", role: "report", ok: result.ok },
+      ...result.artifacts.flatMap((artifact) => [
+        {
+          path: artifact.path,
+          kind: artifact.kind,
+          role: "artifact",
+          ok: artifact.ok,
+        },
+        {
+          path: artifact.diffPath,
+          kind: "diff" as const,
+          role: "diff",
+          ok: artifact.ok,
+        },
+      ]),
+    ],
+  });
 }
 
 function formatStepLabel(step: AgentFlowStep): string {

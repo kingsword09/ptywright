@@ -88,6 +88,46 @@ bunx ptywright@latest run-all --dir scripts
 bunx ptywright@latest --help
 ```
 
+### Raw PTY Cassette
+
+`ptywright pty` records the raw PTY stream once and replays it later without
+rerunning the original command. This is intended for browser terminal renderers
+that need deterministic regression tests for prompts or AI sessions that are
+hard to reproduce live.
+
+```bash
+# Record output/input/resize/exit as base64 PTY events
+bunx ptywright@latest pty record --out tests/cassettes/codex.pty.json -- codex
+
+# Replay the same raw output stream instantly
+bunx ptywright@latest pty replay tests/cassettes/codex.pty.json
+
+# Validate or inspect the portable artifact
+bunx ptywright@latest pty validate tests/cassettes/codex.pty.json
+bunx ptywright@latest pty inspect tests/cassettes/codex.pty.json
+```
+
+External projects do not need to depend on aitty. Use the structural
+`wrapPtyLike` API for `node-pty`/`bun-pty` style objects:
+
+```ts
+import { wrapPtyLike } from "ptywright/pty-cassette";
+
+const recorded = wrapPtyLike(pty, {
+  path: "tests/cassettes/session.pty.json",
+  terminal: { cols: 120, rows: 40, term: "xterm-256color" },
+  command: { file: "codex", args: [] },
+});
+
+recorded.write("hello\r");
+// output and exit are captured from pty.onData/onExit
+```
+
+For Bun Terminal callback-style integration, create a recorder and call
+`recordOutput` from the terminal `data` hook, or use
+`wrapBunTerminalOptions`. The cassette can then be replayed into any renderer
+and compared by that renderer's DOM/text snapshot tests.
+
 ## Tools
 
 All tools are enabled by default (`--caps all`). Use `--caps core` or combine as needed:
@@ -162,6 +202,25 @@ Artifacts go to `.tmp/runs/<name>/` by default (override with `--artifacts-dir`)
 Batch runs generate an overview report:
 - Default: `.tmp/run-all/index.html` + `.tmp/run-all/run.summary.json`
 - With `--artifacts-root <dir>`: `<dir>/index.html` + `<dir>/run.summary.json`
+- `run.summary.json` stores `commands.runAll.argv` and
+  `commands.updateGoldens.argv` so automation can replay the suite or update
+  goldens without reconstructing CLI arguments.
+
+You can read or execute those commands directly from the generated artifact:
+
+```bash
+bunx ptywright@latest script commands .tmp/run-all --json
+bunx ptywright@latest script commands .tmp/run-all/run.summary.json --command runAll
+bunx ptywright@latest script inspect .tmp/run-all
+bunx ptywright@latest script validate .tmp/run-all
+bunx ptywright@latest script exec .tmp/run-all --command updateGoldens
+```
+
+Suite directories also include `ptywright-script.manifest.json`, which indexes
+the generated summary, reports, casts, data, and failure artifacts with
+`bytes`/`sha256`. `script validate`, `script inspect`, `script commands`, and
+`script exec` verify that manifest before using a directory bundle, so copied
+script run artifacts can be replayed or updated without trusting stale files.
 
 On failure, additional files are saved:
 - `failure.error.txt` (error stack)
@@ -177,6 +236,40 @@ Built-in steps (no `--steps` needed):
 - `expectMeta`: Assert terminal meta
 - `waitForExit`: Wait for process exit
 - `sendMouse`: Send SGR mouse events
+
+### Framework Backends
+
+`launch.backend` defaults to `pty`. For faster framework-level checks, use
+`frames`, `ratatui`, or `ink` to run the same script steps against deterministic
+frames without starting a PTY:
+
+```json
+{
+  "$schema": "../schemas/ptywright-script.schema.json",
+  "name": "ratatui_snapshot",
+  "launch": {
+    "backend": "ratatui",
+    "cols": 60,
+    "rows": 12,
+    "frames": [
+      "Screen: Dashboard\nMode: HIGH",
+      "Screen: Permissions\nMode: LOW"
+    ]
+  },
+  "steps": [
+    { "type": "waitForText", "text": "Dashboard" },
+    { "type": "pressKey", "key": "Enter" },
+    { "type": "snapshot", "kind": "text", "saveAs": "final" },
+    { "type": "expect", "from": "final", "contains": ["Mode: LOW"] }
+  ]
+}
+```
+
+`ratatui` is intended for text emitted by `TestBackend`/insta-style snapshots.
+`ink` can load a module via `frameModule` that exports `frames`, `frame`,
+`snapshot`, or `lastFrame`. Input steps such as `pressKey` and `sendText`
+advance to the next frame by default, so the assertion path stays identical to
+the PTY end-to-end script.
 
 For `type:"custom"` steps, inject handlers with `--steps <module.ts>`:
 
@@ -228,17 +321,176 @@ bun run bin/ptywright agent run examples/agent_deterministic.json
 
 # Replay does not need AI; it uses the recorded flow artifact.
 bun run bin/ptywright agent replay .tmp/agent/agent_deterministic/agent_deterministic.agent-run.json
+
+# Cassette files are also directly replayable.
+bun run bin/ptywright agent replay .tmp/agent/agent_deterministic/agent_deterministic.cassette.json
+
+# Promote a live run/cassette into the committed non-AI regression suite.
+bun run bin/ptywright agent promote \
+  .tmp/agent/agent_deterministic/agent_deterministic.cassette.json \
+  --update-snapshots
+
+# Batch replay committed cassettes/run records as a regression suite.
+bun run bin/ptywright agent replay-all .tmp/agent --artifacts-root .tmp/agent-replay-all
+
+# Rerun directly from a generated summary artifact.
+bun run bin/ptywright agent rerun .tmp/agent-promote/agent_deterministic/agent-promote.summary.json
+bun run bin/ptywright agent rerun .tmp/agent-check/agent-check.summary.json
+bun run bin/ptywright agent rerun .tmp/agent-check/agent-replay.summary.json --update-snapshots
+
+# Read reusable commands from any supported agent artifact.
+bun run bin/ptywright agent commands .tmp/agent-check/agent-check.summary.json --json
+bun run bin/ptywright agent commands .tmp/agent-check/agent-check.summary.json --command rerun
+bun run bin/ptywright agent commands .tmp/agent-check --json
+bun run bin/ptywright agent inspect .tmp/agent-check
+bun run bin/ptywright agent inspect .tmp/agent-check --json
+bun run bin/ptywright agent validate .tmp/agent-check
+bun run bin/ptywright agent exec .tmp/agent-check --command rerun
+bun run bin/ptywright agent exec .tmp/agent-check --command updateSnapshots
+bun run bin/ptywright agent exec .tmp/agent-check/agent-check.summary.json --command rerun
+bun run bin/ptywright agent exec .tmp/agent-check/agent-check.summary.json --command updateSnapshots
+
+# Validate flow/cassette/run-record/summary artifacts before committing.
+bun run bin/ptywright agent validate .tmp/agent-replay-all
+
+# Run committed cassette replay regression without launching live agents.
+bun run bin/ptywright agent check
+bun run bin/ptywright agent check --json
+
+# Update terminal/DOM baselines from committed cassettes intentionally.
+bun run bin/ptywright agent replay-all tests/agent-cassettes --update-snapshots
+
+# Record browser interactions into a replayable flow spec.
+bun run bin/ptywright agent record examples/agents/codex_browser_smoke.json \
+  --out scripts/agents/codex_recorded.flow.json \
+  --duration-ms 60000 \
+  --headed
+
+# Generate starter specs for real agents.
+bun run bin/ptywright agent init codex examples/agents/codex_browser_smoke.json
+bun run bin/ptywright agent init claude examples/agents/claude_browser_smoke.json
+bun run bin/ptywright agent init droidx examples/agents/droidx_browser_smoke.json
 ```
 
 Artifacts are split intentionally:
 - `.tmp/agent/<name>/` contains run output, screenshots, `*.flow.json`,
-  `*.agent-run.json`, and `index.html`.
+  `*.agent-run.json`, `*.cassette.json`, `index.html`, and
+  `ptywright-agent.manifest.json`.
 - `tests/agent-snapshots/<name>/` contains stable terminal/DOM baselines.
 - `--update-snapshots` is the explicit update path for intentional UI changes.
 
 `launch.mode=aitty` runs `aitty exec --launch print -- <agent>`. By default
 ptywright resolves the sibling `../aitty/packages/cli/dist/cli.js`; set
 `PTYWRIGHT_AITTY_CLI` or `launch.aitty.command` to override it.
+
+Set `launch.agentFlavor` to `codex`, `claude`, `droid`, or `generic` to opt
+into built-in mask presets for timestamps, generated ids, model names, token
+counts, and other non-deterministic terminal text. Explicit
+`defaults.mask=[...]` rules are appended after the preset, so project-specific
+noise can be hidden without rewriting the runner.
+
+`agent record` opens the same browser-hosted terminal and writes the captured
+keyboard/click steps back to a normal flow JSON. The output can be committed and
+run later with `agent run`, while `.agent-run.json` remains the per-run replay
+record generated by the runner. Run records must include
+`commands.replay.argv` and `commands.updateSnapshots.argv`, so automation can
+replay or intentionally update the captured flow without parsing shell strings.
+
+`agent run` is the live path: it launches the configured process and updates or
+compares terminal/DOM snapshots. `agent promote <run|cassette>` is the
+intentional solidify step after a good live run: it copies the cassette into
+`tests/agent-cassettes/<name>/`, rewrites its `snapshotDir`, optionally updates
+terminal/DOM baselines, replays the promoted cassette, and writes
+`agent-promote.summary.json` with direct commands for future non-AI checks. HTML
+reports also surface replay/update/inspect commands so failed runs can be
+reproduced directly from the report page.
+`agent replay` is the single-case cassette regression path: it accepts either
+`.agent-run.json` or `.cassette.json`, serves a local replay page, and reproduces
+the previously captured terminal DOM without launching Codex, Claude, Droid, or
+any other live agent process. `agent replay-all` recursively scans a directory
+for `.agent-run.json` and `.cassette.json` files, then writes
+`agent-replay.summary.json` and an HTML suite report so committed cassettes can
+be run like a snapshot regression suite.
+`--update-snapshots` works on `agent replay-all`, so intentional DOM/terminal
+baseline changes can be updated from committed cassettes without a live agent.
+Cassette files embed the normalized flow spec plus frame hashes, so they remain
+self-contained replay artifacts when copied away from the original run
+directory. Replay runs also copy the source cassette into the replay artifact
+directory and write run records that point at that local copy, so the replay
+directory can be moved as a durable reproduction bundle. Run/check/promote and
+replay-all outputs also include `ptywright-agent.manifest.json`, which indexes
+produced files with artifact-root-relative paths plus `bytes` and `sha256`,
+stores reusable `commands.*.argv`, and can be passed to `agent commands`,
+`agent inspect`, `agent exec`, or `agent validate`. `agent inspect
+<artifact|dir>` is the self-describing bundle check: when pointed at an artifact
+directory it prefers `ptywright-agent.manifest.json`, validates indexed file
+hashes, summarizes manifest file kinds/validation stages, and prints the
+relocated reusable commands. Because file entries are relative to the manifest
+directory and manifest commands are relocated when read, copying the whole
+artifact directory preserves both manifest validation and direct
+`agent inspect <copied>` /
+`agent commands <copied>` /
+`agent exec <copied> --command rerun` workflows.
+When inspecting a moved summary file that is the manifest primary artifact,
+`agent inspect` also prints `commandsManifest=<path>` and includes
+`commands.manifestPath` in JSON output, making it explicit which manifest bundle
+will validate and relocate the stored commands before execution.
+The same directory entrypoint works for copied live-run bundles too, so
+`agent exec <copied-run> --command replay` and `--command updateSnapshots`
+remain usable after the original run directory is deleted.
+Copied replay-suite bundles are rerun from the run records stored under the
+bundle's own `tests/` directory, so they do not need the original cassette input
+directory. Promote bundles can move their artifact root and still rerun from the
+copied manifest, while continuing to target the promoted cassette suite.
+If `agent inspect <dir>` sees agent artifacts but no top-level manifest, it
+still reports recursive validation results and prints a `directoryManifest`
+diagnostic so the directory is not confused with a portable commands/exec
+bundle.
+For `agent commands` and `agent exec`, a directory argument means a manifest
+bundle directory and must contain `ptywright-agent.manifest.json`; use
+`agent validate <dir>` when you want recursive artifact discovery.
+The generated agent flow, cassette, run-record, manifest, promote-summary,
+replay-summary, and check-summary JSON files each carry a `$schema` URL under
+`schemas/` so editors and CI tooling can validate the replay contract directly.
+Run-record and summary schemas also encode the expected stored command prefixes,
+for example `ptywright agent replay`, `ptywright agent replay-all`, and
+`ptywright agent rerun`, so malformed commands can be caught before execution.
+Run records and summaries reject missing or stale `commands.*.argv` metadata,
+because those argv arrays are the non-AI replay/update contract for the artifact.
+Promote, replay, and check summaries include `commands.*.argv` arrays for direct
+non-AI reruns and snapshot updates. Each summary also includes
+`commands.rerun.argv`, so downstream automation can re-execute the exact summary
+artifact without reconstructing CLI arguments. `agent commands <artifact>
+--command <name>` prints one shell-safe command line for scripts that want to
+execute a specific replay/update/rerun path directly; with `--json`, the same
+command includes `cwd`, `command.argv`, and `shell` so automation can choose
+structured spawn or shell execution. When a moved summary/run-record is backed
+by a sibling manifest bundle, `agent commands` also reports the manifest path in
+plain output and JSON so automation can see which bundle is responsible for
+relocation and integrity checks; manifest-backed command discovery validates
+stored command targets and indexed file hashes before printing commands.
+`agent exec <artifact> --command <name>`
+executes a stored agent command through ptywright's own CLI dispatcher, so it
+does not depend on shell parsing or a global `ptywright` binary. This includes
+stored `updateSnapshots` commands, which provide the non-AI equivalent of a
+snapshot update run from an existing summary artifact. `agent validate
+<artifact>` also checks that every stored argv starts with a supported
+`ptywright agent <subcommand>` shape before accepting the artifact. If validation
+fails on `commands.*.argv`, regenerate the run/summary with `agent run`,
+`agent replay-all`, `agent promote`, or `agent check`; do not hand-edit shell
+strings as a recovery path, because the argv arrays are the replay contract.
+`agent rerun <summary>` reads `agent-promote.summary.json`,
+`agent-check.summary.json`, or
+`agent-replay.summary.json` and replays the stored cassette directory/artifact
+root without launching a live agent. `agent commands <artifact>` reads
+flow/cassette/run-record/summary artifacts and prints the reusable argv commands
+without executing them. `agent validate <path>` accepts a single artifact or a
+directory and returns a non-zero exit code when any known agent replay artifact
+is malformed. `agent check [dir]` validates committed cassettes under
+`tests/agent-cassettes` by default, replays them into `.tmp/agent-check`, writes
+`agent-check.summary.json`, then validates the generated suite output. Add
+`--json` for a CI-friendly summary with input/replay/output counts and failure
+details.
 
 ## Development
 
@@ -249,7 +501,11 @@ bun install
 bun run bin/ptywright mcp
 
 # Run tests
-bun test
+bun run test
+bun run agent:check
+bun run check
+
+# CI installs Chromium, runs bun run check, and uploads .tmp/agent-check.
 
 # Lint & Format
 bun run lint

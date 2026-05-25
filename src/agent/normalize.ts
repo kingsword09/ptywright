@@ -56,6 +56,10 @@ export function normalizeDomSnapshot(
     .replace(/\sstyle="[^"]*--term-(?:cell-width|row-height):[^"]*"/g, "")
     .replace(/\s+/g, " ")
     .replace(/>\s+</g, "><")
+    .replace(
+      /<div class="[^"]*\bterm-row\b[^"]*\bterm-scrollback-row\b[^"]*"[^>]*><span[^>]*><\/span><\/div>/g,
+      "",
+    )
     .trim();
 
   return applyAgentMasks(stable, rules);
