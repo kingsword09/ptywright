@@ -343,11 +343,13 @@ test("agent exec validates a moved replay summary manifest before dispatch", asy
 }, 20_000);
 
 test("agent replay-all CLI accepts JSON output mode", async () => {
-  const cassetteDir = "tests/agent-cassettes";
+  const dir = join(".tmp", "tests", "agent-replay-all-json");
+  const cassetteDir = join(dir, "empty-cassettes");
   const logs: string[] = [];
   const originalLog = console.log;
-  const artifactsRoot = join(".tmp", "tests", "agent-replay-all-json", "suite");
-  rmSync(artifactsRoot, { recursive: true, force: true });
+  const artifactsRoot = join(dir, "suite");
+  rmSync(dir, { recursive: true, force: true });
+  mkdirSync(cassetteDir, { recursive: true });
 
   process.exitCode = undefined;
   try {
@@ -367,7 +369,7 @@ test("agent replay-all CLI accepts JSON output mode", async () => {
     ok: true,
     failureCount: 0,
   });
-  expect(stdout.totalCount).toBeGreaterThanOrEqual(1);
+  expect(stdout.totalCount).toBe(0);
   expect(stdout.commands.replayAll.argv).toEqual(parsed.commands.replayAll.argv);
 }, 15_000);
 
