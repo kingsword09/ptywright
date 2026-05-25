@@ -219,7 +219,7 @@ export async function runAgentSpec(
     result.ok = false;
     result.errors.push(error instanceof Error ? error.message : String(error));
   } finally {
-    await browser?.close();
+    await closeBrowserSafely(browser);
     result.durationMs = Date.now() - startedAt;
     if (options.replaySourceCassettePath) {
       writeFileSync(cassettePath, readFileSync(options.replaySourceCassettePath, "utf8"), "utf8");
@@ -328,7 +328,10 @@ async function runViewport(args: {
       }
     }
   } finally {
-    await context.close();
+    await withTimeout(
+      context.close().catch(() => undefined),
+      5_000,
+    );
     await session?.close();
   }
 }
@@ -360,6 +363,28 @@ async function replayAgentCassette(
     );
   } finally {
     await server.close();
+  }
+}
+
+async function closeBrowserSafely(browser: Browser | null): Promise<void> {
+  if (!browser) return;
+  await withTimeout(
+    browser.close().catch(() => undefined),
+    5_000,
+  );
+}
+
+async function withTimeout<T>(promise: Promise<T>, timeoutMs: number): Promise<T | undefined> {
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  try {
+    return await Promise.race([
+      promise,
+      new Promise<undefined>((resolveTimeout) => {
+        timer = setTimeout(resolveTimeout, timeoutMs);
+      }),
+    ]);
+  } finally {
+    if (timer) clearTimeout(timer);
   }
 }
 
@@ -676,7 +701,11 @@ async function waitForStableDom(
   let stableSince = Date.now();
 
   while (Date.now() - started < args.timeoutMs) {
-    const current = await readTerminalDom(page);
+    const current = await readTerminalDomIfPresent(page);
+    if (current === null) {
+      await new Promise((resolvePoll) => setTimeout(resolvePoll, args.intervalMs));
+      continue;
+    }
     if (current !== last) {
       last = current;
       stableSince = Date.now();
@@ -690,23 +719,31 @@ async function waitForStableDom(
 }
 
 async function readTerminalText(page: Page): Promise<string> {
-  return page
-    .locator("[data-terminal-root]")
-    .first()
-    .evaluate((node) => {
-      const rows = Array.from(node.querySelectorAll(".term-grid .term-row"));
-      if (rows.length > 0) {
-        return rows.map((row) => row.textContent ?? "").join("\n");
-      }
-      return node.textContent ?? "";
-    });
+  const text = await page.evaluate(() => {
+    const node = document.querySelector("[data-terminal-root]");
+    if (!node) return null;
+    const rows = Array.from(node.querySelectorAll(".term-grid .term-row"));
+    if (rows.length > 0) {
+      return rows.map((row) => row.textContent ?? "").join("\n");
+    }
+    return node.textContent ?? "";
+  });
+  if (text === null) {
+    throw new Error("terminal root is not attached");
+  }
+  return text;
 }
 
 async function readTerminalDom(page: Page): Promise<string> {
-  return page
-    .locator("[data-terminal-root]")
-    .first()
-    .evaluate((node) => node.innerHTML);
+  const dom = await readTerminalDomIfPresent(page);
+  if (dom === null) {
+    throw new Error("terminal root is not attached");
+  }
+  return dom;
+}
+
+async function readTerminalDomIfPresent(page: Page): Promise<string | null> {
+  return page.evaluate(() => document.querySelector("[data-terminal-root]")?.innerHTML ?? null);
 }
 
 function writeRunRecord(result: AgentRunResult, spec: AgentFlowSpec): void {

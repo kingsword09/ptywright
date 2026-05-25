@@ -1,5 +1,6 @@
 import { createServer, type Server } from "node:http";
 import { readFileSync } from "node:fs";
+import type { Socket } from "node:net";
 
 import { z } from "zod";
 
@@ -146,6 +147,7 @@ export function upsertAgentCassetteFrame(
 export async function startAgentCassetteServer(
   cassette: AgentCassette,
 ): Promise<AgentCassetteServer> {
+  const sockets = new Set<Socket>();
   const server = createServer((request, response) => {
     if (request.url === "/health") {
       response.writeHead(200, { "content-type": "text/plain; charset=utf-8" });
@@ -158,6 +160,12 @@ export async function startAgentCassetteServer(
       "content-type": "text/html; charset=utf-8",
     });
     response.end(renderCassetteHtml(cassette));
+  });
+  server.on("connection", (socket) => {
+    sockets.add(socket);
+    socket.once("close", () => {
+      sockets.delete(socket);
+    });
   });
 
   await new Promise<void>((resolveListen, rejectListen) => {
@@ -183,7 +191,7 @@ export async function startAgentCassetteServer(
 
   return {
     url: `http://127.0.0.1:${address.port}/`,
-    close: () => closeServer(server),
+    close: () => closeServer(server, sockets),
   };
 }
 
@@ -286,9 +294,29 @@ function renderCassetteHtml(cassette: AgentCassette): string {
 </html>`;
 }
 
-async function closeServer(server: Server): Promise<void> {
+async function closeServer(server: Server, sockets: Set<Socket>): Promise<void> {
+  const serverWithConnectionClosers = server as Server & {
+    closeIdleConnections?: () => void;
+    closeAllConnections?: () => void;
+  };
+
+  serverWithConnectionClosers.closeIdleConnections?.();
+
   await new Promise<void>((resolveClose, rejectClose) => {
+    const forceCloseTimer = setTimeout(() => {
+      serverWithConnectionClosers.closeAllConnections?.();
+      for (const socket of sockets) {
+        socket.destroy();
+      }
+    }, 500);
+
+    const finishTimer = setTimeout(() => {
+      resolveClose();
+    }, 2_000);
+
     server.close((error) => {
+      clearTimeout(forceCloseTimer);
+      clearTimeout(finishTimer);
       if (error) rejectClose(error);
       else resolveClose();
     });
