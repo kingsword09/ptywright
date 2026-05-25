@@ -1,0 +1,4 @@
+interface:
+  display_name: "Ptywright Testing"
+  short_description: "Terminal and browser-agent regression testing"
+  default_prompt: "Use $ptywright-testing to create or debug deterministic terminal, PTY cassette, or browser-agent regression tests."
