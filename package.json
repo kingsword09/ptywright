@@ -23,32 +23,32 @@
     "url": "git+https://github.com/kingsword09/ptywright.git"
   },
   "bin": {
-    "ptywright": "bin/ptywright"
+    "ptywright": "dist/bin/ptywright.mjs"
   },
   "files": [
-    "bin",
-    "src",
+    "dist",
     "schemas",
     "skills",
     "README.md",
     "LICENSE"
   ],
   "type": "module",
-  "main": "src/cli.ts",
+  "main": "./dist/cli.mjs",
   "exports": {
-    ".": "./src/cli.ts",
-    "./agent": "./src/agent/runner.ts",
-    "./mcp": "./src/mcp/server.ts",
-    "./pty-cassette": "./src/pty-cassette/index.ts",
-    "./session": "./src/session/terminal_session.ts",
-    "./script": "./src/script/runner.ts"
+    ".": "./dist/cli.mjs",
+    "./agent": "./dist/agent.mjs",
+    "./mcp": "./dist/mcp.mjs",
+    "./pty-cassette": "./dist/pty-cassette.mjs",
+    "./session": "./dist/session.mjs",
+    "./script": "./dist/script.mjs"
   },
   "scripts": {
+    "build": "vp pack",
     "dev": "vp dev",
     "mcp": "bun run src/index.ts",
     "agent": "bun run src/cli.ts agent",
     "agent:check": "bun run src/cli.ts agent check",
-    "check": "vp check && bun run test && bun run agent:check",
+    "check": "vp check && bun run build && bun run test && bun run agent:check",
     "test": "bun run scripts/test_all.ts",
     "test:mcp-all-tools": "bun test tests/mcp_all_tools_smoke.test.ts",
     "lint": "vp lint",
