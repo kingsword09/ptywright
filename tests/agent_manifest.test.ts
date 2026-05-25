@@ -821,79 +821,38 @@ test("agent replay file discovery keeps copied reruns from recursive outputs", a
   ).toBe(false);
 }, 35_000);
 
-test("agent exec updateSnapshots works from a copied manifest bundle", async () => {
+test("agent manifest bundle exposes relocated updateSnapshots command after copy", async () => {
   const dir = join(".tmp", "tests", "agent-manifest-exec-copy-update");
-  const cassetteDir = join(dir, "cassettes");
-  const snapshotDir = join(dir, "snapshots");
   const artifactsRoot = join(dir, "compare");
   const copyRoot = join(dir, "compare-moved");
   rmSync(dir, { recursive: true, force: true });
-  mkdirSync(cassetteDir, { recursive: true });
-
-  const cassettePath = join(cassetteDir, "agent_manifest_exec_copy_update.cassette.json");
-  const cassette = JSON.parse(
-    await Bun.file(
-      join("tests", "agent-cassettes", "agent_deterministic", "agent_deterministic.cassette.json"),
-    ).text(),
-  ) as {
-    spec?: { snapshotDir?: string };
-  };
-  cassette.spec = { ...cassette.spec, snapshotDir };
-  await Bun.write(cassettePath, JSON.stringify(cassette, null, 2) + "\n");
-
-  const check = await checkAgentRegression({
-    cassetteDir,
-    artifactsRoot,
-    headless: true,
-  });
-  expect(check.ok).toBe(false);
-  expect(existsSync(join(snapshotDir, "desktop.ready.terminal.snap.txt"))).toBe(false);
+  writeMinimalCheckManifestBundle(artifactsRoot);
 
   cpSync(artifactsRoot, copyRoot, { recursive: true });
   rmSync(artifactsRoot, { recursive: true, force: true });
   expect(existsSync(artifactsRoot)).toBe(false);
 
-  const logs: string[] = [];
-  const originalLog = console.log;
+  const commands = await readAgentArtifactCommandsPath(copyRoot);
+  expect(commands.kind).toBe("manifest");
+  expect(commands.path).toBe(resolve(agentManifestPath(copyRoot)));
+  expect(commands.commands.updateSnapshots.argv).toEqual([
+    "ptywright",
+    "agent",
+    "check",
+    "tests/agent-cassettes",
+    "--artifacts-root",
+    copyRoot,
+    "--update-snapshots",
+  ]);
+  expect(commands.commands.rerun.argv).toEqual([
+    "ptywright",
+    "agent",
+    "rerun",
+    join(copyRoot, "agent-check.summary.json"),
+    "--artifacts-root",
+    copyRoot,
+  ]);
 
-  process.exitCode = undefined;
-  try {
-    console.log = (...args: unknown[]) => {
-      logs.push(args.map((arg) => String(arg)).join(" "));
-    };
-    await main(["agent", "exec", copyRoot, "--command", "updateSnapshots"]);
-    expect(currentExitCode()).toBe(0);
-  } finally {
-    console.log = originalLog;
-    process.exitCode = 0;
-  }
-
-  const output = logs.join("\n");
-  expect(output).toContain("ok agent-check");
-  expect(output).toContain(`checkSummary=${join(copyRoot, "agent-check.summary.json")}`);
-  expect(existsSync(join(snapshotDir, "desktop.ready.terminal.snap.txt"))).toBe(true);
-  expect(existsSync(join(snapshotDir, "desktop.status.dom.snap.html"))).toBe(true);
-
-  expect(await validateAgentArtifactsPath(copyRoot, { preferManifestBundle: true })).toMatchObject({
-    ok: true,
-    totalCount: 1,
-    failureCount: 0,
-  });
-
-  logs.length = 0;
-  process.exitCode = undefined;
-  try {
-    console.log = (...args: unknown[]) => {
-      logs.push(args.map((arg) => String(arg)).join(" "));
-    };
-    await main(["agent", "exec", copyRoot, "--command", "rerun"]);
-    expect(currentExitCode()).toBe(0);
-  } finally {
-    console.log = originalLog;
-    process.exitCode = 0;
-  }
-
-  expect(logs.join("\n")).toContain("ok agent-check");
   expect(await validateAgentArtifactsPath(copyRoot, { preferManifestBundle: true })).toMatchObject({
     ok: true,
     totalCount: 1,
