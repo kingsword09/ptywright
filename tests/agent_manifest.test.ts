@@ -1203,22 +1203,19 @@ test("agent inspect explains when a directory is not a manifest bundle", async (
 
 test("agent validate includes manifests when scanning artifact directories", async () => {
   const dir = join(".tmp", "tests", "agent-manifest-scan");
+  const bundleDir = join(dir, "bundle");
   rmSync(dir, { recursive: true, force: true });
-  mkdirSync(dir, { recursive: true });
   expect(existsSync(join(dir, AGENT_MANIFEST_FILE_NAME))).toBe(false);
 
-  const run = await runAgentSpec(
-    deterministicAgentSpec({
-      name: "agent_manifest_scan",
-      artifactsDir: join(dir, "run"),
-      snapshotDir: join(dir, "snapshots"),
-      targets: ["terminal"],
-    }),
-    { updateSnapshots: true, headless: true },
-  );
-  expect(run.ok).toBe(true);
+  writeMinimalCheckManifestBundle(bundleDir);
 
   const validation = await validateAgentArtifactsPath(dir);
   expect(validation.ok).toBe(true);
-  expect(validation.entries.some((entry) => entry.kind === "manifest")).toBe(true);
+  expect(validation.entries).toContainEqual(
+    expect.objectContaining({
+      filePath: resolve(agentManifestPath(bundleDir)),
+      kind: "manifest",
+      ok: true,
+    }),
+  );
 });

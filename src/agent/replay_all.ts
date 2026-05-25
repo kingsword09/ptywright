@@ -7,7 +7,12 @@ import {
   type AgentRunArtifact,
   type AgentRunResult,
 } from "./runner";
-import { agentManifestPath, writeAgentManifestPath } from "./manifest";
+import {
+  AGENT_MANIFEST_FILE_NAME,
+  agentManifestPath,
+  readAgentManifestPath,
+  writeAgentManifestPath,
+} from "./manifest";
 import {
   AGENT_RUN_RECORD_SCHEMA_URL,
   formatAgentArgv,
@@ -305,6 +310,16 @@ function listReplayFiles(
 }
 
 function isGeneratedReplayOutputDir(dir: string): boolean {
+  const manifestPath = join(dir, AGENT_MANIFEST_FILE_NAME);
+  try {
+    const manifest = readAgentManifestPath(manifestPath);
+    if (samePath(manifest.rootDir, dir)) {
+      return true;
+    }
+  } catch {
+    // Fall back to legacy run-record detection below.
+  }
+
   for (const entry of readdirSync(dir)) {
     if (!entry.endsWith(".agent-run.json")) continue;
     try {
