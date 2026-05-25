@@ -17,6 +17,27 @@ const toolingIgnorePatterns = [
 ];
 
 export default defineConfig({
+  pack: {
+    entry: {
+      cli: "src/cli.ts",
+      index: "src/index.ts",
+      agent: "src/agent/runner.ts",
+      mcp: "src/mcp/server.ts",
+      "pty-cassette": "src/pty-cassette/index.ts",
+      script: "src/script/runner.ts",
+      session: "src/session/terminal_session.ts",
+      "bin/ptywright": "src/bin/ptywright.ts",
+    },
+    outDir: "dist",
+    format: "esm",
+    platform: "node",
+    target: "es2022",
+    clean: true,
+    dts: false,
+    deps: {
+      skipNodeModulesBundle: true,
+    },
+  },
   lint: {
     env: {
       node: true,

@@ -11,7 +11,9 @@ test("package check script includes committed agent cassette regression", () => 
   const readme = readFileSync("README.md", "utf8");
 
   expect(pkg.scripts?.["agent:check"]).toBe("bun run src/cli.ts agent check");
+  expect(pkg.scripts?.build).toBe("vp pack");
   expect(pkg.scripts?.test).toBe("bun run scripts/test_all.ts");
+  expect(pkg.scripts?.check).toContain("bun run build");
   expect(pkg.scripts?.check).toContain("bun run agent:check");
   expect(pkg.scripts?.check).toContain("bun run test");
   expect(pkg.scripts?.prepublishOnly).toBe("bun run check");
