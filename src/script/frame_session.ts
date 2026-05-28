@@ -1,92 +1,39 @@
-import { readFileSync } from "node:fs";
-import { isAbsolute, resolve } from "node:path";
-import { pathToFileURL } from "node:url";
-
-import { applyTextMaskRules, type TextMaskRule } from "../terminal/mask";
 import { encodeKey } from "../terminal/keys";
 import { encodeSgrMouse, type MouseEvent } from "../terminal/mouse";
-import type { SnapshotScope, TerminalSnapshotGrid } from "../terminal/snapshot";
+import type { TerminalSnapshotGrid } from "../terminal/snapshot";
 import type { TerminalMeta } from "../terminal/view";
 import { TraceRecorder, type TraceSnapshot } from "../trace/recorder";
-import { fnv1a32 } from "../util/hash";
-import { sleep } from "../util/sleep";
-import type { SnapshotFrame, TerminalSessionCloseReason } from "../session/terminal_session";
+import type { SnapshotFrame, TerminalSessionCloseReason } from "../session/terminal_session_types";
 import type { Script } from "./schema";
+import { snapshotFrameAnsiFromText, snapshotFrameGrid, snapshotFrameText } from "./frame_snapshot";
+import { resolveLaunchFrames } from "./frame_source";
+import type {
+  FrameSessionOptions,
+  ScriptBackend,
+  ScriptSession,
+  SnapshotAnsiOptions,
+  SnapshotTextOptions,
+} from "./frame_session_types";
+import {
+  clampInt,
+  inferCols,
+  inferRows,
+  normalizeLineWidth,
+  normalizeNewlines,
+} from "./frame_text";
+import {
+  waitForFrameStableScreen,
+  waitForFrameText,
+  type WaitForFrameTextArgs,
+} from "./frame_wait";
 
-export type ScriptBackend = "pty" | "frames" | "ink" | "ratatui";
-
-export type ScriptSession = {
-  readonly id: string;
-  resize(cols: number, rows: number): void;
-  sendText(text: string, options?: { enter?: boolean }): void;
-  pressKey(key: string): void;
-  sendMouse(event: MouseEvent): void;
-  mark(label?: string): void;
-  flush(): Promise<void>;
-  getMeta(): TerminalMeta;
-  snapshotText(options?: SnapshotTextOptions): Promise<{ text: string; hash: string }>;
-  snapshotAnsi(options?: SnapshotAnsiOptions): Promise<{
-    ansi: string;
-    plain: string;
-    hash: string;
-    lines: Array<{ ansi: string; plain: string }>;
-  }>;
-  snapshotGrid(options?: {
-    trimRight?: boolean;
-    includeStyles?: boolean;
-    captureFrame?: boolean;
-  }): Promise<{ grid: TerminalSnapshotGrid; hash: string }>;
-  snapshotCast(options?: { tailEvents?: number }): Promise<TraceSnapshot>;
-  waitForText(args: {
-    scope?: SnapshotScope;
-    text?: string;
-    regex?: RegExp;
-    timeoutMs: number;
-    intervalMs: number;
-  }): Promise<{ found: boolean; text: string; hash: string }>;
-  waitForStableScreen(args: {
-    quietMs: number;
-    timeoutMs: number;
-    intervalMs: number;
-  }): Promise<{ stable: boolean; text: string; hash: string }>;
-  isClosed(): boolean;
-  getCloseReason(): TerminalSessionCloseReason | null;
-  close(): void;
-  getSnapshotFrames(): SnapshotFrame[];
-  getRawOutputChunks(): string[];
-};
-
-type SnapshotTextOptions = {
-  scope?: SnapshotScope;
-  trimRight?: boolean;
-  trimBottom?: boolean;
-  maxLines?: number;
-  tailLines?: number;
-  captureFrame?: boolean;
-  mask?: TextMaskRule[];
-};
-
-type SnapshotAnsiOptions = SnapshotTextOptions;
-
-export type FrameSessionOptions = {
-  id?: string;
-  backend: Exclude<ScriptBackend, "pty">;
-  frames: readonly string[];
-  cols?: number;
-  rows?: number;
-  title?: string;
-  advanceOnInput?: boolean;
-};
-
-type FrameLike =
-  | string
-  | {
-      name?: string;
-      text?: string;
-      frame?: string;
-      snapshot?: string;
-      lastFrame?: string;
-    };
+export type {
+  FrameSessionOptions,
+  ScriptBackend,
+  ScriptSession,
+  SnapshotAnsiOptions,
+  SnapshotTextOptions,
+} from "./frame_session_types";
 
 export class FrameSession implements ScriptSession {
   readonly id: string;
@@ -177,29 +124,16 @@ export class FrameSession implements ScriptSession {
       baseY: 0,
       length: this.visibleLines({ trimRight: true }).length,
       cursorX: 0,
-      cursorY: Math.max(0, Math.min(this.rowsValue - 1, this.currentLines().length - 1)),
+      cursorY: this.cursorY(),
     };
   }
 
   async snapshotText(options?: SnapshotTextOptions): Promise<{ text: string; hash: string }> {
-    if (options?.maxLines !== undefined && options.tailLines !== undefined) {
-      throw new Error("snapshotText: maxLines and tailLines are mutually exclusive");
-    }
-
-    let lines =
+    const lines =
       options?.scope === "buffer"
         ? this.currentLines({ trimRight: options?.trimRight })
         : this.visibleLines({ trimRight: options?.trimRight });
-
-    if (options?.trimBottom ?? true) {
-      lines = trimBottomEmptyLines(lines);
-    }
-
-    lines = sliceLines(lines, options);
-    lines = applyTextMaskRules(lines, options?.mask);
-
-    const text = lines.join("\n");
-    const hash = fnv1a32(text);
+    const { text, hash } = snapshotFrameText(lines, options);
     if (options?.captureFrame ?? true) {
       this.captureFrame(text, hash);
     }
@@ -213,8 +147,7 @@ export class FrameSession implements ScriptSession {
     lines: Array<{ ansi: string; plain: string }>;
   }> {
     const { text, hash } = await this.snapshotText(options);
-    const lines = text.split("\n").map((line) => ({ ansi: line, plain: line }));
-    return { ansi: text, plain: text, hash, lines };
+    return snapshotFrameAnsiFromText(text, hash);
   }
 
   async snapshotGrid(options?: {
@@ -223,17 +156,13 @@ export class FrameSession implements ScriptSession {
     captureFrame?: boolean;
   }): Promise<{ grid: TerminalSnapshotGrid; hash: string }> {
     const lines = this.visibleLines({ trimRight: options?.trimRight });
-    const grid: TerminalSnapshotGrid = {
+    const { grid, hash } = snapshotFrameGrid({
+      lines,
       cols: this.colsValue,
       rows: this.rowsValue,
-      bufferType: "normal",
-      cursorX: 0,
-      cursorY: Math.max(0, Math.min(this.rowsValue - 1, this.currentLines().length - 1)),
-      viewportY: 0,
-      lines,
-      styleRuns: options?.includeStyles ? lines.map(() => []) : undefined,
-    };
-    const hash = fnv1a32(JSON.stringify(grid));
+      cursorY: this.cursorY(),
+      includeStyles: options?.includeStyles,
+    });
     if (options?.captureFrame ?? true) {
       this.captureFrame(lines.join("\n"), hash);
     }
@@ -245,33 +174,14 @@ export class FrameSession implements ScriptSession {
     return this.trace.snapshot({ tailEvents: options?.tailEvents });
   }
 
-  async waitForText(args: {
-    scope?: SnapshotScope;
-    text?: string;
-    regex?: RegExp;
-    timeoutMs: number;
-    intervalMs: number;
-  }): Promise<{ found: boolean; text: string; hash: string }> {
-    const startedAt = Date.now();
-
-    while (true) {
-      const snapshot = await this.snapshotText({ scope: args.scope, captureFrame: true });
-      if (args.text && snapshot.text.includes(args.text)) {
-        return { found: true, ...snapshot };
-      }
-      if (args.regex && args.regex.test(snapshot.text)) {
-        return { found: true, ...snapshot };
-      }
-      if (Date.now() - startedAt >= args.timeoutMs) {
-        return { found: false, ...snapshot };
-      }
-      await sleep(Math.max(1, args.intervalMs));
-    }
+  async waitForText(
+    args: WaitForFrameTextArgs,
+  ): Promise<{ found: boolean; text: string; hash: string }> {
+    return waitForFrameText((options) => this.snapshotText(options), args);
   }
 
   async waitForStableScreen(): Promise<{ stable: boolean; text: string; hash: string }> {
-    const snapshot = await this.snapshotText({ captureFrame: true });
-    return { stable: true, ...snapshot };
+    return waitForFrameStableScreen((options) => this.snapshotText(options));
   }
 
   isClosed(): boolean {
@@ -322,6 +232,10 @@ export class FrameSession implements ScriptSession {
     return lines;
   }
 
+  private cursorY(): number {
+    return Math.max(0, Math.min(this.rowsValue - 1, this.currentLines().length - 1));
+  }
+
   private captureFrame(text: string, hash: string): void {
     this.snapshotRing.push({
       atMs: Date.now(),
@@ -363,155 +277,4 @@ export async function createFrameSessionFromLaunch(args: {
     title: args.title,
     advanceOnInput: args.launch.advanceOnInput,
   });
-}
-
-async function resolveLaunchFrames(
-  launch: Script["launch"],
-  cwd: string,
-  backend: Exclude<ScriptBackend, "pty">,
-): Promise<string[]> {
-  const frames: string[] = [];
-
-  if (launch.frames?.length) {
-    frames.push(...normalizeFrames(launch.frames));
-  }
-
-  if (launch.frame !== undefined) {
-    frames.push(launch.frame);
-  }
-
-  if (launch.framePath) {
-    const path = resolveLaunchPath(cwd, launch.framePath);
-    frames.push(readFileSync(path, "utf8").replace(/\n$/, ""));
-  }
-
-  if (launch.frameModule) {
-    frames.push(...(await loadFrameModule(resolveLaunchPath(cwd, launch.frameModule), backend)));
-  }
-
-  if (frames.length === 0) {
-    throw new Error(`launch.backend=${backend} requires frame, frames, framePath, or frameModule`);
-  }
-
-  return frames;
-}
-
-async function loadFrameModule(
-  modulePath: string,
-  backend: Exclude<ScriptBackend, "pty">,
-): Promise<string[]> {
-  const mod = (await import(pathToFileURL(modulePath).href)) as Record<string, unknown>;
-  const source = await materializeFrameSource(selectModuleFrameSource(mod, backend));
-  return normalizeFrames(source);
-}
-
-function selectModuleFrameSource(
-  mod: Record<string, unknown>,
-  backend: Exclude<ScriptBackend, "pty">,
-): unknown {
-  if (mod.frames !== undefined) return mod.frames;
-  if (mod.default !== undefined) return mod.default;
-  if (backend === "ink" && mod.lastFrame !== undefined) return mod.lastFrame;
-  if (backend === "ink" && mod.frame !== undefined) return mod.frame;
-  if (backend === "ratatui" && mod.snapshot !== undefined) return mod.snapshot;
-  if (mod.frame !== undefined) return mod.frame;
-  if (mod.snapshot !== undefined) return mod.snapshot;
-  throw new Error(`frame module did not export frames/default/frame/snapshot/lastFrame`);
-}
-
-async function materializeFrameSource(source: unknown): Promise<unknown> {
-  if (typeof source === "function") {
-    return await (source as () => unknown | Promise<unknown>)();
-  }
-  return source;
-}
-
-function normalizeFrames(source: unknown): string[] {
-  if (Array.isArray(source)) {
-    return source.map((frame) => normalizeFrame(frame));
-  }
-  return [normalizeFrame(source)];
-}
-
-function normalizeFrame(frame: unknown): string {
-  if (typeof frame === "string") {
-    return normalizeNewlines(frame).replace(/\n$/, "");
-  }
-
-  if (typeof frame === "object" && frame !== null) {
-    const value = frame as FrameLike;
-    const text =
-      typeof value.text === "string"
-        ? value.text
-        : typeof value.frame === "string"
-          ? value.frame
-          : typeof value.snapshot === "string"
-            ? value.snapshot
-            : typeof value.lastFrame === "string"
-              ? value.lastFrame
-              : undefined;
-    if (text !== undefined) {
-      return normalizeNewlines(text).replace(/\n$/, "");
-    }
-  }
-
-  throw new Error("frame entries must be strings or objects with text/frame/snapshot/lastFrame");
-}
-
-function resolveLaunchPath(cwd: string, path: string): string {
-  return isAbsolute(path) ? path : resolve(cwd, path);
-}
-
-function normalizeNewlines(text: string): string {
-  return text.replace(/\r\n/g, "\n").replace(/\r/g, "\n");
-}
-
-function normalizeLineWidth(line: string, cols: number, trimRight: boolean): string {
-  const clipped = line.length > cols ? line.slice(0, cols) : line;
-  return trimRight ? clipped.trimEnd() : clipped.padEnd(cols, " ");
-}
-
-function trimBottomEmptyLines(lines: string[]): string[] {
-  let end = lines.length;
-  while (end > 0 && (lines[end - 1] ?? "").trim() === "") {
-    end -= 1;
-  }
-  return lines.slice(0, end);
-}
-
-function sliceLines(
-  lines: string[],
-  options?: { maxLines?: number; tailLines?: number },
-): string[] {
-  if (options?.maxLines !== undefined) {
-    return lines.slice(0, Math.max(0, Math.trunc(options.maxLines)));
-  }
-  if (options?.tailLines !== undefined) {
-    const tail = Math.max(0, Math.trunc(options.tailLines));
-    return lines.slice(Math.max(0, lines.length - tail));
-  }
-  return lines;
-}
-
-function inferCols(frames: readonly string[]): number {
-  const max = frames.reduce((acc, frame) => {
-    const lines = normalizeNewlines(frame).split("\n");
-    return Math.max(acc, ...lines.map((line) => line.length));
-  }, 0);
-  return clampInt(max || 80, 1, 500);
-}
-
-function inferRows(frames: readonly string[]): number {
-  const max = frames.reduce((acc, frame) => {
-    return Math.max(acc, normalizeNewlines(frame).split("\n").length);
-  }, 0);
-  return clampInt(max || 24, 1, 300);
-}
-
-function clampInt(value: number, min: number, max: number): number {
-  if (!Number.isFinite(value)) return min;
-  const int = Math.trunc(value);
-  if (int < min) return min;
-  if (int > max) return max;
-  return int;
 }

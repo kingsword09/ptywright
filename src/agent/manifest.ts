@@ -1,9 +1,14 @@
-import { createHash } from "node:crypto";
-import { mkdirSync, readFileSync, rmSync, statSync, writeFileSync } from "node:fs";
-import { dirname, isAbsolute, join, relative, resolve } from "node:path";
+import { mkdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { dirname, join } from "node:path";
 
 import { z } from "zod";
 
+import {
+  collectManifestFiles,
+  validateManifestFiles,
+  type ManifestFileDraft,
+} from "../common/manifest_files";
+import { formatZodIssues } from "../common/zod";
 import type { AgentCommandRecord } from "./run_record";
 
 export const AGENT_MANIFEST_SCHEMA_URL =
@@ -105,12 +110,7 @@ export type AgentManifestValidation = z.infer<typeof agentManifestValidationSche
 export type AgentManifest = z.infer<typeof agentManifestSchema>;
 export type AgentManifestCommandMap = Record<string, AgentCommandRecord>;
 
-export type AgentManifestFileDraft = {
-  path?: string | null;
-  kind: AgentManifestFileKind;
-  role?: string;
-  ok?: boolean;
-};
+export type AgentManifestFileDraft = ManifestFileDraft<AgentManifestFileKind>;
 
 export type CreateAgentManifestOptions = {
   kind: AgentManifestKind;
@@ -175,31 +175,12 @@ export function normalizeAgentManifest(input: unknown): AgentManifest {
 }
 
 export function validateAgentManifestFiles(manifest: AgentManifest, manifestPath?: string): void {
-  const failures: string[] = [];
-  const baseDir = manifestPath
-    ? dirname(resolve(process.cwd(), manifestPath))
-    : resolve(process.cwd(), manifest.rootDir);
-
-  for (const file of manifest.files) {
-    let current: AgentManifestFile | null = null;
-    try {
-      current = readManifestFile(file, baseDir);
-    } catch (error) {
-      failures.push(`${file.path}: ${error instanceof Error ? error.message : String(error)}`);
-      continue;
-    }
-
-    if (current.bytes !== file.bytes) {
-      failures.push(`${file.path}: bytes ${current.bytes} !== ${file.bytes}`);
-    }
-    if (current.sha256 !== file.sha256) {
-      failures.push(`${file.path}: sha256 ${current.sha256} !== ${file.sha256}`);
-    }
-  }
-
-  if (failures.length > 0) {
-    throw new Error(`invalid agent manifest files: ${failures.join("; ")}`);
-  }
+  validateManifestFiles({
+    files: manifest.files,
+    manifestPath,
+    rootDir: manifest.rootDir,
+    label: "agent",
+  });
 }
 
 export function isAgentManifestLike(input: unknown): boolean {
@@ -211,73 +192,4 @@ export function isAgentManifestLike(input: unknown): boolean {
     Array.isArray((input as { files?: unknown }).files) &&
     typeof (input as { commands?: unknown }).commands === "object"
   );
-}
-
-function collectManifestFiles(
-  files: readonly AgentManifestFileDraft[],
-  rootDir: string,
-): AgentManifestFile[] {
-  const out: AgentManifestFile[] = [];
-  const seen = new Set<string>();
-  const rootAbs = resolve(process.cwd(), rootDir);
-
-  for (const file of files) {
-    if (!file.path || seen.has(file.path)) continue;
-    seen.add(file.path);
-
-    try {
-      out.push(readManifestFile(file, rootAbs, { portableRoot: true }));
-    } catch {
-      // A failed snapshot comparison can reference a missing baseline. The run
-      // record already carries that failure; the manifest only indexes files
-      // that were actually produced.
-    }
-  }
-
-  return out.sort((a, b) => a.path.localeCompare(b.path));
-}
-
-function readManifestFile(
-  file: AgentManifestFileDraft,
-  baseDir: string,
-  options: { portableRoot?: boolean } = {},
-): AgentManifestFile {
-  if (!file.path) {
-    throw new Error("missing file path");
-  }
-
-  const absPath = isAbsolute(file.path)
-    ? file.path
-    : resolve(options.portableRoot ? process.cwd() : baseDir, file.path);
-  const stat = statSync(absPath);
-  if (!stat.isFile()) {
-    throw new Error("not a file");
-  }
-
-  const bytes = readFileSync(absPath);
-  return {
-    path: options.portableRoot ? portableManifestPath(absPath, baseDir) : file.path,
-    kind: file.kind,
-    role: file.role,
-    ok: file.ok,
-    bytes: bytes.byteLength,
-    sha256: createHash("sha256").update(bytes).digest("hex"),
-  };
-}
-
-function portableManifestPath(absPath: string, rootAbs: string): string {
-  const rel = relative(rootAbs, absPath);
-  if (rel && !rel.startsWith("..") && !isAbsolute(rel)) {
-    return rel;
-  }
-  return absPath;
-}
-
-function formatZodIssues(error: z.ZodError): string {
-  return error.issues
-    .map((issue) => {
-      const path = issue.path.length ? issue.path.join(".") : "<root>";
-      return `${path}: ${issue.message}`;
-    })
-    .join("; ");
 }

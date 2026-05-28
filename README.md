@@ -315,63 +315,74 @@ expose the terminal root as `[data-terminal-root]`.
 
 ```bash
 # First run records snapshots, screenshots, replay metadata, and report.
-bun run bin/ptywright agent run examples/agent_deterministic.json --update-snapshots
+bun run src/cli.ts agent run examples/agent_deterministic.json --update-snapshots
 
 # Later runs compare terminal + DOM snapshots like a test snapshot.
-bun run bin/ptywright agent run examples/agent_deterministic.json
+bun run src/cli.ts agent run examples/agent_deterministic.json
 
 # Replay does not need AI; it uses the recorded flow artifact.
-bun run bin/ptywright agent replay .tmp/agent/agent_deterministic/agent_deterministic.agent-run.json
+bun run src/cli.ts agent replay .tmp/agent/agent_deterministic/agent_deterministic.agent-run.json
 
 # Cassette files are also directly replayable.
-bun run bin/ptywright agent replay .tmp/agent/agent_deterministic/agent_deterministic.cassette.json
+bun run src/cli.ts agent replay .tmp/agent/agent_deterministic/agent_deterministic.cassette.json
 
 # Promote a live run/cassette into the committed non-AI regression suite.
-bun run bin/ptywright agent promote \
+bun run src/cli.ts agent promote \
   .tmp/agent/agent_deterministic/agent_deterministic.cassette.json \
   --update-snapshots
 
 # Batch replay committed cassettes/run records as a regression suite.
-bun run bin/ptywright agent replay-all .tmp/agent --artifacts-root .tmp/agent-replay-all
+bun run src/cli.ts agent replay-all .tmp/agent --artifacts-root .tmp/agent-replay-all
 
 # Rerun directly from a generated summary artifact.
-bun run bin/ptywright agent rerun .tmp/agent-promote/agent_deterministic/agent-promote.summary.json
-bun run bin/ptywright agent rerun .tmp/agent-check/agent-check.summary.json
-bun run bin/ptywright agent rerun .tmp/agent-check/agent-replay.summary.json --update-snapshots
+bun run src/cli.ts agent rerun .tmp/agent-promote/agent_deterministic/agent-promote.summary.json
+bun run src/cli.ts agent rerun .tmp/agent-check/agent-check.summary.json
+bun run src/cli.ts agent rerun .tmp/agent-check/agent-replay.summary.json --update-snapshots
 
 # Read reusable commands from any supported agent artifact.
-bun run bin/ptywright agent commands .tmp/agent-check/agent-check.summary.json --json
-bun run bin/ptywright agent commands .tmp/agent-check/agent-check.summary.json --command rerun
-bun run bin/ptywright agent commands .tmp/agent-check --json
-bun run bin/ptywright agent inspect .tmp/agent-check
-bun run bin/ptywright agent inspect .tmp/agent-check --json
-bun run bin/ptywright agent validate .tmp/agent-check
-bun run bin/ptywright agent exec .tmp/agent-check --command rerun
-bun run bin/ptywright agent exec .tmp/agent-check --command updateSnapshots
-bun run bin/ptywright agent exec .tmp/agent-check/agent-check.summary.json --command rerun
-bun run bin/ptywright agent exec .tmp/agent-check/agent-check.summary.json --command updateSnapshots
+bun run src/cli.ts agent commands .tmp/agent-check/agent-check.summary.json --json
+bun run src/cli.ts agent commands .tmp/agent-check/agent-check.summary.json --command rerun
+bun run src/cli.ts agent commands .tmp/agent-check --json
+bun run src/cli.ts agent inspect .tmp/agent-check
+bun run src/cli.ts agent inspect .tmp/agent-check --json
+bun run src/cli.ts agent validate .tmp/agent-check
+bun run src/cli.ts agent exec .tmp/agent-check --command rerun
+bun run src/cli.ts agent exec .tmp/agent-check --command updateSnapshots
+bun run src/cli.ts agent exec .tmp/agent-check/agent-check.summary.json --command rerun
+bun run src/cli.ts agent exec .tmp/agent-check/agent-check.summary.json --command updateSnapshots
 
 # Validate flow/cassette/run-record/summary artifacts before committing.
-bun run bin/ptywright agent validate .tmp/agent-replay-all
+bun run src/cli.ts agent validate .tmp/agent-replay-all
 
 # Run committed cassette replay regression without launching live agents.
-bun run bin/ptywright agent check
-bun run bin/ptywright agent check --json
+bun run src/cli.ts agent check
+bun run src/cli.ts agent check --json
 
 # Update terminal/DOM baselines from committed cassettes intentionally.
-bun run bin/ptywright agent replay-all tests/agent-cassettes --update-snapshots
+bun run src/cli.ts agent replay-all tests/agent-cassettes --update-snapshots
 
 # Record browser interactions into a replayable flow spec.
-bun run bin/ptywright agent record examples/agents/codex_browser_smoke.json \
+bun run src/cli.ts agent record examples/agents/codex_browser_smoke.json \
   --out scripts/agents/codex_recorded.flow.json \
   --duration-ms 60000 \
   --headed
 
 # Generate starter specs for real agents.
-bun run bin/ptywright agent init codex examples/agents/codex_browser_smoke.json
-bun run bin/ptywright agent init claude examples/agents/claude_browser_smoke.json
-bun run bin/ptywright agent init droidx examples/agents/droidx_browser_smoke.json
+bun run src/cli.ts agent init codex examples/agents/codex_browser_smoke.json
+bun run src/cli.ts agent init claude examples/agents/claude_browser_smoke.json
+bun run src/cli.ts agent init droidx examples/agents/droidx_browser_smoke.json
 ```
+
+DOM artifact viewers prefer project renderer assets when available. If
+`@aitty/browser` is resolvable from the current project, flow path, report path,
+or artifact directory, ptywright copies `@aitty/browser/style.css` and the Aitty
+snapshot web component into the report artifacts and renders snapshots through
+`<aitty-snapshot>`. The classic `web-component.global.js` bundle is preferred for
+portable file reports; `web-component.js` is used as a module fallback. In this
+path, terminal internals such as wterm rows, ANSI styling, termvision, and
+viewport-pan come from `@aitty/browser`; ptywright only supplies the report frame
+and copied assets. If those assets are unavailable, the report falls back to a
+self-contained terminal preview so ptywright remains renderer-agnostic.
 
 Artifacts are split intentionally:
 - `.tmp/agent/<name>/` contains run output, screenshots, `*.flow.json`,
@@ -567,7 +578,7 @@ details.
 bun install
 
 # Start MCP server
-bun run bin/ptywright mcp
+bun run src/cli.ts mcp
 
 # Run tests
 bun run test
@@ -581,11 +592,11 @@ bun run lint
 bun run format:check
 
 # Run scripts
-bun run bin/ptywright run scripts/m5_mask_demo.json
-bun run bin/ptywright run-all
+bun run src/cli.ts run scripts/m5_mask_demo.json
+bun run src/cli.ts run-all
 
 # Run browser agent regression
-bun run bin/ptywright agent run examples/agent_deterministic.json --update-snapshots
+bun run src/cli.ts agent run examples/agent_deterministic.json --update-snapshots
 ```
 
 ## Environment Variables

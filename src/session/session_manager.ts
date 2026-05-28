@@ -1,3 +1,4 @@
+import { mergeProcessEnv } from "../common/env";
 import { createDefaultPtyAdapter } from "../pty/default_adapter";
 import type { PtyAdapter } from "../pty/pty_adapter";
 import { TerminalSession } from "./terminal_session";
@@ -38,7 +39,7 @@ export class SessionManager {
     const cwd = args.cwd ?? process.cwd();
     const term = args.env?.TERM ?? args.name ?? "xterm-256color";
 
-    const env = mergeEnv(
+    const env = mergeProcessEnv(
       {
         TERM: term,
         COLORTERM: "truecolor",
@@ -97,31 +98,6 @@ function clampInt(value: number, min: number, max: number): number {
   if (int < min) return min;
   if (int > max) return max;
   return int;
-}
-
-function mergeEnv(
-  base: Record<string, string>,
-  override?: Record<string, string>,
-): Record<string, string> {
-  const env: Record<string, string> = {};
-
-  for (const [k, v] of Object.entries(process.env)) {
-    if (typeof v === "string") {
-      env[k] = v;
-    }
-  }
-
-  for (const [k, v] of Object.entries(base)) {
-    env[k] = v;
-  }
-
-  if (override) {
-    for (const [k, v] of Object.entries(override)) {
-      env[k] = v;
-    }
-  }
-
-  return env;
 }
 
 function pickTraceEnv(env: Record<string, string>): Record<string, string> {

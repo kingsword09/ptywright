@@ -1,67 +1,28 @@
-import { existsSync, mkdirSync, writeFileSync } from "node:fs";
 import { dirname, relative, resolve } from "node:path";
 
 import { scriptSchema } from "../script/schema";
 import type { Script, ScriptStep } from "../script/schema";
 import type { TerminalSession } from "../session/terminal_session";
-import type { TextMaskRule } from "../terminal/mask";
-
-export type StartScriptRecordingArgs = {
-  name: string;
-  outPath?: string;
-  goldenDir?: string;
-  overwrite?: boolean;
-  checkpoint?: {
-    scope?: "visible" | "buffer";
-    trimRight?: boolean;
-    trimBottom?: boolean;
-    mask?: TextMaskRule[];
-  };
-};
-
-export type StopScriptRecordingArgs = {
-  recordingId: string;
-  writeFiles?: boolean;
-};
-
-export type ScriptRecordingStatus = {
-  recordingId: string;
-  name: string;
-  outPath: string;
-  goldenDir: string;
-  hasLaunch: boolean;
-  stepCount: number;
-  checkpointCount: number;
-};
-
-export type StopScriptRecordingResult = {
-  scriptPath?: string;
-  goldenPaths: string[];
-  script: Script & { $schema?: string };
-};
-
-type GoldenWrite = { path: string; text: string };
-
-type CheckpointConfig = {
-  scope: "visible" | "buffer";
-  trimRight: boolean;
-  trimBottom: boolean;
-  mask?: TextMaskRule[];
-};
-
-type ScriptRecording = {
-  id: string;
-  name: string;
-  outPath: string;
-  goldenDir: string;
-  overwrite: boolean;
-  checkpoint: CheckpointConfig;
-  launch: Script["launch"] | null;
-  sessionId: string | null;
-  steps: ScriptStep[];
-  checkpointIndex: number;
-  goldenWrites: GoldenWrite[];
-};
+import {
+  joinPosix,
+  resolvePathLike,
+  sanitizeLabel,
+  toPosixPath,
+  writeOrThrow,
+} from "./script_recording_files";
+import type {
+  ScriptRecording,
+  ScriptRecordingStatus,
+  StartScriptRecordingArgs,
+  StopScriptRecordingArgs,
+  StopScriptRecordingResult,
+} from "./script_recording_types";
+export type {
+  ScriptRecordingStatus,
+  StartScriptRecordingArgs,
+  StopScriptRecordingArgs,
+  StopScriptRecordingResult,
+} from "./script_recording_types";
 
 export class ScriptRecordingManager {
   private active: ScriptRecording | null = null;
@@ -207,32 +168,4 @@ export class ScriptRecordingManager {
       path: goldenPath,
     } as Extract<ScriptStep, { type: "expectGolden" }>);
   }
-}
-
-function writeOrThrow(path: string, text: string, overwrite: boolean): void {
-  const abs = resolvePathLike(path, true);
-  if (!overwrite && existsSync(abs)) {
-    throw new Error(`refusing to overwrite: ${path}`);
-  }
-  mkdirSync(dirname(abs), { recursive: true });
-  writeFileSync(abs, text, "utf8");
-}
-
-function resolvePathLike(path: string, absolute: boolean): string {
-  if (!absolute) return toPosixPath(path);
-  return resolve(process.cwd(), path);
-}
-
-function sanitizeLabel(label: string): string {
-  return label.replace(/[^a-z0-9._-]+/gi, "_").replace(/^_+|_+$/g, "") || "checkpoint";
-}
-
-function toPosixPath(path: string): string {
-  return path.replace(/\\/g, "/");
-}
-
-function joinPosix(a: string, b: string): string {
-  const left = a.replace(/\\/g, "/").replace(/\/+$/g, "");
-  const right = b.replace(/\\/g, "/").replace(/^\/+/g, "");
-  return `${left}/${right}`;
 }
