@@ -2,45 +2,42 @@ import { Terminal } from "@xterm/headless";
 
 import type { Disposable, PtyProcess } from "../pty/pty_adapter";
 import { encodeKey } from "../terminal/keys";
-import { renderAnsiLines } from "../terminal/ansi";
 import { encodeSgrMouse } from "../terminal/mouse";
 import type { MouseEvent } from "../terminal/mouse";
 import type { AnsiRenderedLine } from "../terminal/ansi";
-import { snapshotGrid, snapshotLines } from "../terminal/snapshot";
+import { snapshotGrid } from "../terminal/snapshot";
 import type { TerminalSnapshotGrid } from "../terminal/snapshot";
-import type { SnapshotScope } from "../terminal/snapshot";
 import type { TerminalMeta } from "../terminal/view";
-import { applyTextMaskRules } from "../terminal/mask";
-import type { TextMaskRule } from "../terminal/mask";
 import { fnv1a32 } from "../util/hash";
-import { sleep } from "../util/sleep";
 import { TraceRecorder } from "../trace/recorder";
 import type { TraceSnapshot } from "../trace/recorder";
+import { snapshotSessionAnsi, snapshotSessionText } from "./terminal_session_snapshot";
+import { waitForSessionText, waitForStableSessionScreen } from "./terminal_session_wait";
+import type {
+  SnapshotAnsiOptions,
+  SnapshotFrame,
+  SnapshotTextResult,
+  SnapshotTextOptions,
+  TerminalSessionCloseReason,
+  TerminalSessionOptions,
+  WaitForStableScreenArgs,
+  WaitForStableScreenResult,
+  WaitForTextArgs,
+  WaitForTextResult,
+} from "./terminal_session_types";
 
-export type TerminalSessionOptions = {
-  id: string;
-  pty: PtyProcess;
-  cols: number;
-  rows: number;
-  snapshotRingSize: number;
-  trace?: {
-    command?: string;
-    args?: string[];
-    cwd?: string;
-    env?: Record<string, string>;
-    title?: string;
-  };
-};
-
-export type SnapshotFrame = {
-  atMs: number;
-  hash: string;
-  text: string;
-};
-
-export type TerminalSessionCloseReason =
-  | { type: "closed_by_user" }
-  | { type: "process_exit"; exitCode: number; signal?: number | string };
+export type {
+  SnapshotAnsiOptions,
+  SnapshotFrame,
+  SnapshotTextResult,
+  SnapshotTextOptions,
+  TerminalSessionCloseReason,
+  TerminalSessionOptions,
+  WaitForStableScreenArgs,
+  WaitForStableScreenResult,
+  WaitForTextArgs,
+  WaitForTextResult,
+} from "./terminal_session_types";
 
 const ESC = "\x1b";
 
@@ -167,39 +164,9 @@ export class TerminalSession {
     };
   }
 
-  async snapshotText(options?: SnapshotTextOptions): Promise<{
-    text: string;
-    hash: string;
-  }> {
+  async snapshotText(options?: SnapshotTextOptions): Promise<SnapshotTextResult> {
     await this.flush();
-    if (options?.maxLines !== undefined && options.tailLines !== undefined) {
-      throw new Error("snapshotText: maxLines and tailLines are mutually exclusive");
-    }
-
-    let lines = snapshotLines(this.terminal, {
-      scope: options?.scope,
-      trimRight: options?.trimRight,
-    });
-
-    const trimBottom = options?.trimBottom ?? true;
-    if (trimBottom) {
-      lines = trimBottomEmptyLines(lines);
-    }
-
-    if (options?.maxLines !== undefined) {
-      const max = Math.max(0, Math.trunc(options.maxLines));
-      lines = lines.slice(0, max);
-    }
-
-    if (options?.tailLines !== undefined) {
-      const tail = Math.max(0, Math.trunc(options.tailLines));
-      lines = lines.slice(Math.max(0, lines.length - tail));
-    }
-
-    lines = applyTextMaskRules(lines, options?.mask);
-
-    const text = lines.join("\n");
-    const hash = fnv1a32(text);
+    const { text, hash } = snapshotSessionText(this.terminal, options);
     if (options?.captureFrame ?? true) {
       this.captureFrame(text, hash);
     }
@@ -213,51 +180,7 @@ export class TerminalSession {
     lines: AnsiRenderedLine[];
   }> {
     await this.flush();
-    if (options?.maxLines !== undefined && options.tailLines !== undefined) {
-      throw new Error("snapshotAnsi: maxLines and tailLines are mutually exclusive");
-    }
-
-    let lines = renderAnsiLines(this.terminal, {
-      scope: options?.scope,
-      trimRight: options?.trimRight,
-    });
-
-    const trimBottom = options?.trimBottom ?? true;
-    if (trimBottom) {
-      lines = trimBottomEmptyAnsiLines(lines);
-    }
-
-    if (options?.maxLines !== undefined) {
-      const max = Math.max(0, Math.trunc(options.maxLines));
-      lines = lines.slice(0, max);
-    }
-
-    if (options?.tailLines !== undefined) {
-      const tail = Math.max(0, Math.trunc(options.tailLines));
-      lines = lines.slice(Math.max(0, lines.length - tail));
-    }
-
-    if (options?.mask && options.mask.length > 0) {
-      const maskedPlain = applyTextMaskRules(
-        lines.map((line) => line.plain),
-        options.mask,
-      );
-      const maskedAnsi = applyTextMaskRules(
-        lines.map((line) => line.ansi),
-        options.mask,
-      );
-
-      lines = lines.map((line, idx) => ({
-        ...line,
-        plain: maskedPlain[idx] ?? "",
-        ansi: maskedAnsi[idx] ?? "",
-      }));
-    }
-
-    const ansi = lines.map((l) => l.ansi).join("\n");
-    const plain = lines.map((l) => l.plain).join("\n");
-    const hash = fnv1a32(ansi);
-    return { ansi, plain, hash, lines };
+    return snapshotSessionAnsi(this.terminal, options);
   }
 
   async snapshotGrid(options?: {
@@ -300,66 +223,12 @@ export class TerminalSession {
     return [...this.rawOutputRing];
   }
 
-  async waitForText(args: {
-    scope?: SnapshotScope;
-    text?: string;
-    regex?: RegExp;
-    timeoutMs: number;
-    intervalMs: number;
-  }): Promise<{ found: boolean; text: string; hash: string }> {
-    const startedAt = Date.now();
-    let closedSince: number | null = null;
-    while (Date.now() - startedAt <= args.timeoutMs) {
-      const snapshot = await this.snapshotText({ captureFrame: true, scope: args.scope });
-      if (args.text && snapshot.text.includes(args.text)) {
-        return { found: true, ...snapshot };
-      }
-      if (args.regex && args.regex.test(snapshot.text)) {
-        return { found: true, ...snapshot };
-      }
-
-      if (this.isClosed()) {
-        closedSince ??= Date.now();
-        const drainMs = Math.max(500, args.intervalMs * 4);
-        if (Date.now() - closedSince >= drainMs) {
-          break;
-        }
-      }
-
-      await sleep(args.intervalMs);
-    }
-
-    const snapshot = await this.snapshotText({ captureFrame: true, scope: args.scope });
-    return { found: false, ...snapshot };
+  async waitForText(args: WaitForTextArgs): Promise<WaitForTextResult> {
+    return waitForSessionText(this, args);
   }
 
-  async waitForStableScreen(args: {
-    quietMs: number;
-    timeoutMs: number;
-    intervalMs: number;
-  }): Promise<{ stable: boolean; text: string; hash: string }> {
-    const startedAt = Date.now();
-    let stableSince: number | null = null;
-    let lastHash: string | null = null;
-
-    while (Date.now() - startedAt <= args.timeoutMs) {
-      const snapshot = await this.snapshotText({ captureFrame: true });
-      if (snapshot.hash === lastHash) {
-        stableSince ??= Date.now();
-      } else {
-        stableSince = null;
-        lastHash = snapshot.hash;
-      }
-
-      if (stableSince !== null && Date.now() - stableSince >= args.quietMs) {
-        return { stable: true, ...snapshot };
-      }
-
-      await sleep(args.intervalMs);
-    }
-
-    const snapshot = await this.snapshotText({ captureFrame: true });
-    return { stable: false, ...snapshot };
+  async waitForStableScreen(args: WaitForStableScreenArgs): Promise<WaitForStableScreenResult> {
+    return waitForStableSessionScreen(this, args);
   }
 
   close(): void {
@@ -432,42 +301,4 @@ export class TerminalSession {
     this.writePtySafely(`${ESC}[?1;2c`);
     return true;
   }
-}
-
-type SnapshotTextOptions = {
-  scope?: SnapshotScope;
-  trimRight?: boolean;
-  trimBottom?: boolean;
-  maxLines?: number;
-  tailLines?: number;
-  captureFrame?: boolean;
-  mask?: TextMaskRule[];
-};
-
-function trimBottomEmptyLines(lines: string[]): string[] {
-  let end = lines.length;
-  while (end > 0 && lines[end - 1] === "") {
-    end -= 1;
-  }
-  return end === lines.length ? lines : lines.slice(0, end);
-}
-
-type SnapshotAnsiOptions = {
-  scope?: SnapshotScope;
-  trimRight?: boolean;
-  trimBottom?: boolean;
-  maxLines?: number;
-  tailLines?: number;
-  mask?: TextMaskRule[];
-};
-
-function trimBottomEmptyAnsiLines(lines: AnsiRenderedLine[]): AnsiRenderedLine[] {
-  let end = lines.length;
-  while (end > 0) {
-    const line = lines[end - 1];
-    const isBlank = !line?.hasStyle && (line?.plain ?? "").trim() === "";
-    if (!isBlank) break;
-    end -= 1;
-  }
-  return end === lines.length ? lines : lines.slice(0, end);
 }

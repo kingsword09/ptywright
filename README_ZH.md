@@ -304,32 +304,42 @@ cassette。一次 live run 通过后，可以把 cassette 固化为不依赖 AI 
 
 ```bash
 # 首次 live run：写入 snapshot、cassette、run record、report。
-bun run bin/ptywright agent run examples/agent_deterministic.json --update-snapshots
+bun run src/cli.ts agent run examples/agent_deterministic.json --update-snapshots
 
 # 非 AI 单用例回放：可传 run record 或 cassette。
-bun run bin/ptywright agent replay .tmp/agent/agent_deterministic/agent_deterministic.agent-run.json
-bun run bin/ptywright agent replay .tmp/agent/agent_deterministic/agent_deterministic.cassette.json
+bun run src/cli.ts agent replay .tmp/agent/agent_deterministic/agent_deterministic.agent-run.json
+bun run src/cli.ts agent replay .tmp/agent/agent_deterministic/agent_deterministic.cassette.json
 
 # 把一次成功的 live run/cassette 提升为提交内回归套件。
-bun run bin/ptywright agent promote \
+bun run src/cli.ts agent promote \
   .tmp/agent/agent_deterministic/agent_deterministic.cassette.json \
   --update-snapshots
 
 # 批量回放已提交 cassette，并在有意变更时更新 terminal/DOM baseline。
-bun run bin/ptywright agent check
-bun run bin/ptywright agent replay-all tests/agent-cassettes --update-snapshots
+bun run src/cli.ts agent check
+bun run src/cli.ts agent replay-all tests/agent-cassettes --update-snapshots
 
 # 从产物读取、校验或直接执行可复用命令。
-bun run bin/ptywright agent commands .tmp/agent-check --json
-bun run bin/ptywright agent inspect .tmp/agent-check
-bun run bin/ptywright agent validate .tmp/agent-check
-bun run bin/ptywright agent exec .tmp/agent-check --command rerun
-bun run bin/ptywright agent exec .tmp/agent-check --command updateSnapshots
+bun run src/cli.ts agent commands .tmp/agent-check --json
+bun run src/cli.ts agent inspect .tmp/agent-check
+bun run src/cli.ts agent validate .tmp/agent-check
+bun run src/cli.ts agent exec .tmp/agent-check --command rerun
+bun run src/cli.ts agent exec .tmp/agent-check --command updateSnapshots
 
 # 从 summary 产物重新执行，不需要 live agent。
-bun run bin/ptywright agent rerun .tmp/agent-check/agent-check.summary.json
-bun run bin/ptywright agent rerun .tmp/agent-check/agent-replay.summary.json --update-snapshots
+bun run src/cli.ts agent rerun .tmp/agent-check/agent-check.summary.json
+bun run src/cli.ts agent rerun .tmp/agent-check/agent-replay.summary.json --update-snapshots
 ```
+
+DOM 产物查看器会优先使用项目自己的渲染资产。如果从当前项目、flow 路径、
+report 路径或 artifact 目录能解析到 `@aitty/browser`，ptywright 会把
+`@aitty/browser/style.css` 和 Aitty snapshot web component 复制进报告产物，
+并通过 `<aitty-snapshot>` 渲染 snapshot。便携的 file report 会优先使用 classic
+`web-component.global.js`；如果不存在，则退到 module 形式的 `web-component.js`。
+在这条路径里，wterm 行结构、ANSI 样式、termvision 和 viewport-pan 都来自
+`@aitty/browser`；ptywright 只提供报告外框和复制后的资产。解析不到这些资产时，
+报告才会回退到自包含的 terminal preview，确保 ptywright 仍然是通用的
+renderer-agnostic 工具。
 
 关键产物：
 - `.agent-run.json`：每次运行的结构化记录，包含 `commands.replay.argv`
@@ -392,7 +402,7 @@ ptywright agent promote .tmp/agent/codex/codex.cassette.json --update-snapshots
 bun install
 
 # 启动 MCP server
-bun run bin/ptywright mcp
+bun run src/cli.ts mcp
 
 # 运行测试与提交前检查
 bun run test
@@ -404,11 +414,11 @@ bun run lint
 bun run format:check
 
 # 运行脚本
-bun run bin/ptywright run scripts/m5_mask_demo.json
-bun run bin/ptywright run-all
+bun run src/cli.ts run scripts/m5_mask_demo.json
+bun run src/cli.ts run-all
 
 # 运行 browser agent 回归
-bun run bin/ptywright agent run examples/agent_deterministic.json --update-snapshots
+bun run src/cli.ts agent run examples/agent_deterministic.json --update-snapshots
 ```
 
 ## 环境变量

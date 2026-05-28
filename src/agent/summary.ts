@@ -2,6 +2,8 @@ import { readFileSync, writeFileSync } from "node:fs";
 
 import { z } from "zod";
 
+import { sameArgv } from "../common/compare";
+import { formatZodIssues } from "../common/zod";
 import { agentRunModeSchema } from "./run_record";
 
 export const AGENT_REPLAY_SUMMARY_SCHEMA_URL =
@@ -166,17 +168,4 @@ function defaultAgentReplaySummaryCommands(summary: {
     updateSnapshots: { argv: [...replayAll, "--update-snapshots"] },
     rerun: { argv: ["ptywright", "agent", "rerun", summary.summaryPath] },
   };
-}
-
-function sameArgv(left: readonly string[], right: readonly string[]): boolean {
-  return left.length === right.length && left.every((value, index) => value === right[index]);
-}
-
-function formatZodIssues(error: z.ZodError): string {
-  return error.issues
-    .map((issue) => {
-      const path = issue.path.length ? issue.path.join(".") : "<root>";
-      return `${path}: ${issue.message}`;
-    })
-    .join("; ");
 }

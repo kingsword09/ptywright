@@ -1,0 +1,88 @@
+export function usage(): string {
+  return [
+    "ptywright <command>",
+    "",
+    "Commands:",
+    "  mcp                 Start the MCP server over stdio (default)",
+    "  mcp-http            Start the MCP server over Streamable HTTP",
+    "  agent run <file>    Run a browser-hosted terminal-agent flow",
+    "  agent record <file> --out <file>  Record browser interactions into a flow",
+    "  agent replay <run>  Replay a recorded terminal-agent flow without AI",
+    "  agent promote <run> Promote a run/cassette into the committed cassette suite",
+    "  agent replay-all [dir]  Replay all agent cassettes/run records in a directory",
+    "  agent rerun <summary>  Rerun from agent replay/check/promote summary metadata",
+    "  agent commands <artifact>  Print replay/update argv from an agent artifact",
+    "  agent inspect <artifact|dir>  Inspect validation, files, and commands for an agent artifact",
+    "  agent exec <artifact> --command <name>  Execute one command from an agent artifact",
+    "  agent check [dir]  Validate and replay committed agent cassettes",
+    "  agent validate <path>  Validate agent flow/cassette/run-record/summary artifacts",
+    "  agent init <flavor> <file>  Write a starter agent flow spec",
+    "  pty record --out <file> -- <command> [args...]  Record a raw PTY cassette",
+    "  pty replay <file>     Replay a raw PTY cassette without rerunning the command",
+    "  pty inspect <file>    Inspect a raw PTY cassette",
+    "  pty validate <file>   Validate a raw PTY cassette",
+    "  run <file>           Run one script (JSON/TS) and write artifacts",
+    "  run-all [dir]        Run all scripts in a directory and write a suite report",
+    "  script commands <summary|dir>  Print replay/update argv from a script run summary",
+    "  script inspect <summary|dir>  Inspect validation, files, and commands for a script artifact",
+    "  script exec <summary|dir> --command <name>  Execute one command from a script summary",
+    "  script validate <summary|dir>  Validate a script run summary artifact",
+    "  help                Show help",
+    "",
+    "Run options:",
+    "  --artifacts-dir <dir>    Override artifacts directory",
+    "  --steps <module.ts>      Inject custom step handlers",
+    "  --update-goldens         Update golden snapshots",
+    "",
+    "Run-all options:",
+    "  --dir <dir>              Directory to scan (default: scripts)",
+    "  --artifacts-root <dir>   Suite artifacts root (default: .tmp/run-all)",
+    "  --steps <module.ts>      Inject custom step handlers",
+    "  --update-goldens         Update golden snapshots",
+    "",
+    "Script artifact options:",
+    "  --command <name>         Select a reusable command (runAll|updateGoldens)",
+    "  --json                   Print machine-readable script artifact output",
+    "",
+    "Agent options:",
+    "  --config <file>          Use a ptywright.config.* file",
+    "  --artifacts-dir <dir>    Override agent run artifact directory",
+    "  --cassette-dir <dir>     Committed cassette directory for promote/check",
+    "  --snapshot-dir <dir>     Snapshot directory for promoted cassettes",
+    "  --out <file>             Output path for agent record",
+    "  --duration-ms <ms>       Recording window duration",
+    "  --artifacts-root <dir>   Override agent replay-all artifact root",
+    "  --command <name>          Print one agent artifact command by name",
+    "  --update-snapshots       Update terminal/DOM snapshots",
+    "  --headed                 Show the browser while running",
+    "  --json                   Print machine-readable agent check output",
+    "",
+    "PTY cassette options:",
+    "  --out <file>             Output cassette JSON path",
+    "  --cols <n> / --rows <n>  Terminal size for recording",
+    "  --term <name>            TERM/name value (default: xterm-256color)",
+    "  --backend <name>         auto|bun-terminal|bun-pty",
+    "  --speed <n>              Replay timing multiplier; 0 means instant",
+    "",
+    "MCP options:",
+    "  --caps <list>            Capabilities: all|core|debug|script|recording",
+    "",
+    "MCP HTTP options (mcp-http):",
+    "  --host <host>            Bind host (default: 127.0.0.1)",
+    "  --port <port>            Bind port (default: 3000)",
+    "  --allowed-origins <list> Comma/space separated Origin allowlist",
+    "  --no-cors                Disable CORS headers",
+  ].join("\n");
+}
+
+export function isHelp(arg: string | undefined): boolean {
+  return arg === "-h" || arg === "--help" || arg === "help";
+}
+
+export function logLines(lines: Array<string | null | undefined>, stderr: boolean): void {
+  const filtered = lines.map((l) => l?.trim()).filter(Boolean) as string[];
+  for (const line of filtered) {
+    // eslint-disable-next-line no-console
+    (stderr ? console.error : console.log)(line);
+  }
+}

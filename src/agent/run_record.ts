@@ -2,7 +2,9 @@ import { readFileSync, writeFileSync } from "node:fs";
 
 import { z } from "zod";
 
+import { sameArgv } from "../common/compare";
 import { formatArgv } from "../common/argv";
+import { formatZodIssues } from "../common/zod";
 import { agentFlowSpecSchema, normalizeAgentFlowSpec, type AgentFlowSpec } from "./schema";
 
 export const AGENT_RUN_RECORD_SCHEMA_URL =
@@ -134,10 +136,6 @@ export function formatAgentArgv(argv: readonly string[]): string {
   return formatArgv(argv);
 }
 
-function sameArgv(left: readonly string[], right: readonly string[]): boolean {
-  return left.length === right.length && left.every((value, index) => value === right[index]);
-}
-
 function isReplayArgv(argv: readonly string[]): boolean {
   return argv.length >= 4 && argv[0] === "ptywright" && argv[1] === "agent" && argv[2] === "replay";
 }
@@ -161,13 +159,4 @@ export function isAgentRunRecordLike(input: unknown): boolean {
     candidate.version === 1 &&
     ("cassettePath" in candidate || "flowPath" in candidate || "spec" in candidate)
   );
-}
-
-function formatZodIssues(error: z.ZodError): string {
-  return error.issues
-    .map((issue) => {
-      const path = issue.path.length ? issue.path.join(".") : "<root>";
-      return `${path}: ${issue.message}`;
-    })
-    .join("; ");
 }
