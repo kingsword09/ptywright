@@ -473,36 +473,54 @@ function renderStableFrameDom(frame: PtyReplayStableFrame, targetCols: number): 
   let html = "";
   let totalRows = 0;
   let wideBlockId = 0;
+  let codeRunCols = 0;
+  let codeRunRows: StableLogicalLine[] = [];
 
-  for (const line of frame.lines) {
-    const lineCols = cellsDisplayWidth(line.cells);
-    const wide = shouldRenderViewportPan(line, lineCols, targetCols);
-
-    if (wide) {
-      wideBlockId += 1;
-      const blockCols = Math.max(targetCols, lineCols);
-      html += `<div class="term-wide-row-block" data-aitty-wide-block="true" data-aitty-wide-block-id="${wideBlockId}" data-aitty-wide-block-kind="viewport-pan" style="--aitty-wide-block-cols: ${blockCols}">`;
-      html += renderStableFrameRow(line, blockCols, totalRows);
-      html += "</div>";
+  const renderPlainRow = (line: StableLogicalLine): void => {
+    for (const row of wrapStableLogicalLine(line, targetCols)) {
+      html += renderStableFrameRow(row, targetCols, totalRows);
       totalRows += 1;
-    } else {
-      for (const row of wrapStableLogicalLine(line, targetCols)) {
-        html += renderStableFrameRow(row, targetCols, totalRows);
+    }
+  };
+
+  const flushCodeRun = (): void => {
+    if (codeRunRows.length === 0) return;
+
+    if (codeRunCols > targetCols) {
+      wideBlockId += 1;
+      const blockCols = Math.max(targetCols, codeRunCols);
+      html += `<div class="term-wide-row-block" data-aitty-wide-block="true" data-aitty-wide-block-id="${wideBlockId}" data-aitty-wide-block-kind="guttered-code" style="--aitty-wide-block-cols: ${blockCols}">`;
+      for (const row of codeRunRows) {
+        html += renderStableFrameRow(row, blockCols, totalRows);
         totalRows += 1;
       }
+      html += "</div>";
+    } else {
+      for (const row of codeRunRows) {
+        renderPlainRow(row);
+      }
     }
+
+    codeRunCols = 0;
+    codeRunRows = [];
+  };
+
+  for (const line of frame.lines) {
+    const lineText = stableLineText(line);
+    const lineCols = cellsDisplayWidth(line.cells);
+
+    if (isGutteredCodeLine(lineText) || isDiffLikeLine(lineText)) {
+      codeRunRows.push(line);
+      codeRunCols = Math.max(codeRunCols, lineCols);
+      continue;
+    }
+
+    flushCodeRun();
+    renderPlainRow(line);
   }
+  flushCodeRun();
 
   return `<div class="term-grid" data-cols="${targetCols}" data-rows="${totalRows}" style="--term-cols: ${targetCols}; --term-rows: ${totalRows};">${html}</div>`;
-}
-
-function shouldRenderViewportPan(
-  line: StableLogicalLine,
-  lineCols: number,
-  targetCols: number,
-): boolean {
-  if (lineCols <= targetCols) return false;
-  return isDiffLikeLine(stableLineText(line));
 }
 
 function stableLineText(line: StableLogicalLine): string {
@@ -510,6 +528,11 @@ function stableLineText(line: StableLogicalLine): string {
     .map((cell) => cell.text)
     .join("")
     .trimEnd();
+}
+
+function isGutteredCodeLine(text: string): boolean {
+  const normalized = text.replace(/[│┃┆┊▏▕]/g, " ").trimStart();
+  return /^\d+\s+(?:[+-]|\s{2,}\S)/.test(normalized);
 }
 
 function isDiffLikeLine(text: string): boolean {

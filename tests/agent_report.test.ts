@@ -635,7 +635,9 @@ test("agent report rebuilds PTY replay DOM previews from stable frames", async (
             dataBase64: encodeOutput(
               [
                 `${"ordinary mobile text ".repeat(8)}\r\n`,
+                "      292        const groupedContext = true;\r\n",
                 `\u001b[32m      293 +      const snapshotWidth = "${"wide-output-".repeat(8)}";\u001b[0m\r\n`,
+                `\u001b[31m      294 -      const previousWidth = "${"removed-output-".repeat(8)}";\u001b[0m\r\n`,
                 `\u001b[38;5;174mPalette174\u001b[0m\r\n`,
                 "Ready\r\n",
               ].join(""),
@@ -690,11 +692,17 @@ test("agent report rebuilds PTY replay DOM previews from stable frames", async (
   expect(domPreview).toContain('theme="dark"');
   expect(domPreview).toContain('rows="24"');
   expect(domPreview).toContain('cols="46"');
+  expect(domPreview).toContain("groupedContext");
   expect(domPreview).toContain("wide-output-wide-output");
+  expect(domPreview).toContain("removed-output-removed-output");
   expect(domPreview).toContain("term-wide-row-block");
-  expect(domPreview).toContain('data-aitty-wide-block-kind="viewport-pan"');
+  expect(domPreview).toContain('data-aitty-wide-block-kind="guttered-code"');
   expect(domPreview.match(/class="term-wide-row-block"/g) ?? []).toHaveLength(1);
+  expect(domPreview.indexOf("groupedContext")).toBeGreaterThan(
+    domPreview.indexOf('class="term-wide-row-block"'),
+  );
   expect(domPreview).toContain("var(--term-color-2)");
+  expect(domPreview).toContain("var(--term-color-1)");
   expect(domPreview).toContain("rgb(215,135,135)");
   expect(domPreview).not.toContain("var(--term-color-174)");
   expect(domPreview).not.toContain('rows="1"');
