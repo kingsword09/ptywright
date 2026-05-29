@@ -5,6 +5,8 @@ import { expect, test } from "bun:test";
 
 import { checkAgentRegression } from "../src/agent/check";
 import { readAgentArtifactCommandsPath } from "../src/agent/commands";
+import { runAgentArtifactCommand } from "../src/cli/agent_artifact_command";
+import { parseAgentArgs } from "../src/cli/agent_args";
 import {
   AGENT_MANIFEST_FILE_NAME,
   AGENT_MANIFEST_SCHEMA_URL,
@@ -713,42 +715,34 @@ test("agent commands accept a copied manifest bundle directory", async () => {
   expect(parsed.commands?.rerun?.argv).toEqual(commands.commands.rerun.argv);
 });
 
-test("agent exec rerun works from a copied manifest bundle", async () => {
+test("agent exec rerun dispatches from a copied manifest bundle", async () => {
   const artifactsRoot = join(".tmp", "tests", "agent-manifest-exec-copy");
   const copyRoot = join(".tmp", "tests", "agent-manifest-exec-copy-moved");
   rmSync(artifactsRoot, { recursive: true, force: true });
   rmSync(copyRoot, { recursive: true, force: true });
 
-  const check = await checkAgentRegression({
-    cassetteDir: "tests/agent-cassettes",
-    artifactsRoot,
-    headless: true,
-  });
-  expect(check.ok).toBe(true);
+  writeMinimalCheckManifestBundle(artifactsRoot);
 
   cpSync(artifactsRoot, copyRoot, { recursive: true });
   rmSync(artifactsRoot, { recursive: true, force: true });
 
-  const logs: string[] = [];
-  const originalLog = console.log;
-
-  process.exitCode = undefined;
-  try {
-    console.log = (...args: unknown[]) => {
-      logs.push(args.map((arg) => String(arg)).join(" "));
-    };
-    await main(["agent", "exec", copyRoot, "--command", "rerun"]);
-    expect(currentExitCode()).toBe(0);
-  } finally {
-    console.log = originalLog;
-    process.exitCode = 0;
+  const args = parseAgentArgs(["exec", copyRoot, "--command", "rerun"]);
+  if (args.mode !== "exec") {
+    throw new Error("expected exec mode");
   }
+  const dispatches: string[][] = [];
+  const exitCode = await runAgentArtifactCommand(args, {
+    dispatch: async (argv) => {
+      dispatches.push(argv);
+      return 0;
+    },
+  });
 
-  const output = logs.join("\n");
-  expect(output).toContain("ok agent-check");
-  expect(output).toContain(`checkSummary=${join(copyRoot, "agent-check.summary.json")}`);
-  expect(existsSync(join(copyRoot, "agent-check.summary.json"))).toBe(true);
-}, 60_000);
+  expect(exitCode).toBe(0);
+  expect(dispatches).toEqual([
+    ["rerun", join(copyRoot, "agent-check.summary.json"), "--artifacts-root", copyRoot],
+  ]);
+});
 
 test("agent check summary next to a moved manifest reruns from local bundle records", async () => {
   const dir = join(".tmp", "tests", "agent-manifest-check-summary-copy");
