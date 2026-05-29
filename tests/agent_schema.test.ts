@@ -5,7 +5,7 @@ import { expect, test } from "bun:test";
 
 import { buildCommandLaunchCommand, extractUrlFromOutput } from "../src/agent/command_launch";
 import { formatAgentLaunchCommand } from "../src/agent/launch";
-import { applyAgentMasks } from "../src/agent/normalize";
+import { applyAgentMasks, normalizeDomSnapshot } from "../src/agent/normalize";
 import {
   createAgentTemplateSpec,
   resolveAgentFlavor,
@@ -118,6 +118,33 @@ test("agent mask presets include common ids and flavor model names", () => {
   expect(masked).toContain("<model>");
   expect(masked).toContain("<id>");
   expect(masked).toContain("<timestamp>");
+});
+
+test("agent codex model masks do not redact ordinary CSS properties", () => {
+  const spec = normalizeAgentFlowSpec({
+    launch: { agentFlavor: "codex", command: "codex" },
+    steps: [{ type: "waitForStableDom" }],
+  });
+
+  const masked = applyAgentMasks(
+    'style="overflow: hidden;" model gpt-5.5 and o3 request req_abc123456789',
+    resolveAgentMasks(spec),
+  );
+
+  expect(masked).toContain("overflow: hidden");
+  expect(masked).toContain("model <model> and <model>");
+  expect(masked).toContain("request <id>");
+});
+
+test("agent DOM masks escape replacement text as HTML", () => {
+  const dom = normalizeDomSnapshot(
+    '<div class="term-grid"><div class="term-row"><span style="overflow: hidden;">gpt-5.5</span></div></div>',
+    [{ regex: "\\bgpt-[A-Za-z0-9._:-]+\\b", flags: "gi", replacement: "<model>" }],
+  );
+
+  expect(dom).toContain("overflow: hidden");
+  expect(dom).toContain("&lt;model&gt;");
+  expect(dom).not.toContain("<model>");
 });
 
 test("agent template specs provide starter launch snapshots for real agent flavors", () => {

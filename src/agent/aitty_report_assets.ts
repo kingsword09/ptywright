@@ -20,20 +20,18 @@ type AittyReportAssetSources = {
   styleSource: string;
 };
 
-// @aitty/browser is the canonical renderer for terminal DOM artifacts. Its
-// custom element + stylesheet are copied next to the report so generated
-// pages stay self-contained.
+// @aitty/snapshot is the canonical renderer for terminal DOM artifacts. Its
+// custom element + stylesheet are copied next to the report so generated pages
+// stay self-contained without depending on the live browser session runtime.
 export function prepareAittyReportAssets(
   context: AgentReportAittyAssetContext,
-): AgentReportAittyAssets | null {
+): AgentReportAittyAssets {
   const sources = resolveAittyReportAssetSources(context);
 
-  if (!sources) {
-    return null;
-  }
-
   if (!existsSync(sources.scriptSource) || !existsSync(sources.styleSource)) {
-    return null;
+    throw new Error(
+      "@aitty/snapshot report assets are missing. Run the package build before generating reports.",
+    );
   }
 
   const assetDir = join(context.artifactsDir, "assets");
@@ -49,7 +47,7 @@ export function prepareAittyReportAssets(
 
 function resolveAittyReportAssetSources(
   context: AgentReportAittyAssetContext,
-): AittyReportAssetSources | null {
+): AittyReportAssetSources {
   for (const resolverBase of resolveAittyReportResolverBases(context)) {
     const sources = tryResolveAittyReportAssetSources(createRequire(resolverBase));
     if (sources) {
@@ -57,15 +55,22 @@ function resolveAittyReportAssetSources(
     }
   }
 
-  return tryResolveAittyReportAssetSources(createRequire(import.meta.url));
+  const fallback = tryResolveAittyReportAssetSources(createRequire(import.meta.url));
+  if (fallback) {
+    return fallback;
+  }
+
+  throw new Error(
+    "@aitty/snapshot report assets are missing. Install @aitty/snapshot or run the package build before generating reports.",
+  );
 }
 
 function resolveAittyReportResolverBases(context: AgentReportAittyAssetContext): string[] {
   const candidates = [
-    findNearestPackageJson(process.cwd()),
     findNearestPackageJson(dirname(resolve(context.flowPath))),
     findNearestPackageJson(dirname(resolve(context.reportPath))),
     findNearestPackageJson(dirname(resolve(context.artifactsDir))),
+    findNearestPackageJson(process.cwd()),
   ].filter((path): path is string => Boolean(path));
 
   return Array.from(new Set(candidates));
@@ -92,15 +97,25 @@ function findNearestPackageJson(startDir: string): string | null {
 function tryResolveAittyReportAssetSources(
   resolver: NodeJS.Require,
 ): AittyReportAssetSources | null {
+  return (
+    tryResolveAittyPackageAssetSources(resolver, "@aitty/snapshot") ??
+    tryResolveAittyPackageAssetSources(resolver, "@aitty/browser")
+  );
+}
+
+function tryResolveAittyPackageAssetSources(
+  resolver: NodeJS.Require,
+  packageName: "@aitty/snapshot" | "@aitty/browser",
+): AittyReportAssetSources | null {
   let scriptSource: string;
   let scriptType: AgentReportAittyAssets["scriptType"] = "classic";
   let styleSource: string;
 
   try {
-    scriptSource = resolver.resolve("@aitty/browser/web-component.global.js");
+    scriptSource = resolver.resolve(`${packageName}/web-component.global.js`);
   } catch {
     try {
-      scriptSource = resolver.resolve("@aitty/browser/web-component.js");
+      scriptSource = resolver.resolve(`${packageName}/web-component.js`);
       scriptType = "module";
     } catch {
       return null;
@@ -108,7 +123,7 @@ function tryResolveAittyReportAssetSources(
   }
 
   try {
-    styleSource = resolver.resolve("@aitty/browser/style.css");
+    styleSource = resolver.resolve(`${packageName}/style.css`);
   } catch {
     return null;
   }

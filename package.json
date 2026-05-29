@@ -63,6 +63,7 @@
     "prepublishOnly": "bun run build"
   },
   "dependencies": {
+    "@aitty/snapshot": "^0.5.0",
     "@modelcontextprotocol/sdk": "^1.25.2",
     "@xterm/headless": "^6.0.0",
     "asciinema-player": "3.9.0",

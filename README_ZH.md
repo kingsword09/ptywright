@@ -331,15 +331,11 @@ bun run src/cli.ts agent rerun .tmp/agent-check/agent-check.summary.json
 bun run src/cli.ts agent rerun .tmp/agent-check/agent-replay.summary.json --update-snapshots
 ```
 
-DOM 产物查看器会优先使用项目自己的渲染资产。如果从当前项目、flow 路径、
-report 路径或 artifact 目录能解析到 `@aitty/browser`，ptywright 会把
-`@aitty/browser/style.css` 和 Aitty snapshot web component 复制进报告产物，
-并通过 `<aitty-snapshot>` 渲染 snapshot。便携的 file report 会优先使用 classic
-`web-component.global.js`；如果不存在，则退到 module 形式的 `web-component.js`。
-在这条路径里，wterm 行结构、ANSI 样式、termvision 和 viewport-pan 都来自
-`@aitty/browser`；ptywright 只提供报告外框和复制后的资产。解析不到这些资产时，
-报告才会回退到自包含的 terminal preview，确保 ptywright 仍然是通用的
-renderer-agnostic 工具。
+DOM 产物查看器使用 `@aitty/snapshot` 作为报告渲染器。ptywright 会把
+`@aitty/snapshot/style.css` 和 classic
+`@aitty/snapshot/web-component.global.js` 复制进报告产物，并通过
+`<aitty-snapshot>` 渲染 snapshot。wterm 行结构、ANSI 样式、termvision 和
+viewport-pan 都来自 `@aitty/snapshot`；ptywright 只提供报告外框和复制后的资产。
 
 关键产物：
 - `.agent-run.json`：每次运行的结构化记录，包含 `commands.replay.argv`

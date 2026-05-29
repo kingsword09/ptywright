@@ -1,12 +1,21 @@
 import type { AgentTextMaskRule } from "./schema";
 
-export function applyAgentMasks(input: string, rules: readonly AgentTextMaskRule[] = []): string {
+type AgentMaskOptions = {
+  replacement?: (replacement: string) => string;
+};
+
+export function applyAgentMasks(
+  input: string,
+  rules: readonly AgentTextMaskRule[] = [],
+  options: AgentMaskOptions = {},
+): string {
   let out = input;
 
   for (const rule of rules) {
     const flags = rule.flags ?? "g";
     const regex = new RegExp(rule.regex, flags.includes("g") ? flags : `${flags}g`);
-    const replacement = rule.replacement ?? "<masked>";
+    const replacement =
+      options.replacement?.(rule.replacement ?? "<masked>") ?? rule.replacement ?? "<masked>";
 
     out = out.replace(regex, (match: string) => {
       if (!rule.preserveLength) {
@@ -62,7 +71,7 @@ export function normalizeDomSnapshot(
     )
     .trim();
 
-  return applyAgentMasks(stable, rules);
+  return applyAgentMasks(stable, rules, { replacement: escapeHtmlText });
 }
 
 export function sanitizeArtifactName(input: string): string {
@@ -82,4 +91,8 @@ export function shortHash(input: string): string {
     hash = Math.imul(hash, 0x01000193) >>> 0;
   }
   return hash.toString(16).padStart(8, "0");
+}
+
+function escapeHtmlText(input: string): string {
+  return input.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
 }

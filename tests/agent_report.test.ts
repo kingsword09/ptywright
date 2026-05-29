@@ -1,5 +1,5 @@
 import { existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
-import { join, resolve } from "node:path";
+import { dirname, join, resolve } from "node:path";
 import { pathToFileURL } from "node:url";
 
 import { expect, test } from "bun:test";
@@ -10,9 +10,6 @@ import type { AgentRunResult } from "../src/agent/runner";
 
 type AittyReportFixture = {
   artifactsDir: string;
-  distDir: string;
-  frontendDir: string;
-  packageDir: string;
   runnerDir: string;
 };
 
@@ -20,22 +17,18 @@ function createAittyReportFixture(name: string): AittyReportFixture {
   const projectDir = resolve(".tmp", "tests", `${name}-project`);
   const runnerDir = resolve(".tmp", "tests", `${name}-runner-cwd`);
   const artifactsDir = join(projectDir, "artifacts");
-  const packageDir = join(projectDir, "node_modules", "@aitty", "browser");
-  const distDir = join(packageDir, "dist");
-  const frontendDir = join(distDir, "frontend");
 
   rmSync(projectDir, { recursive: true, force: true });
   rmSync(runnerDir, { recursive: true, force: true });
   mkdirSync(artifactsDir, { recursive: true });
   mkdirSync(runnerDir, { recursive: true });
-  mkdirSync(frontendDir, { recursive: true });
   writeFileSync(join(projectDir, "package.json"), JSON.stringify({ type: "module" }), "utf8");
   writeFileSync(join(runnerDir, "package.json"), JSON.stringify({ type: "module" }), "utf8");
 
-  return { artifactsDir, distDir, frontendDir, packageDir, runnerDir };
+  return { artifactsDir, runnerDir };
 }
 
-function writeAittyBrowserPackage(
+function writeAittySnapshotPackage(
   fixture: AittyReportFixture,
   options: {
     globalScript?: string;
@@ -43,39 +36,33 @@ function writeAittyBrowserPackage(
     style?: string;
   },
 ): void {
+  const packageDir = join(dirname(fixture.artifactsDir), "node_modules", "@aitty", "snapshot");
+  const distDir = join(packageDir, "dist");
   const exports: Record<string, string> = {
-    "./style.css": "./dist/frontend/terminal.css",
+    "./style.css": "./dist/style.css",
   };
+
+  mkdirSync(distDir, { recursive: true });
 
   if (options.globalScript !== undefined) {
     exports["./web-component.global.js"] = "./dist/web-component.global.js";
+    writeFileSync(join(distDir, "web-component.global.js"), options.globalScript, "utf8");
   }
   if (options.moduleScript !== undefined) {
     exports["./web-component.js"] = "./dist/web-component.js";
+    writeFileSync(join(distDir, "web-component.js"), options.moduleScript, "utf8");
   }
 
   writeFileSync(
-    join(fixture.packageDir, "package.json"),
+    join(packageDir, "package.json"),
     JSON.stringify({
-      name: "@aitty/browser",
+      name: "@aitty/snapshot",
       type: "module",
       exports,
     }),
     "utf8",
   );
-
-  if (options.globalScript !== undefined) {
-    writeFileSync(join(fixture.distDir, "web-component.global.js"), options.globalScript, "utf8");
-  }
-  if (options.moduleScript !== undefined) {
-    writeFileSync(join(fixture.distDir, "web-component.js"), options.moduleScript, "utf8");
-  }
-
-  writeFileSync(
-    join(fixture.frontendDir, "terminal.css"),
-    options.style ?? ".aitty-terminal-root {}\n",
-    "utf8",
-  );
+  writeFileSync(join(distDir, "style.css"), options.style ?? ".aitty-terminal-root {}\n", "utf8");
 }
 
 function extractFirstStyleBlock(html: string): string {
@@ -175,10 +162,6 @@ function writeSingleDomAgentReport(args: {
 
 test("agent report links terminal artifacts to fullscreen viewport viewers", () => {
   const fixture = createAittyReportFixture("agent-report");
-  writeAittyBrowserPackage(fixture, {
-    globalScript: "globalThis.AittyBrowser = {};\n",
-    moduleScript: "export {};\n",
-  });
 
   const { artifactsDir, runnerDir } = fixture;
   const snapshotDir = join(artifactsDir, "snapshots");
@@ -374,10 +357,6 @@ test("agent report links terminal artifacts to fullscreen viewport viewers", () 
 
 test("agent report does not copy Aitty assets when no DOM preview is needed", () => {
   const fixture = createAittyReportFixture("agent-report-terminal-only-aitty-assets");
-  writeAittyBrowserPackage(fixture, {
-    globalScript: "globalThis.AittyBrowser = {};\n",
-    moduleScript: "export {};\n",
-  });
 
   const { artifactsDir, runnerDir } = fixture;
   const snapshotDir = join(artifactsDir, "snapshots");
@@ -474,123 +453,8 @@ test("agent report does not copy Aitty assets when no DOM preview is needed", ()
   expect(terminalViewer).not.toContain(".term-wide-row-block");
 });
 
-test("agent report falls back to raw viewers when Aitty assets are unavailable", () => {
-  const fixture = createAittyReportFixture("agent-report-no-aitty-assets");
-  const { artifactsDir, runnerDir } = fixture;
-  const snapshotDir = join(artifactsDir, "snapshots");
-  const reportPath = join(artifactsDir, "index.html");
-  const flowPath = join(artifactsDir, "agent_report_no_aitty.flow.json");
-  const cassettePath = join(artifactsDir, "agent_report_no_aitty.cassette.json");
-  const terminalPath = join(artifactsDir, "mobile.ready.terminal.txt");
-  const domPath = join(artifactsDir, "mobile.ready.dom.html");
-
-  writeFileSync(terminalPath, "Ready\n\u001b[32mterminal fallback\u001b[0m\n", "utf8");
-  writeFileSync(
-    domPath,
-    [
-      '<div class="term-grid" data-cols="41" data-rows="1">',
-      '<div class="term-row"><span>dom fallback</span></div>',
-      "</div>",
-    ].join(""),
-    "utf8",
-  );
-  writeFileSync(
-    flowPath,
-    JSON.stringify({ launch: { mode: "command", args: ["exec"] } }, null, 2),
-    "utf8",
-  );
-  writeFileSync(
-    cassettePath,
-    JSON.stringify({ spec: { launch: { args: ["exec"] } } }, null, 2),
-    "utf8",
-  );
-
-  const originalCwd = process.cwd();
-  try {
-    process.chdir(runnerDir);
-    writeAgentReport(reportPath, {
-      ok: true,
-      name: "agent_report_no_aitty",
-      mode: "replay",
-      agentFlavor: "claude",
-      startedAt: Date.parse("2026-05-25T00:00:00.000Z"),
-      durationMs: 7,
-      artifactsDir,
-      snapshotDir,
-      reportPath,
-      recordPath: join(artifactsDir, "agent_report_no_aitty.agent-run.json"),
-      flowPath,
-      cassettePath,
-      replayCommand: "ptywright agent replay agent_report_no_aitty.agent-run.json",
-      commands: {
-        replay: {
-          argv: ["ptywright", "agent", "replay", "agent_report_no_aitty.agent-run.json"],
-        },
-        updateSnapshots: {
-          argv: [
-            "ptywright",
-            "agent",
-            "replay",
-            "agent_report_no_aitty.agent-run.json",
-            "--update-snapshots",
-          ],
-        },
-      },
-      viewports: [{ name: "mobile", width: 390, height: 844, isMobile: true, hasTouch: true }],
-      cassetteFrameCount: 1,
-      steps: [],
-      artifacts: [
-        {
-          name: "ready",
-          viewport: "mobile",
-          kind: "terminal",
-          path: terminalPath,
-          baselinePath: join(snapshotDir, "mobile.ready.terminal.snap.txt"),
-          hash: "terminalhash",
-          ok: true,
-        },
-        {
-          name: "ready",
-          viewport: "mobile",
-          kind: "dom",
-          path: domPath,
-          baselinePath: join(snapshotDir, "mobile.ready.dom.snap.html"),
-          hash: "domhash",
-          ok: true,
-        },
-      ],
-      errors: [],
-    } satisfies AgentRunResult);
-  } finally {
-    process.chdir(originalCwd);
-  }
-
-  const terminalViewer = readFileSync(
-    join(artifactsDir, "mobile.ready.terminal.viewer.html"),
-    "utf8",
-  );
-  const domViewer = readFileSync(join(artifactsDir, "mobile.ready.dom.viewer.html"), "utf8");
-
-  expect(existsSync(join(artifactsDir, "assets", "aitty-web-component.js"))).toBe(false);
-  expect(existsSync(join(artifactsDir, "assets", "aitty-terminal.css"))).toBe(false);
-  expect(existsSync(join(artifactsDir, "mobile.ready.dom.preview.html"))).toBe(false);
-  expect(terminalViewer).toContain('<pre class="raw-artifact-text"');
-  expect(terminalViewer).toContain("terminal fallback");
-  expect(terminalViewer).not.toContain('<iframe class="dom-viewer-frame"');
-  expect(terminalViewer).not.toContain("mobile.ready.dom.preview.html");
-  expect(domViewer).toContain('<pre class="raw-artifact-text"');
-  expect(domViewer).toContain("dom fallback");
-  expect(domViewer).toContain("&lt;div");
-  expect(domViewer).not.toContain('<iframe class="dom-viewer-frame"');
-  expect(domViewer).not.toContain("mobile.ready.dom.preview.html");
-});
-
-test("agent report prefers the Aitty global web component for file reports", () => {
+test("agent report copies the Aitty snapshot global web component for file reports", () => {
   const fixture = createAittyReportFixture("agent-report-aitty-assets");
-  writeAittyBrowserPackage(fixture, {
-    globalScript: "globalThis.AittyBrowser = {};\n",
-    moduleScript: "export {};\n",
-  });
   const paths = writeSingleDomAgentReport({
     fixture,
     name: "agent_report_aitty_assets",
@@ -657,171 +521,73 @@ test("agent report prefers the Aitty global web component for file reports", () 
   expect(domPreview).not.toContain("aitty-report-snapshot");
   expect(domPreview).not.toContain("ptywright-terminal-fallback");
   expect(domPreview).not.toContain("data-ptywright-report-scroll-viewport");
-  expect(copiedScript).toBe("globalThis.AittyBrowser = {};\n");
-  expect(copiedStyle).toBe(".aitty-terminal-root {}\n");
+  expect(copiedScript).toContain("globalThis");
+  expect(copiedScript).toContain("AittySnapshot");
+  expect(copiedScript).toContain("mountAittySnapshot");
+  expect(copiedStyle).toContain("aitty-snapshot");
+  expect(copiedStyle).toContain(".aitty-terminal-root");
+  expect(copiedStyle).toContain(".term-wide-row-block");
+  expect(copiedStyle).toContain("--aitty-wide-content-cols");
+  expect(copiedStyle).toContain("overflow-x: visible");
 });
 
-test("agent report falls back to the Aitty module web component when the global bundle is unavailable", () => {
-  const fixture = createAittyReportFixture("agent-report-aitty-module-assets");
-  writeAittyBrowserPackage(fixture, {
-    moduleScript: "export const moduleOnly = true;\n",
+test("agent report prefers downstream Aitty snapshot assets", () => {
+  const fixture = createAittyReportFixture("agent-report-downstream-aitty-assets");
+  writeAittySnapshotPackage(fixture, {
+    globalScript: "globalThis.__downstreamAittySnapshot = true;\n",
+    style: ".downstream-aitty-snapshot { color: rebeccapurple; }\n",
   });
+
   const paths = writeSingleDomAgentReport({
     fixture,
-    name: "agent_report_aitty_module_assets",
+    name: "agent_report_downstream_aitty_assets",
     domHtml: [
       '<div class="term-grid" data-cols="41" data-rows="1" style="--term-cols: 41; --term-rows: 1;">',
-      '<div class="term-row"><span>module output</span></div>',
+      '<div class="term-row"><span>downstream output</span></div>',
       "</div>",
     ].join(""),
   });
 
-  const domViewer = readFileSync(paths.domViewerPath, "utf8");
   const domPreview = readFileSync(paths.domPreviewPath, "utf8");
-  const domPreviewStyle = extractFirstStyleBlock(domPreview);
   const copiedScript = readFileSync(paths.copiedScriptPath, "utf8");
   const copiedStyle = readFileSync(paths.copiedStylePath, "utf8");
 
-  expect(domViewer).toContain('sandbox="allow-same-origin allow-scripts"');
-  expect(domViewer).not.toContain("<script>");
-  expect(domViewer).not.toContain("ptywrightReportAittyAssets");
-  expect(domViewer).not.toContain("ptywrightReportDomRenderer");
-  expect(domViewer).not.toContain("isHtmlElement");
-  expect(domViewer).not.toContain("enableViewportPan");
-  expect(domViewer).not.toContain("raw-artifact-viewport");
-  expect(domViewer).not.toContain("raw-artifact-text");
-  expect(domViewer).not.toContain("data-ptywright-report-pan");
-  expect(domPreview).toContain('<link rel="stylesheet" href="assets/aitty-terminal.css" />');
+  expect(domPreview).toContain('<script src="assets/aitty-web-component.js"></script>');
+  expect(domPreview).not.toContain('type="module"');
+  expect(copiedScript).toBe("globalThis.__downstreamAittySnapshot = true;\n");
+  expect(copiedStyle).toBe(".downstream-aitty-snapshot { color: rebeccapurple; }\n");
+});
+
+test("agent report supports downstream Aitty snapshot module assets", () => {
+  const fixture = createAittyReportFixture("agent-report-downstream-aitty-module-assets");
+  writeAittySnapshotPackage(fixture, {
+    moduleScript: "export const downstreamAittySnapshot = true;\n",
+    style: ".downstream-aitty-snapshot-module { color: teal; }\n",
+  });
+
+  const paths = writeSingleDomAgentReport({
+    fixture,
+    name: "agent_report_downstream_aitty_module_assets",
+    domHtml: [
+      '<div class="term-grid" data-cols="41" data-rows="1" style="--term-cols: 41; --term-rows: 1;">',
+      '<div class="term-row"><span>downstream module output</span></div>',
+      "</div>",
+    ].join(""),
+  });
+
+  const domPreview = readFileSync(paths.domPreviewPath, "utf8");
+  const copiedScript = readFileSync(paths.copiedScriptPath, "utf8");
+  const copiedStyle = readFileSync(paths.copiedStylePath, "utf8");
+
   expect(domPreview).toContain(
     '<script type="module" src="assets/aitty-web-component.js"></script>',
   );
-  expect(domPreview).not.toContain("data-ptywright-report-dom-renderer");
-  expect(domPreview).not.toContain("data-ptywright-report-aitty-assets");
-  expect(domPreview).not.toContain("document.documentElement.dataset.ptywrightReportAittyAssets");
-  expect(domPreview.match(/<aitty-snapshot\b/g)?.length).toBe(1);
-  expect(domPreview).not.toContain('class="ptywright-aitty-snapshot"');
-  expect(domPreview).not.toContain("aittyReportAittyAssets");
-  expect(domPreview).not.toContain("data-aitty-report-screen-mode");
-  expect(domPreview).toContain('font-size="15"');
-  expect(domPreview).toContain('line-height="1.6"');
-  expect(domPreview).not.toContain("aitty-terminal-root terminal-root wterm has-scrollback");
-  expect(domPreview).not.toContain('class="aitty-shell"');
-  expect(domPreview).not.toContain("data-aitty-scroll-target");
-  expect(domPreview).not.toContain("ptywright-terminal-fallback");
-  expect(domPreview).not.toContain("data-ptywright-report-scroll-viewport");
-  expect(domPreviewStyle).not.toContain("--theme-term-bg:");
-  expect(domPreviewStyle).not.toContain("--theme-term-font-size:");
-  expect(domPreviewStyle).not.toContain("--theme-term-line-height:");
-  expect(domPreviewStyle).not.toContain("--term-cols:");
-  expect(domPreviewStyle).not.toContain("--term-rows:");
-  expect(domPreviewStyle).not.toContain("--term-cell-width:");
-  expect(domPreviewStyle).not.toContain("--aitty-report-viewport-width:");
-  expect(domPreviewStyle).not.toContain("--aitty-report-viewport-height:");
-  expect(copiedScript).toBe("export const moduleOnly = true;\n");
-  expect(copiedStyle).toBe(".aitty-terminal-root {}\n");
+  expect(copiedScript).toBe("export const downstreamAittySnapshot = true;\n");
+  expect(copiedStyle).toBe(".downstream-aitty-snapshot-module { color: teal; }\n");
 });
 
 test("agent report delegates Aitty iframe viewport behavior to the web component", async () => {
   const fixture = createAittyReportFixture("agent-report-aitty-runtime");
-  writeAittyBrowserPackage(fixture, {
-    globalScript: `(() => {
-      function mountAittySnapshot(element) {
-        const doc = element.ownerDocument;
-        const source = element.innerHTML;
-        element.classList.add("aitty-embed");
-        element.replaceChildren();
-
-        const shell = doc.createElement("div");
-        shell.className = "aitty-shell";
-        shell.dataset.shell = "";
-        shell.dataset.runtime = "snapshot";
-        shell.dataset.clientRole = "viewer";
-        shell.dataset.screenMode = element.getAttribute("screen-mode") || "plain";
-        shell.dataset.theme = element.getAttribute("theme") || "dark";
-
-        const scrollTarget = doc.createElement("div");
-        scrollTarget.className = "aitty-scroll-target";
-        scrollTarget.dataset.aittyScrollTarget = "";
-
-        const viewport = doc.createElement("div");
-        viewport.className = "aitty-scroll-viewport";
-        viewport.dataset.aittyScrollViewport = "";
-        viewport.dataset.aittyViewportPan = "true";
-
-        const content = doc.createElement("div");
-        content.className = "aitty-scroll-content";
-        content.dataset.aittyScrollContent = "";
-
-        const root = doc.createElement("div");
-        root.className = "aitty-terminal-root terminal-root wterm has-scrollback focused";
-        root.dataset.clientRole = "viewer";
-        root.dataset.screenMode = element.getAttribute("screen-mode") || "plain";
-        root.dataset.theme = element.getAttribute("theme") || "dark";
-        root.dataset.sessionInteractive = "false";
-        root.style.setProperty("--term-cols", element.getAttribute("cols") || "80");
-        root.style.setProperty("--term-rows", element.getAttribute("rows") || "24");
-        root.style.setProperty("--term-cell-width", "8.4px");
-        root.style.setProperty("--term-row-height", "23px");
-        root.innerHTML = source;
-
-        root.querySelectorAll(".term-wide-row-block").forEach((block) => {
-          if (!(block instanceof HTMLElement)) return;
-          block.dataset.aittyViewportPan = "true";
-          block.style.setProperty("--aitty-wide-block-cols", "120");
-        });
-
-        content.append(root);
-        viewport.append(content);
-        scrollTarget.append(viewport);
-        shell.append(scrollTarget);
-        element.append(shell);
-
-        return { shell, terminalRoot: root, viewport };
-      }
-
-      function defineAittySnapshotElement() {
-        if (customElements.get("aitty-snapshot")) return;
-        customElements.define("aitty-snapshot", class AittySnapshot extends HTMLElement {
-          connectedCallback() {
-            if (this.__aittyMounted) return;
-            this.__aittyMounted = true;
-            setTimeout(() => {
-              this.__aittyMounted = mountAittySnapshot(this);
-            }, 0);
-          }
-        });
-      }
-
-      defineAittySnapshotElement();
-      globalThis.AittyBrowser = { defineAittySnapshotElement, mountAittySnapshot };
-    })();
-`,
-    moduleScript: "export {};\n",
-    style: `
-      aitty-snapshot,
-      .aitty-embed,
-      .aitty-shell,
-      .aitty-scroll-target {
-        display: block;
-        width: 100%;
-        height: 100%;
-      }
-      .aitty-scroll-viewport {
-        height: 100%;
-        overflow: auto;
-      }
-      .aitty-terminal-root.wterm {
-        --theme-term-color-15: #5c5f77;
-      }
-      .term-wide-row-block {
-        max-inline-size: 100%;
-        overflow-x: auto;
-      }
-      .term-wide-row-block > .term-row {
-        inline-size: calc(var(--term-cell-width, 1ch) * var(--aitty-wide-block-cols, 80));
-      }
-    `,
-  });
   const paths = writeSingleDomAgentReport({
     fixture,
     name: "agent_report_aitty_runtime",
@@ -858,7 +624,7 @@ test("agent report delegates Aitty iframe viewport behavior to the web component
     await frame?.waitForSelector('.aitty-terminal-root.wterm[data-screen-mode="termvision"]', {
       state: "attached",
     });
-    await frame?.waitForSelector('.term-wide-row-block[data-aitty-viewport-pan="true"]', {
+    await frame?.waitForSelector(".term-wide-row-block", {
       state: "attached",
     });
 
@@ -868,6 +634,7 @@ test("agent report delegates Aitty iframe viewport behavior to the web component
       const root = document.querySelector(".aitty-terminal-root.wterm");
       const wideBlock = document.querySelector(".term-wide-row-block");
       const style = root instanceof HTMLElement ? getComputedStyle(root) : null;
+      const wideBlockStyle = wideBlock instanceof HTMLElement ? getComputedStyle(wideBlock) : null;
 
       return {
         domAttribute: document.documentElement.dataset.ptywrightReportDomRenderer ?? null,
@@ -878,10 +645,16 @@ test("agent report delegates Aitty iframe viewport behavior to the web component
         snapshotMounted:
           snapshot instanceof HTMLElement && snapshot.classList.contains("aitty-embed"),
         terminalRootCount: document.querySelectorAll(".aitty-terminal-root.wterm").length,
+        viewportScrollable:
+          viewport instanceof HTMLElement ? viewport.scrollWidth > viewport.clientWidth : false,
         viewportPan: viewport instanceof HTMLElement ? viewport.dataset.aittyViewportPan : "",
         viewportReportPan:
           viewport instanceof HTMLElement ? (viewport.dataset.ptywrightReportPan ?? null) : null,
-        wideBlockPan: wideBlock instanceof HTMLElement ? wideBlock.dataset.aittyViewportPan : "",
+        wideBlockOverflowX: wideBlockStyle?.overflowX ?? "",
+        wideBlockPan:
+          wideBlock instanceof HTMLElement ? (wideBlock.dataset.aittyViewportPan ?? "") : "",
+        wideBlockScrollable:
+          wideBlock instanceof HTMLElement ? wideBlock.scrollWidth > wideBlock.clientWidth : false,
       };
     });
 
@@ -893,9 +666,12 @@ test("agent report delegates Aitty iframe viewport behavior to the web component
       rootTheme: "light",
       snapshotMounted: true,
       terminalRootCount: 1,
+      viewportScrollable: true,
       viewportPan: "true",
       viewportReportPan: null,
-      wideBlockPan: "true",
+      wideBlockOverflowX: "visible",
+      wideBlockPan: "",
+      wideBlockScrollable: false,
     });
     await page.close();
   } finally {

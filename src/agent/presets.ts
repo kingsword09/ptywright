@@ -36,7 +36,7 @@ const COMMON_AGENT_MASKS: readonly AgentTextMaskRule[] = [
 const FLAVOR_MASKS: Record<AgentFlavor, readonly AgentTextMaskRule[]> = {
   codex: [
     {
-      regex: "\\b(?:gpt|o)[A-Za-z0-9._:-]+\\b",
+      regex: "\\b(?:gpt-[A-Za-z0-9._:-]+|o[0-9][A-Za-z0-9._:-]*)\\b",
       flags: "gi",
       replacement: "<model>",
     },

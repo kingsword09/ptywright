@@ -147,7 +147,7 @@ async function replayAgentCassette(
         ...replaySpec,
         launch: {
           mode: "url",
-          url: server.url,
+          url: withReplayViewportQuery(server.url),
           agentFlavor: replaySpec.launch.agentFlavor,
         },
       },
@@ -161,6 +161,11 @@ async function replayAgentCassette(
   } finally {
     await server.close();
   }
+}
+
+function withReplayViewportQuery(url: string): string {
+  const separator = url.includes("?") ? "&" : "?";
+  return `${url}${separator}viewportName={viewportName}&viewportWidth={viewportWidth}&viewportHeight={viewportHeight}`;
 }
 
 async function closeBrowserSafely(browser: Browser | null): Promise<void> {
