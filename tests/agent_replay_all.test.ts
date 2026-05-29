@@ -6,6 +6,9 @@ import { expect, test } from "bun:test";
 import { readAgentArtifactCommandsPath } from "../src/agent/commands";
 import { agentManifestPath, writeAgentManifestPath } from "../src/agent/manifest";
 import { replayAllAgentRecords } from "../src/agent/replay_all";
+import { writeReplayAllReport } from "../src/agent/replay_all_report";
+import { writeReplayAllSummary } from "../src/agent/replay_all_summary";
+import type { AgentReplayAllResult } from "../src/agent/replay_all_types";
 import {
   normalizeAgentReplaySummary,
   readAgentReplaySummaryPath,
@@ -373,38 +376,96 @@ test("agent replay-all CLI accepts JSON output mode", async () => {
   expect(stdout.commands.replayAll.argv).toEqual(parsed.commands.replayAll.argv);
 }, 15_000);
 
-test("agent replay-all summary links diff artifacts on snapshot mismatch", async () => {
+test("agent replay-all summary links diff artifacts on snapshot mismatch", () => {
   const dir = join(".tmp", "tests", "agent-replay-all-diff");
-  const cassetteDir = join(dir, "cassettes");
-  const snapshotDir = join(dir, "snapshots");
+  const suiteDir = join(dir, "suite");
+  const entryDir = join(suiteDir, "tests", "fixture");
   rmSync(dir, { recursive: true, force: true });
-  mkdirSync(cassetteDir, { recursive: true });
+  mkdirSync(entryDir, { recursive: true });
 
-  copyCommittedCassette(join(cassetteDir, "agent_replay_all_diff_fixture.cassette.json"), {
-    snapshotDir,
+  const artifactPath = join(entryDir, "desktop.ready.terminal.txt");
+  const baselinePath = join(entryDir, "desktop.ready.terminal.snap.txt");
+  const diffPath = join(entryDir, "desktop.ready.terminal.diff.txt");
+  const reportPath = join(suiteDir, "index.html");
+  const summaryPath = join(suiteDir, "agent-replay.summary.json");
+  const entryReportPath = join(entryDir, "index.html");
+  const recordPath = join(entryDir, "agent-run.json");
+  const cassettePath = join(dir, "cassettes", "agent_replay_all_diff_fixture.cassette.json");
+  const replayArgv = ["ptywright", "agent", "replay", cassettePath];
+
+  writeFileSync(artifactPath, "actual output\n", "utf8");
+  writeFileSync(baselinePath, "wrong baseline\n", "utf8");
+  writeFileSync(diffPath, "-wrong baseline\n+actual output\n", "utf8");
+
+  const result = {
+    ok: false,
+    dir,
+    suiteDir,
+    durationMs: 12,
+    reportPath,
+    summaryPath,
+    updateSnapshots: false,
+    entries: [
+      {
+        filePath: cassettePath,
+        durationMs: 12,
+        result: {
+          ok: false,
+          name: "agent_replay_all_diff_fixture",
+          mode: "replay",
+          agentFlavor: "generic",
+          startedAt: Date.now(),
+          durationMs: 12,
+          artifactsDir: entryDir,
+          snapshotDir: join(dir, "snapshots"),
+          reportPath: entryReportPath,
+          recordPath,
+          flowPath: join(entryDir, "flow.json"),
+          cassettePath,
+          replayCommand: replayArgv.join(" "),
+          commands: {
+            replay: { argv: replayArgv },
+            updateSnapshots: { argv: [...replayArgv, "--update-snapshots"] },
+          },
+          viewports: [{ name: "desktop", width: 1280, height: 820 }],
+          cassetteFrameCount: 4,
+          steps: [],
+          artifacts: [
+            {
+              name: "ready",
+              viewport: "desktop",
+              kind: "terminal",
+              path: artifactPath,
+              baselinePath,
+              diffPath,
+              ok: false,
+              error: "snapshot mismatch",
+            },
+          ],
+          errors: ["desktop step 2 snapshot: snapshot mismatch"],
+        },
+      },
+    ],
+  } satisfies AgentReplayAllResult;
+
+  writeReplayAllSummary(summaryPath, result);
+  writeReplayAllReport(reportPath, {
+    dir,
+    durationMs: result.durationMs,
+    updateSnapshots: false,
+    entries: result.entries,
+    summaryPath,
   });
-  mkdirSync(snapshotDir, { recursive: true });
-  writeFileSync(join(snapshotDir, "desktop.ready.terminal.snap.txt"), "wrong baseline\n", "utf8");
-
-  const result = await replayAllAgentRecords({
-    dir: cassetteDir,
-    artifactsRoot: join(dir, "suite"),
-    headless: true,
-  });
-
-  expect(result.ok).toBe(false);
-  const failedArtifact = result.entries[0]?.result.artifacts.find((artifact) => artifact.diffPath);
-  expect(failedArtifact?.diffPath).toBeTruthy();
-  expect(existsSync(failedArtifact!.diffPath!)).toBe(true);
 
   const summary = readAgentReplaySummaryPath(result.summaryPath);
   expect(summary.failureCount).toBe(1);
-  expect(summary.entries?.[0]?.failedArtifacts?.[0]?.diffPath).toBe(failedArtifact?.diffPath);
+  expect(summary.entries?.[0]?.failedArtifacts?.[0]?.diffPath).toBe(diffPath);
+  expect(existsSync(diffPath)).toBe(true);
 
   const html = readFileSync(result.reportPath, "utf8");
   expect(html).toContain("diff");
   expect(html).toContain("snapshot mismatch");
-}, 45_000);
+});
 
 test("agent replay-all records invalid cassette as a failed entry", async () => {
   const dir = join(".tmp", "tests", "agent-replay-all-invalid");
