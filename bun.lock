@@ -5,7 +5,7 @@
     "": {
       "name": "ptywright",
       "dependencies": {
-        "@aitty/snapshot": "^0.5.0",
+        "@aitty/snapshot": "^0.5.1",
         "@modelcontextprotocol/sdk": "^1.25.2",
         "@xterm/headless": "^6.0.0",
         "asciinema-player": "3.9.0",
@@ -25,7 +25,7 @@
   "packages": {
     "@aitty/protocol": ["@aitty/protocol@0.5.0", "", {}, "sha512-EVyxksAzPEVknxEMJoXuTBhSt3+eI33Ou27YlKh8S0+u+gdOA2rVAWgYIBBDkM2j5W08y4cRRmyBZ5CcYR964Q=="],
 
-    "@aitty/snapshot": ["@aitty/snapshot@0.5.0", "", { "dependencies": { "@aitty/protocol": "0.5.0" } }, "sha512-8KYnepCESA8P8hWSdoYvhUBPx76mWqQKtDI8cP+/I4vzwDw0CmPbr8ha6YwJabxaoliRXFZJUvZN3Ds3vj1xIQ=="],
+    "@aitty/snapshot": ["@aitty/snapshot@0.5.1", "", { "dependencies": { "@aitty/protocol": "0.5.0" } }, "sha512-qFVigiCzCZ4rTsvqWEJKLi+xvmX9DRCDVIc1FGWjj+gP3jz8UIpUWRfdy1Nw22aIJlMcipZmdCHb72yh3GDikA=="],
 
     "@babel/runtime": ["@babel/runtime@7.28.6", "", {}, "sha512-05WQkdpL9COIMz4LjTxGpPNCdlpyimKppYNoJ5Di5EUObifl8t4tuLuUBBZEpoLYOmfvIWrsp9fCl0HoPRVTdA=="],
 
