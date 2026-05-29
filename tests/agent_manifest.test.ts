@@ -1,5 +1,5 @@
 import { cpSync, existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
-import { join, resolve } from "node:path";
+import { dirname, join, resolve } from "node:path";
 
 import { expect, test } from "bun:test";
 
@@ -13,6 +13,7 @@ import { parseAgentArgs } from "../src/cli/agent_args";
 import {
   AGENT_MANIFEST_FILE_NAME,
   AGENT_MANIFEST_SCHEMA_URL,
+  type AgentManifestFileDraft,
   agentManifestPath,
   readAgentManifestPath,
   writeAgentManifestPath,
@@ -27,7 +28,10 @@ function currentExitCode(): string | number | null | undefined {
   return process.exitCode;
 }
 
-function writeMinimalCheckManifestBundle(artifactsRoot: string): { summaryPath: string } {
+function writeMinimalCheckManifestBundle(
+  artifactsRoot: string,
+  options: { replayRecordPath?: string } = {},
+): { summaryPath: string } {
   mkdirSync(artifactsRoot, { recursive: true });
   const summaryPath = join(artifactsRoot, "agent-check.summary.json");
   const checkCommand = [
@@ -71,6 +75,20 @@ function writeMinimalCheckManifestBundle(artifactsRoot: string): { summaryPath: 
     "utf8",
   );
 
+  const files: AgentManifestFileDraft[] = [
+    { path: summaryPath, kind: "check-summary", role: "summary", ok: true },
+  ];
+  if (options.replayRecordPath) {
+    mkdirSync(dirname(options.replayRecordPath), { recursive: true });
+    writeFileSync(options.replayRecordPath, "{}\n", "utf8");
+    files.push({
+      path: options.replayRecordPath,
+      kind: "run-record",
+      role: "record",
+      ok: true,
+    });
+  }
+
   writeAgentManifestPath(agentManifestPath(artifactsRoot), {
     kind: "check",
     ok: true,
@@ -85,7 +103,7 @@ function writeMinimalCheckManifestBundle(artifactsRoot: string): { summaryPath: 
         { name: "outputs", ok: true, totalCount: 0, failureCount: 0 },
       ],
     },
-    files: [{ path: summaryPath, kind: "check-summary", role: "summary", ok: true }],
+    files,
   });
 
   return { summaryPath };
@@ -749,37 +767,21 @@ test("agent exec rerun dispatches from a copied manifest bundle", async () => {
 
 test("agent check summary next to a moved manifest locates local bundle records", async () => {
   const dir = join(".tmp", "tests", "agent-manifest-check-summary-copy");
-  const cassetteDir = join(dir, "cassettes");
   const artifactsRoot = join(dir, "compare");
   const copyRoot = join(dir, "compare-moved");
   rmSync(dir, { recursive: true, force: true });
-  mkdirSync(cassetteDir, { recursive: true });
 
-  const cassette = JSON.parse(
-    await Bun.file(
-      join("tests", "agent-cassettes", "agent_deterministic", "agent_deterministic.cassette.json"),
-    ).text(),
-  );
-  await Bun.write(
-    join(cassetteDir, "agent_manifest_check_summary_copy.cassette.json"),
-    JSON.stringify(cassette, null, 2) + "\n",
-  );
-
-  const check = await checkAgentRegression({
-    cassetteDir,
-    artifactsRoot,
-    headless: true,
+  writeMinimalCheckManifestBundle(artifactsRoot, {
+    replayRecordPath: join(artifactsRoot, "local-records", "agent.agent-run.json"),
   });
-  expect(check.ok).toBe(true);
 
   cpSync(artifactsRoot, copyRoot, { recursive: true });
-  rmSync(cassetteDir, { recursive: true, force: true });
   rmSync(artifactsRoot, { recursive: true, force: true });
 
   const movedSummaryPath = join(copyRoot, "agent-check.summary.json");
   const movedBundle = findMovedPrimaryManifestBundle(movedSummaryPath, "check-summary");
   expect(movedBundle?.artifactsRoot).toBe(copyRoot);
-  expect(movedBundle?.replayInputDir?.startsWith(copyRoot)).toBe(true);
+  expect(movedBundle?.replayInputDir).toBe(join(copyRoot, "local-records"));
 
   const commands = await readAgentArtifactCommandsPath(movedSummaryPath);
   expect(commands.manifestPath).toBe(resolve(agentManifestPath(copyRoot)));
