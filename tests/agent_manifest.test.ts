@@ -469,13 +469,7 @@ test("agent manifest validation rejects unsupported stored commands", async () =
 test("agent manifest validation rejects stale command targets even when files are intact", async () => {
   const artifactsRoot = join(".tmp", "tests", "agent-manifest-stale-command-target");
   rmSync(artifactsRoot, { recursive: true, force: true });
-
-  const check = await checkAgentRegression({
-    cassetteDir: "tests/agent-cassettes",
-    artifactsRoot,
-    headless: true,
-  });
-  expect(check.ok).toBe(true);
+  writeMinimalCheckManifestBundle(artifactsRoot);
 
   const manifestPath = agentManifestPath(artifactsRoot);
   const manifest = JSON.parse(readFileSync(manifestPath, "utf8")) as {
@@ -509,18 +503,12 @@ test("agent manifest validation rejects stale command targets even when files ar
   expect(validation.entries[0]?.error).toContain(
     "command updateSnapshots argv must match primary artifact",
   );
-}, 20_000);
+});
 
 test("agent exec refuses a manifest when command targets are stale", async () => {
   const artifactsRoot = join(".tmp", "tests", "agent-manifest-exec-stale-command");
   rmSync(artifactsRoot, { recursive: true, force: true });
-
-  const check = await checkAgentRegression({
-    cassetteDir: "tests/agent-cassettes",
-    artifactsRoot,
-    headless: true,
-  });
-  expect(check.ok).toBe(true);
+  writeMinimalCheckManifestBundle(artifactsRoot);
 
   const manifestPath = agentManifestPath(artifactsRoot);
   const manifest = JSON.parse(readFileSync(manifestPath, "utf8")) as {

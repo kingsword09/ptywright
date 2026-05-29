@@ -1,3 +1,4 @@
+import { Buffer } from "node:buffer";
 import { existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { dirname, join, resolve } from "node:path";
 import { pathToFileURL } from "node:url";
@@ -5,6 +6,7 @@ import { pathToFileURL } from "node:url";
 import { expect, test } from "bun:test";
 import { chromium } from "playwright";
 
+import type { ResolvedPtywrightConfig } from "../src/config";
 import { writeAgentReport } from "../src/agent/report";
 import type { AgentRunResult } from "../src/agent/runner";
 
@@ -138,17 +140,18 @@ function extractFirstStyleBlock(html: string): string {
   return /<style>\n([\s\S]*?)\n    <\/style>/.exec(html)?.[1] ?? "";
 }
 
-function writeSingleDomAgentReport(args: {
+async function writeSingleDomAgentReport(args: {
+  config?: ResolvedPtywrightConfig;
   domHtml: string;
   fixture: AittyReportFixture;
   launchArgs?: string[];
   name: string;
-}): {
+}): Promise<{
   copiedScriptPath: string;
   copiedStylePath: string;
   domPreviewPath: string;
   domViewerPath: string;
-} {
+}> {
   const { artifactsDir, runnerDir } = args.fixture;
   const snapshotDir = join(artifactsDir, "snapshots");
   const reportPath = join(artifactsDir, "index.html");
@@ -173,50 +176,54 @@ function writeSingleDomAgentReport(args: {
   const originalCwd = process.cwd();
   try {
     process.chdir(runnerDir);
-    writeAgentReport(reportPath, {
-      ok: true,
-      name: args.name,
-      mode: "replay",
-      agentFlavor: "claude",
-      startedAt: Date.parse("2026-05-25T00:00:00.000Z"),
-      durationMs: 7,
-      artifactsDir,
-      snapshotDir,
+    await writeAgentReport(
       reportPath,
-      recordPath,
-      flowPath,
-      cassettePath,
-      replayCommand: `ptywright agent replay ${args.name}.agent-run.json`,
-      commands: {
-        replay: {
-          argv: ["ptywright", "agent", "replay", `${args.name}.agent-run.json`],
+      {
+        ok: true,
+        name: args.name,
+        mode: "replay",
+        agentFlavor: "claude",
+        startedAt: Date.parse("2026-05-25T00:00:00.000Z"),
+        durationMs: 7,
+        artifactsDir,
+        snapshotDir,
+        reportPath,
+        recordPath,
+        flowPath,
+        cassettePath,
+        replayCommand: `ptywright agent replay ${args.name}.agent-run.json`,
+        commands: {
+          replay: {
+            argv: ["ptywright", "agent", "replay", `${args.name}.agent-run.json`],
+          },
+          updateSnapshots: {
+            argv: [
+              "ptywright",
+              "agent",
+              "replay",
+              `${args.name}.agent-run.json`,
+              "--update-snapshots",
+            ],
+          },
         },
-        updateSnapshots: {
-          argv: [
-            "ptywright",
-            "agent",
-            "replay",
-            `${args.name}.agent-run.json`,
-            "--update-snapshots",
-          ],
-        },
-      },
-      viewports: [{ name: "mobile", width: 390, height: 844, isMobile: true, hasTouch: true }],
-      cassetteFrameCount: 1,
-      steps: [],
-      artifacts: [
-        {
-          name: "ready",
-          viewport: "mobile",
-          kind: "dom",
-          path: domPath,
-          baselinePath: join(snapshotDir, "mobile.ready.dom.snap.html"),
-          hash: "domhash",
-          ok: true,
-        },
-      ],
-      errors: [],
-    } satisfies AgentRunResult);
+        viewports: [{ name: "mobile", width: 390, height: 844, isMobile: true, hasTouch: true }],
+        cassetteFrameCount: 1,
+        steps: [],
+        artifacts: [
+          {
+            name: "ready",
+            viewport: "mobile",
+            kind: "dom",
+            path: domPath,
+            baselinePath: join(snapshotDir, "mobile.ready.dom.snap.html"),
+            hash: "domhash",
+            ok: true,
+          },
+        ],
+        errors: [],
+      } satisfies AgentRunResult,
+      { config: args.config },
+    );
   } finally {
     process.chdir(originalCwd);
   }
@@ -229,7 +236,11 @@ function writeSingleDomAgentReport(args: {
   };
 }
 
-test("agent report links terminal artifacts to fullscreen viewport viewers", () => {
+function encodeOutput(text: string): string {
+  return Buffer.from(text, "utf8").toString("base64");
+}
+
+test("agent report links terminal artifacts to fullscreen viewport viewers", async () => {
   const fixture = createAittyReportFixture("agent-report");
 
   const { artifactsDir, runnerDir } = fixture;
@@ -297,7 +308,7 @@ test("agent report links terminal artifacts to fullscreen viewport viewers", () 
   const originalCwd = process.cwd();
   try {
     process.chdir(runnerDir);
-    writeAgentReport(reportPath, {
+    await writeAgentReport(reportPath, {
       ok: true,
       name: "agent_report_fixture",
       mode: "replay",
@@ -387,8 +398,8 @@ test("agent report links terminal artifacts to fullscreen viewport viewers", () 
   expect(terminalViewer).toContain('data-theme="light"');
   expect(terminalViewer).toContain("--config-viewport-width: 390px;");
   expect(terminalViewer).toContain("--config-viewport-height: 844px;");
-  expect(terminalViewer).toContain("width: var(--config-viewport-width);");
-  expect(terminalViewer).toContain("height: var(--config-viewport-height);");
+  expect(terminalViewer).toContain("width: min(var(--config-viewport-width), 100%);");
+  expect(terminalViewer).toContain("height: min(var(--config-viewport-height), 100%);");
   expect(terminalViewer).not.toContain("raw-artifact-viewport");
   expect(terminalViewer).not.toContain("data-ptywright-report-pan");
 
@@ -424,7 +435,7 @@ test("agent report links terminal artifacts to fullscreen viewport viewers", () 
   expect(domPreview).not.toContain("--term-cell-width:");
 });
 
-test("agent report does not copy Aitty assets when no DOM preview is needed", () => {
+test("agent report does not copy Aitty assets when no DOM preview is needed", async () => {
   const fixture = createAittyReportFixture("agent-report-terminal-only-aitty-assets");
 
   const { artifactsDir, runnerDir } = fixture;
@@ -448,7 +459,7 @@ test("agent report does not copy Aitty assets when no DOM preview is needed", ()
   const originalCwd = process.cwd();
   try {
     process.chdir(runnerDir);
-    writeAgentReport(reportPath, {
+    await writeAgentReport(reportPath, {
       ok: true,
       name: "agent_report_terminal_only",
       mode: "replay",
@@ -522,10 +533,10 @@ test("agent report does not copy Aitty assets when no DOM preview is needed", ()
   expect(terminalViewer).not.toContain(".term-wide-row-block");
 });
 
-test("agent report copies the Aitty snapshot global web component for file reports", () => {
+test("agent report copies the Aitty snapshot global web component for file reports", async () => {
   const fixture = createAittyReportFixture("agent-report-aitty-assets");
   writeLocalPanAittySnapshotPackage(fixture);
-  const paths = writeSingleDomAgentReport({
+  const paths = await writeSingleDomAgentReport({
     fixture,
     name: "agent_report_aitty_assets",
     domHtml: [
@@ -602,14 +613,162 @@ test("agent report copies the Aitty snapshot global web component for file repor
   expect(copiedStyle).not.toContain("--aitty-wide-content-cols");
 });
 
-test("agent report prefers downstream Aitty snapshot assets", () => {
+test("agent report rebuilds PTY replay DOM previews from stable frames", async () => {
+  const fixture = createAittyReportFixture("agent-report-pty-stable-frame");
+  writeLocalPanAittySnapshotPackage(fixture);
+
+  const replayPath = join(dirname(fixture.artifactsDir), "recordings", "codex.pty.json");
+  mkdirSync(dirname(replayPath), { recursive: true });
+  writeFileSync(
+    replayPath,
+    JSON.stringify(
+      {
+        version: 1,
+        createdAt: "2026-05-25T00:00:00.000Z",
+        durationMs: 320,
+        command: { file: "codex", args: [], cols: 80, rows: 24 },
+        events: [
+          { atMs: 0, type: "resize", cols: 80, rows: 24 },
+          {
+            atMs: 0,
+            type: "output",
+            dataBase64: encodeOutput(
+              `\u001b[32m${"wide-output-".repeat(10)}\u001b[0m\r\nReady\r\n`,
+            ),
+          },
+          { atMs: 320, type: "exit", exitCode: 0 },
+        ],
+      },
+      null,
+      2,
+    ),
+    "utf8",
+  );
+
+  const paths = await writeSingleDomAgentReport({
+    fixture,
+    name: "agent_report_pty_stable_frame",
+    launchArgs: [
+      "exec",
+      "--experimental-screen-mode",
+      "termvision",
+      "--theme",
+      "light",
+      "--font-size",
+      "14",
+      "--pty-replay",
+      replayPath,
+    ],
+    config: {
+      rootDir: dirname(fixture.artifactsDir),
+      agent: {
+        report: {
+          stableFrames: {
+            theme: "dark",
+            viewportTargets: { mobile: 46 },
+          },
+        },
+      },
+    },
+    domHtml: [
+      '<div class="term-grid" data-cols="41" data-rows="1" data-terminal-transcript-archive="true" style="--term-cols: 41; --term-rows: 1;">',
+      '<div class="term-row"><span>stale live DOM</span></div>',
+      "</div>",
+    ].join(""),
+  });
+
+  const domPreview = readFileSync(paths.domPreviewPath, "utf8");
+
+  expect(domPreview).toContain("stable-frame preview");
+  expect(domPreview).toContain("<aitty-snapshot");
+  expect(domPreview).toContain('screen-mode="termvision"');
+  expect(domPreview).toContain('theme="dark"');
+  expect(domPreview).toContain('rows="24"');
+  expect(domPreview).toContain('cols="46"');
+  expect(domPreview).toContain("wide-output-wide-output");
+  expect(domPreview).toContain("term-wide-row-block");
+  expect(domPreview).toContain('data-aitty-wide-block-kind="viewport-pan"');
+  expect(domPreview).toContain("var(--term-color-2)");
+  expect(domPreview).not.toContain('rows="1"');
+  expect(domPreview).not.toContain("data-terminal-transcript-archive");
+  expect(domPreview).not.toContain("stale live DOM");
+});
+
+test("agent report can choose PTY replay stable frames by text", async () => {
+  const fixture = createAittyReportFixture("agent-report-pty-stable-frame-match");
+  writeLocalPanAittySnapshotPackage(fixture);
+
+  const replayPath = join(dirname(fixture.artifactsDir), "recordings", "claude.pty.json");
+  mkdirSync(dirname(replayPath), { recursive: true });
+  writeFileSync(
+    replayPath,
+    JSON.stringify(
+      {
+        version: 1,
+        createdAt: "2026-05-25T00:00:00.000Z",
+        durationMs: 1000,
+        command: { file: "claude", args: [], cols: 80, rows: 24 },
+        events: [
+          { atMs: 0, type: "resize", cols: 80, rows: 24 },
+          { atMs: 0, type: "output", dataBase64: encodeOutput("early frame\r\n") },
+          {
+            atMs: 300,
+            type: "output",
+            dataBase64: encodeOutput("\u001b[2J\u001b[HResume this session with:\r\n"),
+          },
+          {
+            atMs: 650,
+            type: "output",
+            dataBase64: encodeOutput("\u001b[2J\u001b[Hlater frame\r\n"),
+          },
+          { atMs: 1000, type: "exit", exitCode: 0 },
+        ],
+      },
+      null,
+      2,
+    ),
+    "utf8",
+  );
+
+  const paths = await writeSingleDomAgentReport({
+    fixture,
+    name: "agent_report_pty_stable_frame_match",
+    launchArgs: ["exec", "--pty-replay", replayPath],
+    config: {
+      rootDir: dirname(fixture.artifactsDir),
+      agent: {
+        report: {
+          stableFrames: {
+            matchMode: "first",
+            matchText: "Resume this session with:",
+          },
+        },
+      },
+    },
+    domHtml: [
+      '<div class="term-grid" data-cols="41" data-rows="1" data-terminal-transcript-archive="true" style="--term-cols: 41; --term-rows: 1;">',
+      '<div class="term-row"><span>stale live DOM</span></div>',
+      "</div>",
+    ].join(""),
+  });
+
+  const domPreview = readFileSync(paths.domPreviewPath, "utf8");
+
+  expect(domPreview).toContain("stable-frame preview");
+  expect(domPreview).toContain("Resume this session with:");
+  expect(domPreview).not.toContain("early frame");
+  expect(domPreview).not.toContain("later frame");
+  expect(domPreview).not.toContain("stale live DOM");
+});
+
+test("agent report prefers downstream Aitty snapshot assets", async () => {
   const fixture = createAittyReportFixture("agent-report-downstream-aitty-assets");
   writeAittySnapshotPackage(fixture, {
     globalScript: "globalThis.__downstreamAittySnapshot = true;\n",
     style: ".downstream-aitty-snapshot { color: rebeccapurple; }\n",
   });
 
-  const paths = writeSingleDomAgentReport({
+  const paths = await writeSingleDomAgentReport({
     fixture,
     name: "agent_report_downstream_aitty_assets",
     domHtml: [
@@ -629,14 +788,14 @@ test("agent report prefers downstream Aitty snapshot assets", () => {
   expect(copiedStyle).toBe(".downstream-aitty-snapshot { color: rebeccapurple; }\n");
 });
 
-test("agent report supports downstream Aitty snapshot module assets", () => {
+test("agent report supports downstream Aitty snapshot module assets", async () => {
   const fixture = createAittyReportFixture("agent-report-downstream-aitty-module-assets");
   writeAittySnapshotPackage(fixture, {
     moduleScript: "export const downstreamAittySnapshot = true;\n",
     style: ".downstream-aitty-snapshot-module { color: teal; }\n",
   });
 
-  const paths = writeSingleDomAgentReport({
+  const paths = await writeSingleDomAgentReport({
     fixture,
     name: "agent_report_downstream_aitty_module_assets",
     domHtml: [
@@ -660,7 +819,7 @@ test("agent report supports downstream Aitty snapshot module assets", () => {
 test("agent report delegates Aitty iframe viewport behavior to the web component", async () => {
   const fixture = createAittyReportFixture("agent-report-aitty-runtime");
   writeLocalPanAittySnapshotPackage(fixture);
-  const paths = writeSingleDomAgentReport({
+  const paths = await writeSingleDomAgentReport({
     fixture,
     name: "agent_report_aitty_runtime",
     launchArgs: [

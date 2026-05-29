@@ -12,9 +12,33 @@ export type PtywrightAgentDefaults = {
   mask?: AgentTextMaskRule[];
 };
 
+export type PtywrightAgentReportStableFrameFlowConfig = {
+  cols?: number;
+  enabled?: boolean;
+  frameIndex?: number;
+  matchMode?: "first" | "last";
+  matchRegex?: string | string[];
+  matchText?: string | string[];
+  rows?: number;
+  skip?: boolean;
+  stableMs?: number;
+  theme?: "dark" | "light";
+  viewportOnly?: boolean;
+  viewportTargets?: Record<string, number | null | undefined>;
+};
+
+export type PtywrightAgentReportStableFrameConfig = PtywrightAgentReportStableFrameFlowConfig & {
+  flows?: Record<string, PtywrightAgentReportStableFrameFlowConfig>;
+};
+
+export type PtywrightAgentReportConfig = {
+  stableFrames?: PtywrightAgentReportStableFrameConfig;
+};
+
 export type PtywrightAgentConfig = {
   artifactsRoot?: string;
   cassetteDir?: string;
+  report?: PtywrightAgentReportConfig;
   snapshotDir?: string;
   defaults?: PtywrightAgentDefaults;
 };

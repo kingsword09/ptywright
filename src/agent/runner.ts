@@ -126,7 +126,7 @@ export async function runAgentSpec(
     }
     result.cassetteFrameCount = cassette.frames.length;
     writeRunRecord(result, spec);
-    writeAgentReport(reportPath, result);
+    await writeAgentReport(reportPath, result, { config: options.config });
     writeRunManifest(result);
   }
 
