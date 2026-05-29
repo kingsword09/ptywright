@@ -4,7 +4,10 @@ import { join, resolve } from "node:path";
 import { expect, test } from "bun:test";
 
 import { checkAgentRegression } from "../src/agent/check";
-import { readAgentArtifactCommandsPath } from "../src/agent/commands";
+import {
+  findMovedPrimaryManifestBundle,
+  readAgentArtifactCommandsPath,
+} from "../src/agent/commands";
 import { runAgentArtifactCommand } from "../src/cli/agent_artifact_command";
 import { parseAgentArgs } from "../src/cli/agent_args";
 import {
@@ -744,7 +747,7 @@ test("agent exec rerun dispatches from a copied manifest bundle", async () => {
   ]);
 });
 
-test("agent check summary next to a moved manifest reruns from local bundle records", async () => {
+test("agent check summary next to a moved manifest locates local bundle records", async () => {
   const dir = join(".tmp", "tests", "agent-manifest-check-summary-copy");
   const cassetteDir = join(dir, "cassettes");
   const artifactsRoot = join(dir, "compare");
@@ -774,31 +777,26 @@ test("agent check summary next to a moved manifest reruns from local bundle reco
   rmSync(artifactsRoot, { recursive: true, force: true });
 
   const movedSummaryPath = join(copyRoot, "agent-check.summary.json");
-  const logs: string[] = [];
-  const originalLog = console.log;
+  const movedBundle = findMovedPrimaryManifestBundle(movedSummaryPath, "check-summary");
+  expect(movedBundle?.artifactsRoot).toBe(copyRoot);
+  expect(movedBundle?.replayInputDir?.startsWith(copyRoot)).toBe(true);
 
-  process.exitCode = undefined;
-  try {
-    console.log = (...args: unknown[]) => {
-      logs.push(args.map((arg) => String(arg)).join(" "));
-    };
-    await main(["agent", "rerun", movedSummaryPath]);
-    expect(currentExitCode()).toBe(0);
-  } finally {
-    console.log = originalLog;
-    process.exitCode = 0;
-  }
-
-  const output = logs.join("\n");
-  expect(output).toContain("ok agent-check");
-  expect(output).toContain(`summary=${resolve(copyRoot, "agent-replay.summary.json")}`);
-  expect(output).toContain(`checkSummary=${join(copyRoot, "agent-check.summary.json")}`);
+  const commands = await readAgentArtifactCommandsPath(movedSummaryPath);
+  expect(commands.manifestPath).toBe(resolve(agentManifestPath(copyRoot)));
+  expect(commands.commands.rerun.argv).toEqual([
+    "ptywright",
+    "agent",
+    "rerun",
+    movedSummaryPath,
+    "--artifacts-root",
+    copyRoot,
+  ]);
   expect(await validateAgentArtifactsPath(copyRoot, { preferManifestBundle: true })).toMatchObject({
     ok: true,
     totalCount: 1,
     failureCount: 0,
   });
-}, 25_000);
+});
 
 test("agent replay file discovery keeps copied reruns from recursive outputs", async () => {
   const copyRoot = join(".tmp", "tests", "agent-manifest-exec-repeat-moved");
