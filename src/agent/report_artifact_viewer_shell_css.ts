@@ -70,23 +70,23 @@ export function renderArtifactViewerShellCss(): string {
       }
       .viewer-stage {
         display: grid;
-        grid-template-columns: max-content;
-        grid-template-rows: max-content;
+        grid-template-columns: minmax(0, 1fr);
+        grid-template-rows: minmax(0, 1fr);
         min-width: 0;
         min-height: 0;
-        justify-content: start;
+        justify-items: center;
         align-content: start;
-        overflow: auto;
+        overflow: hidden;
         background:
           radial-gradient(circle at top left, rgba(121, 192, 255, 0.1), transparent 32%),
           #060a13;
         padding: 14px;
       }
       .viewer-viewport {
-        width: var(--config-viewport-width);
-        height: var(--config-viewport-height);
-        max-width: none;
-        max-height: none;
+        width: min(var(--config-viewport-width), 100%);
+        height: min(var(--config-viewport-height), 100%);
+        max-width: 100%;
+        max-height: 100%;
         overflow: auto;
         overscroll-behavior: contain;
         border: 0;
@@ -96,7 +96,7 @@ export function renderArtifactViewerShellCss(): string {
         box-shadow: 0 18px 52px rgba(0, 0, 0, 0.34);
       }
       .viewer-viewport[data-mobile="true"] {
-        width: var(--config-viewport-width);
+        width: min(var(--config-viewport-width), 100%);
       }
       .dom-viewport {
         overflow: hidden;
@@ -135,8 +135,8 @@ export function renderArtifactViewerShellCss(): string {
           padding: 0;
         }
         .viewer-viewport {
-          width: var(--config-viewport-width);
-          height: var(--config-viewport-height);
+          width: min(var(--config-viewport-width), 100%);
+          height: min(var(--config-viewport-height), 100%);
           border-radius: 0;
         }
       }`;

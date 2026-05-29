@@ -1,6 +1,7 @@
 import { mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { dirname } from "node:path";
 
+import type { ResolvedPtywrightConfig } from "../config";
 import { prepareAittyReportAssets } from "./aitty_report_assets";
 import { resolveAittyPreviewAssets } from "./report_aitty_preview";
 import {
@@ -10,6 +11,10 @@ import {
 } from "./report_artifact_paths";
 import { renderArtifactViewerHtml } from "./report_artifact_viewer";
 import { resolveReportDomPreview } from "./report_dom_artifact_viewer";
+import {
+  extractPtyReplayStableFrameForReport,
+  renderPtyReplayStableFramePreviewDocument,
+} from "./report_pty_stable_frame";
 import { renderDomPreviewDocument } from "./report_terminal_preview";
 import { resolveReportViewOptions } from "./report_view_options";
 import type { AgentRunArtifact, AgentRunResult } from "./runner";
@@ -20,9 +25,12 @@ type AgentReportReadableArtifact = {
   viewerPath: string;
 };
 
-export function writeArtifactViewerPages(result: AgentRunResult): void {
+export async function writeArtifactViewerPages(
+  result: AgentRunResult,
+  options: { config?: ResolvedPtywrightConfig } = {},
+): Promise<void> {
   const viewportsByName = new Map(result.viewports.map((viewport) => [viewport.name, viewport]));
-  const viewOptions = resolveReportViewOptions(result);
+  const viewOptions = resolveReportViewOptions(result, options.config);
   const readableArtifacts: AgentReportReadableArtifact[] = [];
 
   for (const artifact of result.artifacts) {
@@ -50,6 +58,9 @@ export function writeArtifactViewerPages(result: AgentRunResult): void {
         })
       : null;
   const writtenDomPreviewPaths = new Set<string>();
+  const ptyReplayStableFrame = aittyAssets
+    ? await extractPtyReplayStableFrameForReport({ config: options.config, result })
+    : null;
 
   if (aittyAssets) {
     for (const { artifact, content } of readableArtifacts) {
@@ -57,17 +68,24 @@ export function writeArtifactViewerPages(result: AgentRunResult): void {
 
       const viewport = viewportsByName.get(artifact.viewport);
       const domPreviewPath = artifactDomPreviewPath(artifact);
-      mkdirSync(dirname(domPreviewPath), { recursive: true });
-      writeFileSync(
+      const aittyPreviewAssets = resolveAittyPreviewAssets(
         domPreviewPath,
-        renderDomPreviewDocument(
-          content,
-          viewport,
-          viewOptions,
-          resolveAittyPreviewAssets(domPreviewPath, aittyAssets, result.artifactsDir),
-        ),
-        "utf8",
+        aittyAssets,
+        result.artifactsDir,
       );
+      const previewDocument = ptyReplayStableFrame
+        ? renderPtyReplayStableFramePreviewDocument({
+            aittyAssets: aittyPreviewAssets,
+            config: options.config,
+            flowName: result.name,
+            frame: ptyReplayStableFrame,
+            viewOptions,
+            viewport,
+          })
+        : renderDomPreviewDocument(content, viewport, viewOptions, aittyPreviewAssets);
+
+      mkdirSync(dirname(domPreviewPath), { recursive: true });
+      writeFileSync(domPreviewPath, previewDocument, "utf8");
       writtenDomPreviewPaths.add(domPreviewPath);
     }
   }
