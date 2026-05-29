@@ -1,9 +1,10 @@
 import { existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
-import { join, resolve } from "node:path";
+import { dirname, join, resolve } from "node:path";
 
 import { expect, test } from "bun:test";
 
 import { checkAgentRegression } from "../src/agent/check";
+import { createAgentCassette, upsertAgentCassetteFrame } from "../src/agent/cassette";
 import { rerunAgentSummary } from "../src/agent/rerun";
 import { readAgentCheckSummaryPath, writeAgentCheckSummaryPath } from "../src/agent/check_summary";
 import {
@@ -37,6 +38,30 @@ function committedCassettePath(): string {
     "agent_deterministic",
     "agent_deterministic.cassette.json",
   );
+}
+
+function writeFastPromoteCassette(path: string): void {
+  const viewport = { name: "desktop", width: 320, height: 200 };
+  const cassette = createAgentCassette("agent_rerun_promote_fast", {
+    name: "agent_rerun_promote_fast",
+    launch: { mode: "url", url: "http://127.0.0.1:9/" },
+    viewports: [viewport],
+    defaults: { timeoutMs: 1_000 },
+    steps: [{ type: "sleep", ms: 0 }],
+  });
+
+  upsertAgentCassetteFrame(cassette, {
+    viewport,
+    phase: 0,
+    stepIndex: null,
+    stepType: "initial",
+    terminalText: "Ready",
+    dom: '<div class="term-grid"><div class="term-row"><span>Ready</span></div></div>',
+    capturedAt: new Date().toISOString(),
+  });
+
+  mkdirSync(dirname(path), { recursive: true });
+  writeFileSync(path, JSON.stringify(cassette, null, 2) + "\n", "utf8");
 }
 
 function writeFlowOnlyInputDir(dir: string): void {
@@ -359,10 +384,12 @@ test("agent rerun can override the promote summary artifacts root", async () => 
   const snapshotDir = join(dir, "snapshots");
   const artifactsRoot = join(dir, "artifacts");
   const rerunRoot = join(dir, "rerun-artifacts");
+  const sourcePath = join(dir, "source", "agent_rerun_promote_fast.cassette.json");
   rmSync(dir, { recursive: true, force: true });
+  writeFastPromoteCassette(sourcePath);
 
   const summaryPath = writePromoteSummaryFixture({
-    sourcePath: committedCassettePath(),
+    sourcePath,
     cassetteDir,
     snapshotDir,
     artifactsRoot,
