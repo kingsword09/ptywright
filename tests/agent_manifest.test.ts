@@ -86,6 +86,73 @@ function writeMinimalCheckManifestBundle(artifactsRoot: string): { summaryPath: 
   return { summaryPath };
 }
 
+function writeMinimalRunManifestBundle(artifactsRoot: string): void {
+  mkdirSync(artifactsRoot, { recursive: true });
+  const recordPath = join(artifactsRoot, "agent-manifest-copy.agent-run.json");
+  const terminalPath = join(artifactsRoot, "mobile.ready.terminal.txt");
+  const replayCommand = ["ptywright", "agent", "replay", recordPath];
+  const commands = {
+    replay: { argv: replayCommand },
+    updateSnapshots: { argv: [...replayCommand, "--update-snapshots"] },
+  };
+
+  writeFileSync(terminalPath, "ready\n", "utf8");
+  writeFileSync(
+    recordPath,
+    JSON.stringify(
+      {
+        version: 1,
+        name: "agent_manifest_copy",
+        ok: true,
+        startedAt: "2026-01-01T00:00:00.000Z",
+        durationMs: 0,
+        mode: "replay",
+        spec: {
+          name: "agent_manifest_copy",
+          launch: { mode: "url", url: "http://127.0.0.1:3000/" },
+          steps: [{ type: "snapshot", name: "ready", targets: ["terminal"] }],
+        },
+        artifactsDir: artifactsRoot,
+        snapshotDir: join(artifactsRoot, "snapshots"),
+        reportPath: join(artifactsRoot, "index.html"),
+        cassetteFrameCount: 0,
+        replayCommand: replayCommand.join(" "),
+        commands,
+        steps: [],
+        artifacts: [
+          {
+            name: "ready",
+            viewport: "mobile",
+            kind: "terminal",
+            path: terminalPath,
+            ok: true,
+          },
+        ],
+        errors: [],
+      },
+      null,
+      2,
+    ) + "\n",
+    "utf8",
+  );
+
+  writeAgentManifestPath(agentManifestPath(artifactsRoot), {
+    kind: "run",
+    ok: true,
+    rootDir: artifactsRoot,
+    primaryPath: recordPath,
+    commands,
+    validation: {
+      ok: true,
+      stages: [{ name: "run", ok: true, totalCount: 1, failureCount: 0 }],
+    },
+    files: [
+      { path: recordPath, kind: "run-record", role: "record", ok: true },
+      { path: terminalPath, kind: "terminal", role: "artifact", ok: true },
+    ],
+  });
+}
+
 test("agent run writes a hashed manifest for replayable artifacts", async () => {
   const dir = join(".tmp", "tests", "agent-manifest-run");
   rmSync(dir, { recursive: true, force: true });
@@ -536,28 +603,20 @@ test("agent exec refuses a manifest when command targets are stale", async () =>
 
 test("agent manifest remains valid after copying the artifact directory", async () => {
   const dir = join(".tmp", "tests", "agent-manifest-copy");
+  const artifactsRoot = join(dir, "run");
   const copyDir = join(".tmp", "tests", "agent-manifest-copy-moved");
   rmSync(dir, { recursive: true, force: true });
   rmSync(copyDir, { recursive: true, force: true });
 
-  const run = await runAgentSpec(
-    deterministicAgentSpec({
-      name: "agent_manifest_copy",
-      artifactsDir: join(dir, "run"),
-      snapshotDir: join(dir, "snapshots"),
-      targets: ["terminal"],
-    }),
-    { updateSnapshots: true, headless: true },
-  );
-  expect(run.ok).toBe(true);
+  writeMinimalRunManifestBundle(artifactsRoot);
 
-  cpSync(run.artifactsDir, copyDir, { recursive: true });
+  cpSync(artifactsRoot, copyDir, { recursive: true });
   const validation = await validateAgentArtifactsPath(agentManifestPath(copyDir));
   expect(validation).toMatchObject({ ok: true, totalCount: 1, failureCount: 0 });
 
   const copiedManifest = readAgentManifestPath(agentManifestPath(copyDir));
   expect(copiedManifest.files.some((file) => file.path.endsWith(".terminal.txt"))).toBe(true);
-  expect(copiedManifest.files.every((file) => !file.path.startsWith(run.artifactsDir))).toBe(true);
+  expect(copiedManifest.files.every((file) => !file.path.startsWith(artifactsRoot))).toBe(true);
 });
 
 test("agent validate treats copied manifest directories as portable bundles", async () => {
