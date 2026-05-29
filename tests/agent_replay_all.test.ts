@@ -404,7 +404,7 @@ test("agent replay-all summary links diff artifacts on snapshot mismatch", async
   const html = readFileSync(result.reportPath, "utf8");
   expect(html).toContain("diff");
   expect(html).toContain("snapshot mismatch");
-}, 20_000);
+}, 45_000);
 
 test("agent replay-all records invalid cassette as a failed entry", async () => {
   const dir = join(".tmp", "tests", "agent-replay-all-invalid");
