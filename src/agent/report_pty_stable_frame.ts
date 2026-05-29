@@ -475,22 +475,100 @@ function renderStableFrameDom(frame: PtyReplayStableFrame, targetCols: number): 
   let wideBlockId = 0;
 
   for (const line of frame.lines) {
-    const lineCols = Math.max(targetCols, cellsDisplayWidth(line.cells));
-    const wide = lineCols > targetCols || line.physicalRows > 1;
+    const lineCols = cellsDisplayWidth(line.cells);
+    const wide = shouldRenderViewportPan(line, lineCols, targetCols);
 
     if (wide) {
       wideBlockId += 1;
-      html += `<div class="term-wide-row-block" data-aitty-wide-block="true" data-aitty-wide-block-id="${wideBlockId}" data-aitty-wide-block-kind="viewport-pan" style="--aitty-wide-block-cols: ${lineCols}">`;
-      html += renderStableFrameRow(line, lineCols, totalRows);
+      const blockCols = Math.max(targetCols, lineCols);
+      html += `<div class="term-wide-row-block" data-aitty-wide-block="true" data-aitty-wide-block-id="${wideBlockId}" data-aitty-wide-block-kind="viewport-pan" style="--aitty-wide-block-cols: ${blockCols}">`;
+      html += renderStableFrameRow(line, blockCols, totalRows);
       html += "</div>";
+      totalRows += 1;
     } else {
-      html += renderStableFrameRow(line, targetCols, totalRows);
+      for (const row of wrapStableLogicalLine(line, targetCols)) {
+        html += renderStableFrameRow(row, targetCols, totalRows);
+        totalRows += 1;
+      }
     }
-
-    totalRows += 1;
   }
 
   return `<div class="term-grid" data-cols="${targetCols}" data-rows="${totalRows}" style="--term-cols: ${targetCols}; --term-rows: ${totalRows};">${html}</div>`;
+}
+
+function shouldRenderViewportPan(
+  line: StableLogicalLine,
+  lineCols: number,
+  targetCols: number,
+): boolean {
+  if (lineCols <= targetCols) return false;
+  return isDiffLikeLine(stableLineText(line));
+}
+
+function stableLineText(line: StableLogicalLine): string {
+  return line.cells
+    .map((cell) => cell.text)
+    .join("")
+    .trimEnd();
+}
+
+function isDiffLikeLine(text: string): boolean {
+  const normalized = text.replace(/[│┃┆┊▏▕]/g, " ").trimStart();
+  if (normalized === "") return false;
+
+  if (/^(?:diff --git|index [0-9a-f]{6,}\.\.|@@\s|[-+]{3}\s)/.test(normalized)) {
+    return true;
+  }
+
+  if (/^\d+\s+[+-]/.test(normalized)) return true;
+
+  const signed = normalized.match(/^[+-]\s*(.*)$/);
+  if (!signed) return false;
+  return isCodeLikeText(signed[1] ?? "");
+}
+
+function isCodeLikeText(text: string): boolean {
+  return (
+    /[{}()[\];=<>]/.test(text) ||
+    /\b(?:async|await|class|const|def|export|from|function|if|import|interface|let|return|type|var)\b/.test(
+      text,
+    ) ||
+    /(?:^|\s)(?:--?[a-z][\w-]*|#[\w-]+|\/[A-Za-z0-9._/-]+)(?:\s|$)/.test(text)
+  );
+}
+
+function wrapStableLogicalLine(line: StableLogicalLine, targetCols: number): StableLogicalLine[] {
+  const lineCols = cellsDisplayWidth(line.cells);
+  if (lineCols <= targetCols) return [line];
+
+  const rows: StableLogicalLine[] = [];
+  let cells: StableCell[] = [];
+  let cols = 0;
+
+  const flush = (): void => {
+    rows.push({ cells, live: line.live, physicalRows: 1 });
+    cells = [];
+    cols = 0;
+  };
+
+  for (const cell of line.cells) {
+    if (cols > 0 && cols + cell.width > targetCols) {
+      flush();
+    }
+
+    cells.push(cell);
+    cols += cell.width;
+
+    if (cols >= targetCols) {
+      flush();
+    }
+  }
+
+  if (cells.length > 0 || rows.length === 0) {
+    flush();
+  }
+
+  return rows;
 }
 
 function renderStableFrameRow(
@@ -590,13 +668,33 @@ function styleDeclarations(style: CellStyle): string[] {
 
 function colorToCss(color: Color): string | null {
   if (color.mode === "default") return null;
-  if (color.mode === "palette") return `var(--term-color-${color.value})`;
+  if (color.mode === "palette") return paletteColorToCss(color.value);
 
   const value = color.value;
   const r = (value >> 16) & 0xff;
   const g = (value >> 8) & 0xff;
   const b = value & 0xff;
   return `rgb(${r},${g},${b})`;
+}
+
+function paletteColorToCss(value: number): string {
+  if (value >= 0 && value <= 15) return `var(--term-color-${value})`;
+
+  if (value >= 16 && value <= 231) {
+    const index = value - 16;
+    const steps = [0, 95, 135, 175, 215, 255];
+    const r = steps[Math.floor(index / 36)] ?? 0;
+    const g = steps[Math.floor((index % 36) / 6)] ?? 0;
+    const b = steps[index % 6] ?? 0;
+    return `rgb(${r},${g},${b})`;
+  }
+
+  if (value >= 232 && value <= 255) {
+    const channel = 8 + (value - 232) * 10;
+    return `rgb(${channel},${channel},${channel})`;
+  }
+
+  return `var(--term-color-${value})`;
 }
 
 function widthDeclaration(width: number): string {
