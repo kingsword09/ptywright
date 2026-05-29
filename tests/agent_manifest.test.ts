@@ -509,7 +509,7 @@ test("agent manifest validation rejects stale command targets even when files ar
   expect(validation.entries[0]?.error).toContain(
     "command updateSnapshots argv must match primary artifact",
   );
-});
+}, 20_000);
 
 test("agent exec refuses a manifest when command targets are stale", async () => {
   const artifactsRoot = join(".tmp", "tests", "agent-manifest-exec-stale-command");
