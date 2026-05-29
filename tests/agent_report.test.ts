@@ -65,6 +65,75 @@ function writeAittySnapshotPackage(
   writeFileSync(join(distDir, "style.css"), options.style ?? ".aitty-terminal-root {}\n", "utf8");
 }
 
+function writeLocalPanAittySnapshotPackage(fixture: AittyReportFixture): void {
+  writeAittySnapshotPackage(fixture, {
+    globalScript: [
+      "function mountAittySnapshot(host, options = {}) {",
+      "  const doc = host.ownerDocument;",
+      "  const html = options.html ?? host.getAttribute('html') ?? host.innerHTML;",
+      "  host.replaceChildren();",
+      "  host.classList.add('aitty-embed');",
+      "  const shell = doc.createElement('div');",
+      "  shell.className = 'aitty-shell';",
+      "  shell.dataset.shell = '';",
+      "  shell.dataset.runtime = 'snapshot';",
+      "  shell.dataset.clientRole = 'viewer';",
+      "  shell.dataset.screenMode = host.getAttribute('screen-mode') || 'native';",
+      "  const viewport = doc.createElement('div');",
+      "  viewport.className = 'aitty-scroll-viewport';",
+      "  viewport.dataset.aittyScrollViewport = '';",
+      "  const content = doc.createElement('div');",
+      "  content.className = 'aitty-scroll-content';",
+      "  content.dataset.aittyScrollContent = '';",
+      "  const root = doc.createElement('div');",
+      "  root.className = 'aitty-terminal-root terminal-root wterm has-scrollback';",
+      "  root.dataset.terminalRoot = '';",
+      "  root.dataset.clientRole = 'viewer';",
+      "  root.dataset.screenMode = shell.dataset.screenMode;",
+      "  root.dataset.theme = host.getAttribute('theme') || 'dark';",
+      "  root.style.setProperty('--term-cols', host.getAttribute('cols') || '80');",
+      "  root.style.setProperty('--term-rows', host.getAttribute('rows') || '24');",
+      "  root.style.setProperty('--term-cell-width', '8px');",
+      "  root.style.setProperty('--term-row-height', '22.4px');",
+      "  root.innerHTML = html;",
+      "  for (const block of root.querySelectorAll('.term-wide-row-block')) {",
+      "    block.dataset.aittyViewportPan = 'true';",
+      "  }",
+      "  content.append(root);",
+      "  viewport.append(content);",
+      "  shell.append(viewport);",
+      "  host.append(shell);",
+      "  return { shell, viewport, terminalRoot: root, destroy() { shell.remove(); } };",
+      "}",
+      "globalThis.AittySnapshot = { mountAittySnapshot };",
+      "customElements.define('aitty-snapshot', class extends HTMLElement {",
+      "  connectedCallback() {",
+      "    const mount = () => mountAittySnapshot(this);",
+      "    if (this.ownerDocument.readyState === 'loading' && !this.hasAttribute('html')) {",
+      "      this.ownerDocument.addEventListener('DOMContentLoaded', mount, { once: true });",
+      "      return;",
+      "    }",
+      "    mount();",
+      "  }",
+      "});",
+      "",
+    ].join("\n"),
+    style: [
+      "aitty-snapshot, .aitty-embed, .aitty-shell, .aitty-scroll-viewport { display: block; width: 100%; height: 100%; min-width: 0; min-height: 0; }",
+      ".aitty-scroll-viewport { overflow-x: auto; overflow-y: auto; }",
+      ".aitty-shell[data-client-role=\"viewer\"][data-screen-mode=\"termvision\"] .aitty-scroll-viewport { overflow-x: hidden; }",
+      ".aitty-terminal-root.wterm { --theme-term-color-15: #5c5f77; width: 100%; min-height: 100%; font-size: 14px; line-height: 1.6; }",
+      ".aitty-terminal-root.wterm[data-client-role=\"viewer\"][data-screen-mode=\"termvision\"] { min-inline-size: 100%; }",
+      ".aitty-terminal-root .term-grid, .aitty-terminal-root .term-row { display: block; white-space: pre; }",
+      ".aitty-terminal-root .term-row > span { display: inline-block; white-space: pre; }",
+      ".aitty-terminal-root .term-wide-row-block { display: block; max-inline-size: 100%; min-inline-size: 0; overflow-x: auto; overflow-y: visible; }",
+      ".aitty-terminal-root .term-wide-row-block > .term-row { inline-size: calc(var(--term-cell-width, 1ch) * var(--aitty-wide-block-cols, var(--term-cols, 80))); max-inline-size: none; white-space: nowrap; }",
+      ".aitty-terminal-root .term-wide-row-block[data-aitty-viewport-pan=\"true\"] { cursor: grab; touch-action: pan-x pan-y; }",
+      "",
+    ].join("\n"),
+  });
+}
+
 function extractFirstStyleBlock(html: string): string {
   return /<style>\n([\s\S]*?)\n    <\/style>/.exec(html)?.[1] ?? "";
 }
@@ -455,6 +524,7 @@ test("agent report does not copy Aitty assets when no DOM preview is needed", ()
 
 test("agent report copies the Aitty snapshot global web component for file reports", () => {
   const fixture = createAittyReportFixture("agent-report-aitty-assets");
+  writeLocalPanAittySnapshotPackage(fixture);
   const paths = writeSingleDomAgentReport({
     fixture,
     name: "agent_report_aitty_assets",
@@ -527,8 +597,9 @@ test("agent report copies the Aitty snapshot global web component for file repor
   expect(copiedStyle).toContain("aitty-snapshot");
   expect(copiedStyle).toContain(".aitty-terminal-root");
   expect(copiedStyle).toContain(".term-wide-row-block");
-  expect(copiedStyle).toContain("--aitty-wide-content-cols");
-  expect(copiedStyle).toContain("overflow-x: visible");
+  expect(copiedStyle).toContain('.term-wide-row-block[data-aitty-viewport-pan="true"]');
+  expect(copiedStyle).toContain("overflow-x: auto");
+  expect(copiedStyle).not.toContain("--aitty-wide-content-cols");
 });
 
 test("agent report prefers downstream Aitty snapshot assets", () => {
@@ -588,6 +659,7 @@ test("agent report supports downstream Aitty snapshot module assets", () => {
 
 test("agent report delegates Aitty iframe viewport behavior to the web component", async () => {
   const fixture = createAittyReportFixture("agent-report-aitty-runtime");
+  writeLocalPanAittySnapshotPackage(fixture);
   const paths = writeSingleDomAgentReport({
     fixture,
     name: "agent_report_aitty_runtime",
@@ -634,6 +706,7 @@ test("agent report delegates Aitty iframe viewport behavior to the web component
       const root = document.querySelector(".aitty-terminal-root.wterm");
       const wideBlock = document.querySelector(".term-wide-row-block");
       const style = root instanceof HTMLElement ? getComputedStyle(root) : null;
+      const viewportStyle = viewport instanceof HTMLElement ? getComputedStyle(viewport) : null;
       const wideBlockStyle = wideBlock instanceof HTMLElement ? getComputedStyle(wideBlock) : null;
 
       return {
@@ -645,20 +718,28 @@ test("agent report delegates Aitty iframe viewport behavior to the web component
         snapshotMounted:
           snapshot instanceof HTMLElement && snapshot.classList.contains("aitty-embed"),
         terminalRootCount: document.querySelectorAll(".aitty-terminal-root.wterm").length,
+        rootClientWidth: root instanceof HTMLElement ? root.clientWidth : 0,
+        rootMinInlineSize: style?.minInlineSize ?? "",
+        rootScrollWidth: root instanceof HTMLElement ? root.scrollWidth : 0,
+        viewportClientWidth: viewport instanceof HTMLElement ? viewport.clientWidth : 0,
+        viewportOverflowX: viewportStyle?.overflowX ?? "",
         viewportScrollable:
           viewport instanceof HTMLElement ? viewport.scrollWidth > viewport.clientWidth : false,
-        viewportPan: viewport instanceof HTMLElement ? viewport.dataset.aittyViewportPan : "",
+        viewportPan: viewport instanceof HTMLElement ? (viewport.dataset.aittyViewportPan ?? "") : "",
         viewportReportPan:
           viewport instanceof HTMLElement ? (viewport.dataset.ptywrightReportPan ?? null) : null,
+        viewportScrollWidth: viewport instanceof HTMLElement ? viewport.scrollWidth : 0,
+        wideBlockClientWidth: wideBlock instanceof HTMLElement ? wideBlock.clientWidth : 0,
         wideBlockOverflowX: wideBlockStyle?.overflowX ?? "",
         wideBlockPan:
           wideBlock instanceof HTMLElement ? (wideBlock.dataset.aittyViewportPan ?? "") : "",
+        wideBlockScrollWidth: wideBlock instanceof HTMLElement ? wideBlock.scrollWidth : 0,
         wideBlockScrollable:
           wideBlock instanceof HTMLElement ? wideBlock.scrollWidth > wideBlock.clientWidth : false,
       };
     });
 
-    expect(runtime).toEqual({
+    expect(runtime).toMatchObject({
       domAttribute: null,
       color15: "#5c5f77",
       reportPanCount: 0,
@@ -666,13 +747,20 @@ test("agent report delegates Aitty iframe viewport behavior to the web component
       rootTheme: "light",
       snapshotMounted: true,
       terminalRootCount: 1,
-      viewportScrollable: true,
-      viewportPan: "true",
+      rootMinInlineSize: "100%",
+      viewportOverflowX: "hidden",
+      viewportPan: "",
       viewportReportPan: null,
-      wideBlockOverflowX: "visible",
-      wideBlockPan: "",
-      wideBlockScrollable: false,
+      wideBlockOverflowX: "auto",
+      wideBlockPan: "true",
+      wideBlockScrollable: true,
     });
+    expect(runtime?.rootClientWidth).toBeGreaterThan(0);
+    expect(runtime?.viewportClientWidth).toBeGreaterThan(0);
+    expect(runtime?.rootScrollWidth).toBeLessThanOrEqual((runtime?.rootClientWidth ?? 0) + 1);
+    expect(runtime?.viewportScrollWidth).toBeLessThanOrEqual((runtime?.viewportClientWidth ?? 0) + 1);
+    expect(runtime?.viewportScrollable).toBe(false);
+    expect(runtime?.wideBlockScrollWidth).toBeGreaterThan(runtime?.wideBlockClientWidth ?? 0);
     await page.close();
   } finally {
     await browser.close();
