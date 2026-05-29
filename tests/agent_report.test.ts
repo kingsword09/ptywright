@@ -121,14 +121,14 @@ function writeLocalPanAittySnapshotPackage(fixture: AittyReportFixture): void {
     style: [
       "aitty-snapshot, .aitty-embed, .aitty-shell, .aitty-scroll-viewport { display: block; width: 100%; height: 100%; min-width: 0; min-height: 0; }",
       ".aitty-scroll-viewport { overflow-x: auto; overflow-y: auto; }",
-      ".aitty-shell[data-client-role=\"viewer\"][data-screen-mode=\"termvision\"] .aitty-scroll-viewport { overflow-x: hidden; }",
+      '.aitty-shell[data-client-role="viewer"][data-screen-mode="termvision"] .aitty-scroll-viewport { overflow-x: hidden; }',
       ".aitty-terminal-root.wterm { --theme-term-color-15: #5c5f77; width: 100%; min-height: 100%; font-size: 14px; line-height: 1.6; }",
-      ".aitty-terminal-root.wterm[data-client-role=\"viewer\"][data-screen-mode=\"termvision\"] { min-inline-size: 100%; }",
+      '.aitty-terminal-root.wterm[data-client-role="viewer"][data-screen-mode="termvision"] { min-inline-size: 100%; }',
       ".aitty-terminal-root .term-grid, .aitty-terminal-root .term-row { display: block; white-space: pre; }",
       ".aitty-terminal-root .term-row > span { display: inline-block; white-space: pre; }",
       ".aitty-terminal-root .term-wide-row-block { display: block; max-inline-size: 100%; min-inline-size: 0; overflow-x: auto; overflow-y: visible; }",
       ".aitty-terminal-root .term-wide-row-block > .term-row { inline-size: calc(var(--term-cell-width, 1ch) * var(--aitty-wide-block-cols, var(--term-cols, 80))); max-inline-size: none; white-space: nowrap; }",
-      ".aitty-terminal-root .term-wide-row-block[data-aitty-viewport-pan=\"true\"] { cursor: grab; touch-action: pan-x pan-y; }",
+      '.aitty-terminal-root .term-wide-row-block[data-aitty-viewport-pan="true"] { cursor: grab; touch-action: pan-x pan-y; }',
       "",
     ].join("\n"),
   });
@@ -725,7 +725,8 @@ test("agent report delegates Aitty iframe viewport behavior to the web component
         viewportOverflowX: viewportStyle?.overflowX ?? "",
         viewportScrollable:
           viewport instanceof HTMLElement ? viewport.scrollWidth > viewport.clientWidth : false,
-        viewportPan: viewport instanceof HTMLElement ? (viewport.dataset.aittyViewportPan ?? "") : "",
+        viewportPan:
+          viewport instanceof HTMLElement ? (viewport.dataset.aittyViewportPan ?? "") : "",
         viewportReportPan:
           viewport instanceof HTMLElement ? (viewport.dataset.ptywrightReportPan ?? null) : null,
         viewportScrollWidth: viewport instanceof HTMLElement ? viewport.scrollWidth : 0,
@@ -758,7 +759,9 @@ test("agent report delegates Aitty iframe viewport behavior to the web component
     expect(runtime?.rootClientWidth).toBeGreaterThan(0);
     expect(runtime?.viewportClientWidth).toBeGreaterThan(0);
     expect(runtime?.rootScrollWidth).toBeLessThanOrEqual((runtime?.rootClientWidth ?? 0) + 1);
-    expect(runtime?.viewportScrollWidth).toBeLessThanOrEqual((runtime?.viewportClientWidth ?? 0) + 1);
+    expect(runtime?.viewportScrollWidth).toBeLessThanOrEqual(
+      (runtime?.viewportClientWidth ?? 0) + 1,
+    );
     expect(runtime?.viewportScrollable).toBe(false);
     expect(runtime?.wideBlockScrollWidth).toBeGreaterThan(runtime?.wideBlockClientWidth ?? 0);
     await page.close();
