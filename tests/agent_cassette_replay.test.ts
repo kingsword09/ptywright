@@ -134,6 +134,65 @@ test("agent replay uses cassette frames instead of launching the original comman
   expect(secondReplay.ok).toBe(true);
 }, 15_000);
 
+test("agent replay selects cassette DOM frames by viewport", async () => {
+  const artifactsDir = join(".tmp", "tests", "agent-cassette-viewports");
+  const snapshotDir = join(artifactsDir, "snapshots");
+  rmSync(artifactsDir, { recursive: true, force: true });
+
+  const run = await runAgentSpec(
+    {
+      name: "agent_cassette_viewports",
+      artifactsDir,
+      snapshotDir,
+      launch: {
+        mode: "url",
+        url: `data:text/html;charset=utf-8,${encodeURIComponent(renderViewportAwareAgentHtml())}`,
+      },
+      viewports: [
+        { name: "desktop", width: 900, height: 640 },
+        { name: "mobile", width: 390, height: 844, isMobile: true, hasTouch: true },
+      ],
+      defaults: { timeoutMs: 30_000, screenshot: false },
+      steps: [
+        { type: "waitForStableDom", quietMs: 100 },
+        { type: "snapshot", name: "ready", targets: ["terminal", "dom"] },
+      ],
+    },
+    { updateSnapshots: true, headless: true },
+  );
+
+  expect(run.ok).toBe(true);
+
+  const record = JSON.parse(readFileSync(run.recordPath, "utf8")) as {
+    spec?: { launch?: { url?: string } };
+  };
+
+  if (record.spec?.launch) {
+    record.spec.launch.url = "http://127.0.0.1:9/missing-agent-fixture";
+  }
+  writeFileSync(run.recordPath, JSON.stringify(record, null, 2) + "\n", "utf8");
+
+  const replay = await replayAgentRecordPath(run.recordPath, {
+    artifactsDir: join(artifactsDir, "replay"),
+    updateSnapshots: true,
+    headless: true,
+  });
+
+  expect(replay.ok).toBe(true);
+  expect(readFileSync(join(replay.artifactsDir, "desktop.ready.dom.html"), "utf8")).toContain(
+    'data-cols="90"',
+  );
+  expect(readFileSync(join(replay.artifactsDir, "desktop.ready.dom.html"), "utf8")).toContain(
+    "desktop-viewport",
+  );
+  expect(readFileSync(join(replay.artifactsDir, "mobile.ready.dom.html"), "utf8")).toContain(
+    'data-cols="39"',
+  );
+  expect(readFileSync(join(replay.artifactsDir, "mobile.ready.dom.html"), "utf8")).toContain(
+    "mobile-viewport",
+  );
+}, 15_000);
+
 test("agent snapshot mismatch writes a readable diff artifact", async () => {
   const artifactsDir = join(".tmp", "tests", "agent-mismatch-diff");
   const snapshotDir = join(artifactsDir, "snapshots");
@@ -144,7 +203,6 @@ test("agent snapshot mismatch writes a readable diff artifact", async () => {
       name: "agent_mismatch_diff_fixture",
       artifactsDir,
       snapshotDir,
-      targets: ["terminal"],
     }),
     name: "agent_mismatch_diff_fixture",
     artifactsDir,
@@ -162,6 +220,9 @@ test("agent snapshot mismatch writes a readable diff artifact", async () => {
   const diffArtifact = compare.artifacts.find((artifact) => artifact.diffPath);
   expect(diffArtifact?.diffPath).toBeTruthy();
   expect(existsSync(diffArtifact!.diffPath!)).toBe(true);
+  expect(compare.artifacts.some((artifact) => artifact.kind === "dom" && artifact.ok)).toBe(true);
+  expect(existsSync(join(compare.artifactsDir, "desktop.ready.dom.html"))).toBe(true);
+  expect(existsSync(join(compare.artifactsDir, "desktop.ready.dom.preview.html"))).toBe(true);
 
   const diff = readFileSync(diffArtifact!.diffPath!, "utf8");
   expect(diff).toContain("--- expected");
@@ -170,10 +231,18 @@ test("agent snapshot mismatch writes a readable diff artifact", async () => {
   expect(diff).toContain("+ Deterministic Agent Ready");
 
   const report = readFileSync(compare.reportPath, "utf8");
+  const terminalViewer = readFileSync(
+    join(compare.artifactsDir, "desktop.ready.terminal.viewer.html"),
+    "utf8",
+  );
+
   expect(report).toContain("diff");
   expect(report).toContain("Commands");
   expect(report).toContain("ptywright agent commands");
   expect(report).toContain("--update-snapshots");
+  expect(report).toContain('href="desktop.ready.dom.viewer.html"');
+  expect(terminalViewer).toContain('src="desktop.ready.dom.preview.html"');
+  expect(terminalViewer).not.toContain('<pre class="raw-artifact-text"');
 }, 15_000);
 
 test("agent run and replay CLI accept JSON output mode", async () => {
@@ -267,3 +336,43 @@ test("agent cassette validation rejects tampered frame hashes", async () => {
   cassette.frames![0]!.terminalText = "tampered";
   expect(() => normalizeAgentCassette(cassette)).toThrow("terminal hash mismatch");
 }, 15_000);
+
+function renderViewportAwareAgentHtml(): string {
+  return `<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Viewport Aware Agent Fixture</title>
+  </head>
+  <body>
+    <div data-terminal-root tabindex="0"></div>
+    <script>
+      const root = document.querySelector("[data-terminal-root]");
+
+      function render() {
+        const mobile = window.innerWidth <= 500;
+        const cols = mobile ? 39 : 90;
+        const grid = document.createElement("div");
+        const row = document.createElement("div");
+        const span = document.createElement("span");
+        grid.className = "term-grid";
+        grid.dataset.cols = String(cols);
+        grid.dataset.rows = "1";
+        grid.style.setProperty("--term-cols", String(cols));
+        grid.style.setProperty("--term-rows", "1");
+        row.className = "term-row";
+        row.dataset.aittyLineCols = String(cols);
+        span.textContent = mobile ? "mobile-viewport" : "desktop-viewport";
+        span.style.width = "calc(var(--term-cell-width, 1ch) * " + cols + ")";
+        row.append(span);
+        grid.append(row);
+        root.replaceChildren(grid);
+      }
+
+      window.addEventListener("resize", render);
+      render();
+    </script>
+  </body>
+</html>`;
+}

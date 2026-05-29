@@ -58,7 +58,7 @@ export async function runAgentViewport(args: {
   };
 
   try {
-    await page.goto(launchTarget.url, {
+    await page.goto(resolveViewportUrl(launchTarget.url, viewport), {
       waitUntil: "domcontentloaded",
       timeout: spec.defaults?.timeoutMs ?? 30_000,
     });
@@ -106,4 +106,11 @@ export async function runAgentViewport(args: {
     );
     await launchTarget.session?.close();
   }
+}
+
+function resolveViewportUrl(url: string, viewport: AgentViewport): string {
+  return url
+    .replaceAll("{viewportName}", encodeURIComponent(viewport.name))
+    .replaceAll("{viewportWidth}", encodeURIComponent(String(viewport.width)))
+    .replaceAll("{viewportHeight}", encodeURIComponent(String(viewport.height)));
 }

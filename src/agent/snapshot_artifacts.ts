@@ -35,45 +35,54 @@ export async function captureSnapshotStep(
     ...(ctx.spec.defaults?.screenshot ? ["screenshot" as const] : []),
   ];
   const base = `${sanitizeArtifactName(ctx.viewport.name)}.${sanitizeArtifactName(step.name)}`;
+  const errors: string[] = [];
 
   for (const target of targets) {
-    if (target === "terminal") {
-      const text = normalizeTerminalText(await readTerminalText(ctx.page), ctx.masks);
-      await writeComparableArtifact(ctx, {
-        name: step.name,
-        kind: "terminal",
-        relativePath: `${base}.terminal.txt`,
-        baselineRelativePath: `${base}.terminal.snap.txt`,
-        diffRelativePath: `${base}.terminal.diff.txt`,
-        content: text + "\n",
-        compare: step.compare ?? true,
-      });
-      continue;
-    }
+    try {
+      if (target === "terminal") {
+        const text = normalizeTerminalText(await readTerminalText(ctx.page), ctx.masks);
+        await writeComparableArtifact(ctx, {
+          name: step.name,
+          kind: "terminal",
+          relativePath: `${base}.terminal.txt`,
+          baselineRelativePath: `${base}.terminal.snap.txt`,
+          diffRelativePath: `${base}.terminal.diff.txt`,
+          content: text + "\n",
+          compare: step.compare ?? true,
+        });
+        continue;
+      }
 
-    if (target === "dom") {
-      const dom = normalizeDomSnapshot(await readTerminalDom(ctx.page), ctx.masks);
-      await writeComparableArtifact(ctx, {
-        name: step.name,
-        kind: "dom",
-        relativePath: `${base}.dom.html`,
-        baselineRelativePath: `${base}.dom.snap.html`,
-        diffRelativePath: `${base}.dom.diff.txt`,
-        content: dom + "\n",
-        compare: step.compare ?? true,
-      });
-      continue;
-    }
+      if (target === "dom") {
+        const dom = normalizeDomSnapshot(await readTerminalDom(ctx.page), ctx.masks);
+        await writeComparableArtifact(ctx, {
+          name: step.name,
+          kind: "dom",
+          relativePath: `${base}.dom.html`,
+          baselineRelativePath: `${base}.dom.snap.html`,
+          diffRelativePath: `${base}.dom.diff.txt`,
+          content: dom + "\n",
+          compare: step.compare ?? true,
+        });
+        continue;
+      }
 
-    const screenshotPath = join(ctx.artifactsDir, `${base}.png`);
-    await ctx.page.screenshot({ path: screenshotPath, fullPage: step.fullPage ?? false });
-    ctx.artifacts.push({
-      name: step.name,
-      viewport: ctx.viewport.name,
-      kind: "screenshot",
-      path: screenshotPath,
-      ok: true,
-    });
+      const screenshotPath = join(ctx.artifactsDir, `${base}.png`);
+      await ctx.page.screenshot({ path: screenshotPath, fullPage: step.fullPage ?? false });
+      ctx.artifacts.push({
+        name: step.name,
+        viewport: ctx.viewport.name,
+        kind: "screenshot",
+        path: screenshotPath,
+        ok: true,
+      });
+    } catch (error) {
+      errors.push(error instanceof Error ? error.message : String(error));
+    }
+  }
+
+  if (errors.length > 0) {
+    throw new Error(errors.join("; "));
   }
 }
 

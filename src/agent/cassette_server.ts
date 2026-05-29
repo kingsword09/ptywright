@@ -99,10 +99,25 @@ function renderCassetteHtml(cassette: AgentCassette): string {
       const root = document.querySelector("[data-terminal-root]");
       let phase = 0;
 
+      function queryViewport() {
+        const params = new URLSearchParams(window.location.search);
+        const width = Number.parseInt(params.get("viewportWidth") || "", 10);
+        const height = Number.parseInt(params.get("viewportHeight") || "", 10);
+        const name = params.get("viewportName") || "";
+        return {
+          height: Number.isFinite(height) && height > 0 ? height : window.innerHeight,
+          name,
+          width: Number.isFinite(width) && width > 0 ? width : window.innerWidth,
+        };
+      }
+
       function viewportScore(frame) {
         const viewport = frame.viewport || {};
-        return Math.abs((viewport.width || window.innerWidth) - window.innerWidth) +
-          Math.abs((viewport.height || window.innerHeight) - window.innerHeight);
+        const target = queryViewport();
+        const namePenalty = target.name && viewport.name !== target.name ? 100000 : 0;
+        return namePenalty +
+          Math.abs((viewport.width || target.width) - target.width) +
+          Math.abs((viewport.height || target.height) - target.height);
       }
 
       function chooseFrame() {

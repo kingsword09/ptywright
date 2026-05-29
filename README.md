@@ -373,16 +373,12 @@ bun run src/cli.ts agent init claude examples/agents/claude_browser_smoke.json
 bun run src/cli.ts agent init droidx examples/agents/droidx_browser_smoke.json
 ```
 
-DOM artifact viewers prefer project renderer assets when available. If
-`@aitty/browser` is resolvable from the current project, flow path, report path,
-or artifact directory, ptywright copies `@aitty/browser/style.css` and the Aitty
-snapshot web component into the report artifacts and renders snapshots through
-`<aitty-snapshot>`. The classic `web-component.global.js` bundle is preferred for
-portable file reports; `web-component.js` is used as a module fallback. In this
-path, terminal internals such as wterm rows, ANSI styling, termvision, and
-viewport-pan come from `@aitty/browser`; ptywright only supplies the report frame
-and copied assets. If those assets are unavailable, the report falls back to a
-self-contained terminal preview so ptywright remains renderer-agnostic.
+DOM artifact viewers use `@aitty/snapshot` as the report renderer. ptywright
+copies `@aitty/snapshot/style.css` and the classic
+`@aitty/snapshot/web-component.global.js` bundle into the report artifacts, then
+renders snapshots through `<aitty-snapshot>`. Terminal internals such as wterm
+rows, ANSI styling, termvision, and viewport-pan come from `@aitty/snapshot`;
+ptywright only supplies the report frame and copied assets.
 
 Artifacts are split intentionally:
 - `.tmp/agent/<name>/` contains run output, screenshots, `*.flow.json`,

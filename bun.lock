@@ -5,6 +5,7 @@
     "": {
       "name": "ptywright",
       "dependencies": {
+        "@aitty/snapshot": "^0.5.1",
         "@modelcontextprotocol/sdk": "^1.25.2",
         "@xterm/headless": "^6.0.0",
         "asciinema-player": "3.9.0",
@@ -22,6 +23,10 @@
     },
   },
   "packages": {
+    "@aitty/protocol": ["@aitty/protocol@0.5.0", "", {}, "sha512-EVyxksAzPEVknxEMJoXuTBhSt3+eI33Ou27YlKh8S0+u+gdOA2rVAWgYIBBDkM2j5W08y4cRRmyBZ5CcYR964Q=="],
+
+    "@aitty/snapshot": ["@aitty/snapshot@0.5.1", "", { "dependencies": { "@aitty/protocol": "0.5.0" } }, "sha512-qFVigiCzCZ4rTsvqWEJKLi+xvmX9DRCDVIc1FGWjj+gP3jz8UIpUWRfdy1Nw22aIJlMcipZmdCHb72yh3GDikA=="],
+
     "@babel/runtime": ["@babel/runtime@7.28.6", "", {}, "sha512-05WQkdpL9COIMz4LjTxGpPNCdlpyimKppYNoJ5Di5EUObifl8t4tuLuUBBZEpoLYOmfvIWrsp9fCl0HoPRVTdA=="],
 
     "@emnapi/core": ["@emnapi/core@1.10.0", "", { "dependencies": { "@emnapi/wasi-threads": "1.2.1", "tslib": "^2.4.0" } }, "sha512-yq6OkJ4p82CAfPl0u9mQebQHKPJkY7WrIuk205cTYnYe+k2Z8YBh11FrbRG/H6ihirqcacOgl2BIO8oyMQLeXw=="],

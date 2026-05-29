@@ -46,7 +46,7 @@ export function renderAittyPreviewBody(args: {
 }
 
 // The <aitty-snapshot> custom element ships its own wterm appearance, ANSI
-// palette, and viewport-pan behavior via @aitty/browser/style.css. The report
+// palette, and viewport-pan behavior via @aitty/snapshot/style.css. The report
 // page only needs to make the host fill the iframe and respect safe-area on
 // mobile; everything else (cell metrics, scrollbars, themes) is owned by aitty.
 export function renderAittyPreviewCss(viewOptions: AgentReportViewOptions): string {
