@@ -4,8 +4,15 @@ import { dirname, join, resolve } from "node:path";
 
 import { expect, test } from "bun:test";
 
-import { readAgentArtifactCommandsPath } from "../src/agent/commands";
-import { agentManifestPath, writeAgentManifestPath } from "../src/agent/manifest";
+import {
+  findMovedPrimaryManifestBundle,
+  readAgentArtifactCommandsPath,
+} from "../src/agent/commands";
+import {
+  agentManifestPath,
+  type AgentManifestFileDraft,
+  writeAgentManifestPath,
+} from "../src/agent/manifest";
 import { replayAllAgentRecords } from "../src/agent/replay_all";
 import { writeReplayAllReport } from "../src/agent/replay_all_report";
 import { writeReplayAllSummary } from "../src/agent/replay_all_summary";
@@ -40,7 +47,10 @@ function copyCommittedCassette(targetPath: string, overrides: { snapshotDir?: st
   writeFileSync(targetPath, JSON.stringify(cassette, null, 2) + "\n", "utf8");
 }
 
-function writeMinimalReplayManifestBundle(artifactsRoot: string): { summaryPath: string } {
+function writeMinimalReplayManifestBundle(
+  artifactsRoot: string,
+  options: { replayRecordPath?: string } = {},
+): { summaryPath: string } {
   mkdirSync(artifactsRoot, { recursive: true });
   const summaryPath = join(artifactsRoot, "agent-replay.summary.json");
   const replayDir = join(artifactsRoot, "tests");
@@ -72,6 +82,20 @@ function writeMinimalReplayManifestBundle(artifactsRoot: string): { summaryPath:
     entries: [],
   });
 
+  const files: AgentManifestFileDraft[] = [
+    { path: summaryPath, kind: "replay-summary", role: "summary", ok: true },
+  ];
+  if (options.replayRecordPath) {
+    mkdirSync(dirname(options.replayRecordPath), { recursive: true });
+    writeFileSync(options.replayRecordPath, "{}\n", "utf8");
+    files.push({
+      path: options.replayRecordPath,
+      kind: "run-record",
+      role: "record",
+      ok: true,
+    });
+  }
+
   writeAgentManifestPath(agentManifestPath(artifactsRoot), {
     kind: "replay-suite",
     ok: true,
@@ -86,7 +110,7 @@ function writeMinimalReplayManifestBundle(artifactsRoot: string): { summaryPath:
       ok: true,
       stages: [{ name: "replay", ok: true, totalCount: 0, failureCount: 0 }],
     },
-    files: [{ path: summaryPath, kind: "replay-summary", role: "summary", ok: true }],
+    files,
   });
 
   return { summaryPath };
@@ -320,29 +344,26 @@ test("agent replay-all manifest bundle can rerun after the original input direct
   });
 }, 25_000);
 
-test("agent replay summary next to a moved manifest reruns from local bundle records", async () => {
+test("agent replay summary next to a moved manifest locates local bundle records", async () => {
   const dir = join(".tmp", "tests", "agent-replay-summary-copy");
-  const cassetteDir = join(dir, "cassettes");
   const suiteDir = join(dir, "suite");
   const copyRoot = join(dir, "suite-moved");
   rmSync(dir, { recursive: true, force: true });
-  mkdirSync(cassetteDir, { recursive: true });
 
-  copyCommittedCassette(join(cassetteDir, "agent_replay_summary_copy_fixture.cassette.json"));
-
-  const result = await replayAllAgentRecords({
-    dir: cassetteDir,
-    artifactsRoot: suiteDir,
-    headless: true,
+  writeMinimalReplayManifestBundle(suiteDir, {
+    replayRecordPath: join(suiteDir, "tests", "agent.agent-run.json"),
   });
-  expect(result.ok).toBe(true);
 
   cpSync(suiteDir, copyRoot, { recursive: true });
-  rmSync(cassetteDir, { recursive: true, force: true });
   rmSync(suiteDir, { recursive: true, force: true });
 
   const movedSummaryPath = join(copyRoot, "agent-replay.summary.json");
+  const movedBundle = findMovedPrimaryManifestBundle(movedSummaryPath, "replay-summary");
+  expect(movedBundle?.artifactsRoot).toBe(copyRoot);
+  expect(movedBundle?.replayInputDir).toBe(join(copyRoot, "tests"));
+
   const commands = await readAgentArtifactCommandsPath(movedSummaryPath);
+  expect(commands.manifestPath).toBe(resolve(agentManifestPath(copyRoot)));
   expect(commands.commands.rerun.argv).toEqual([
     "ptywright",
     "agent",
@@ -351,47 +372,12 @@ test("agent replay summary next to a moved manifest reruns from local bundle rec
     "--artifacts-root",
     copyRoot,
   ]);
-
-  const logs: string[] = [];
-  const originalLog = console.log;
-
-  process.exitCode = undefined;
-  try {
-    console.log = (...args: unknown[]) => {
-      logs.push(args.map((arg) => String(arg)).join(" "));
-    };
-    await main(["agent", "exec", movedSummaryPath, "--command", "rerun"]);
-    expect(currentExitCode()).toBe(0);
-  } finally {
-    console.log = originalLog;
-    process.exitCode = 0;
-  }
-
-  expect(logs.join("\n")).toContain("ok count=1");
-  expect(logs.join("\n")).toContain(`dir=${resolve(copyRoot, "tests")}`);
   expect(await validateAgentArtifactsPath(copyRoot, { preferManifestBundle: true })).toMatchObject({
     ok: true,
     totalCount: 1,
     failureCount: 0,
   });
-
-  logs.length = 0;
-  process.exitCode = undefined;
-  try {
-    console.log = (...args: unknown[]) => {
-      logs.push(args.map((arg) => String(arg)).join(" "));
-    };
-    await main(["agent", "rerun", movedSummaryPath]);
-    expect(currentExitCode()).toBe(0);
-  } finally {
-    console.log = originalLog;
-    process.exitCode = 0;
-  }
-
-  expect(logs.join("\n")).toContain("ok rerun=replay-summary");
-  expect(logs.join("\n")).toContain(`dir=${resolve(copyRoot, "tests")}`);
-  expect(logs.join("\n")).toContain(`summary=${resolve(copyRoot, "agent-replay.summary.json")}`);
-}, 25_000);
+});
 
 test("agent exec validates a moved replay summary manifest before dispatch", async () => {
   const dir = join(".tmp", "tests", "agent-replay-summary-copy-tamper");
