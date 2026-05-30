@@ -1,4 +1,4 @@
-import { normalizeDomSnapshot, normalizeTerminalText } from "./normalize";
+import { normalizeReplayDom, normalizeTerminalText } from "./normalize";
 import { upsertAgentCassetteFrame, type MutableAgentCassette } from "./cassette";
 import type { AgentFlowStep } from "./schema";
 import { captureSnapshotStep, type SnapshotArtifactContext } from "./snapshot_artifacts";
@@ -110,7 +110,7 @@ export async function captureCassetteFrame(
     stepIndex: frame.stepIndex,
     stepType: frame.stepType,
     terminalText: normalizeTerminalText(await readTerminalText(ctx.page), ctx.masks),
-    dom: normalizeDomSnapshot(await readTerminalDom(ctx.page), ctx.masks),
+    dom: normalizeReplayDom(await readTerminalDom(ctx.page), ctx.masks),
     capturedAt: new Date().toISOString(),
   });
 }

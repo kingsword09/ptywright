@@ -6,7 +6,6 @@ import type { AgentReportViewOptions } from "./report_view_options";
 
 export type AgentReportAittyViewerAssets = {
   scriptHref: string;
-  scriptType: "classic" | "module";
   styleHref: string;
 };
 
@@ -17,14 +16,13 @@ export function resolveAittyPreviewAssets(
 ): AgentReportAittyViewerAssets {
   return {
     scriptHref: relativeHref(previewPath, assets.scriptPath, artifactsDir),
-    scriptType: assets.scriptType,
     styleHref: relativeHref(previewPath, assets.stylePath, artifactsDir),
   };
 }
 
 export function renderAittyPreviewAssetTags(assets: AgentReportAittyViewerAssets): string {
   return `    <link rel="stylesheet" href="${escapeAttribute(assets.styleHref)}" />
-    <script${assets.scriptType === "module" ? ' type="module"' : ""} src="${escapeAttribute(assets.scriptHref)}"></script>
+    <script src="${escapeAttribute(assets.scriptHref)}"></script>
 `;
 }
 

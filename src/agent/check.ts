@@ -32,6 +32,7 @@ export async function checkAgentRegression(
   }
 
   const replay = await replayAllAgentRecords({
+    config: options.config,
     dir: cassetteDir,
     artifactsRoot,
     headless: options.headless ?? true,

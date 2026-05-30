@@ -3,7 +3,7 @@ import { isAbsolute, resolve } from "node:path";
 
 import { Terminal } from "@xterm/headless";
 
-import type { PtywrightAgentReportStableFrameFlowConfig, ResolvedPtywrightConfig } from "../config";
+import type { ResolvedPtywrightConfig } from "../config";
 import { base64ToBytes } from "../pty-cassette/data";
 import {
   DEFAULT_STYLE,
@@ -22,6 +22,10 @@ import {
   renderAittyPreviewCss,
 } from "./report_aitty_preview";
 import { readFlagValueFromArgSets, readReportLaunchArgSets } from "./report_launch_args";
+import {
+  resolveStableFrameConfig,
+  type ResolvedStableFrameConfig,
+} from "./report_stable_frame_config";
 import type { TerminalSnapshotLayout } from "./report_terminal_layout";
 import { isMobileViewport, type AgentReportViewOptions } from "./report_view_options";
 import type { AgentRunResult } from "./runner";
@@ -57,11 +61,6 @@ type RawPtyReplayRecording = {
     rows?: number;
   };
 };
-
-type StableFrameConfig = Required<
-  Pick<PtywrightAgentReportStableFrameFlowConfig, "stableMs" | "theme" | "viewportOnly">
-> &
-  Omit<PtywrightAgentReportStableFrameFlowConfig, "stableMs" | "theme" | "viewportOnly">;
 
 export type StableCell = {
   style: CellStyle;
@@ -187,26 +186,6 @@ ${body}
 </html>`;
 }
 
-function resolveStableFrameConfig(
-  config: ResolvedPtywrightConfig | undefined,
-  flowName: string,
-): StableFrameConfig {
-  const stableFrames = config?.agent?.report?.stableFrames;
-  const flowConfig = stableFrames?.flows?.[flowName];
-
-  return {
-    ...stableFrames,
-    ...flowConfig,
-    stableMs: flowConfig?.stableMs ?? stableFrames?.stableMs ?? 200,
-    theme: flowConfig?.theme ?? stableFrames?.theme ?? "dark",
-    viewportOnly: flowConfig?.viewportOnly ?? stableFrames?.viewportOnly ?? false,
-    viewportTargets: {
-      ...stableFrames?.viewportTargets,
-      ...flowConfig?.viewportTargets,
-    },
-  };
-}
-
 function resolvePtyReplayPath(
   replayPathArg: string,
   config: ResolvedPtywrightConfig | undefined,
@@ -216,7 +195,7 @@ function resolvePtyReplayPath(
 }
 
 async function extractStableFrame(args: {
-  config: StableFrameConfig;
+  config: ResolvedStableFrameConfig;
   events: readonly RawPtyReplayEvent[];
   terminal: Terminal;
 }): Promise<PtyReplayStableFrame | null> {
@@ -410,7 +389,7 @@ function chooseBestStableFrame(
   return meaningful.at(-1) ?? frames.at(-1) ?? null;
 }
 
-function createStableFrameMatcher(config: StableFrameConfig): StableFrameMatcher | null {
+function createStableFrameMatcher(config: ResolvedStableFrameConfig): StableFrameMatcher | null {
   const matchText = toStringArray(config.matchText);
   const matchRegex = toStringArray(config.matchRegex).map((pattern) => {
     try {
@@ -449,7 +428,7 @@ function toStringArray(value: string | string[] | undefined): string[] {
 }
 
 function resolveTargetCols(args: {
-  config: StableFrameConfig;
+  config: ResolvedStableFrameConfig;
   fontSize: number;
   frameCols: number;
   viewport?: AgentViewport;
@@ -561,37 +540,81 @@ function isCodeLikeText(text: string): boolean {
 }
 
 function wrapStableLogicalLine(line: StableLogicalLine, targetCols: number): StableLogicalLine[] {
-  const lineCols = cellsDisplayWidth(line.cells);
-  if (lineCols <= targetCols) return [line];
+  const cols = Math.max(1, targetCols);
+  if (cellsDisplayWidth(line.cells) <= cols) return [line];
 
   const rows: StableLogicalLine[] = [];
-  let cells: StableCell[] = [];
-  let cols = 0;
+  let remaining = [...line.cells];
 
-  const flush = (): void => {
-    rows.push({ cells, live: line.live, physicalRows: 1 });
-    cells = [];
-    cols = 0;
-  };
+  while (remaining.length > 0) {
+    const chunk: StableCell[] = [];
+    let usedCols = 0;
+    let consumed = 0;
 
-  for (const cell of line.cells) {
-    if (cols > 0 && cols + cell.width > targetCols) {
-      flush();
+    for (const cell of remaining) {
+      if (chunk.length > 0 && usedCols + cell.width > cols) {
+        break;
+      }
+
+      chunk.push(cell);
+      usedCols += cell.width;
+      consumed += 1;
+
+      if (usedCols >= cols) {
+        break;
+      }
     }
 
-    cells.push(cell);
-    cols += cell.width;
+    if (chunk.length === 0) {
+      chunk.push(remaining[0] ?? { style: DEFAULT_STYLE, text: "", width: 1 });
+      consumed = 1;
+    }
 
-    if (cols >= targetCols) {
-      flush();
+    let rowCells = chunk;
+    let nextRemaining = remaining.slice(consumed);
+    const breakIndex = findStableLineBreakIndex(chunk);
+
+    if (breakIndex > 0) {
+      rowCells = chunk.slice(0, breakIndex);
+      nextRemaining = [...chunk.slice(breakIndex + 1), ...nextRemaining];
+    }
+
+    rows.push({ cells: trimTrailingStableCells(rowCells), live: line.live, physicalRows: 1 });
+    remaining = dropLeadingStableSpaces(nextRemaining);
+  }
+
+  return rows.length > 0 ? rows : [line];
+}
+
+function findStableLineBreakIndex(cells: readonly StableCell[]): number {
+  for (let index = cells.length - 2; index > 0; index -= 1) {
+    const cell = cells[index];
+    if (cell?.text === " " && cell.width === 1) {
+      return index;
     }
   }
 
-  if (cells.length > 0 || rows.length === 0) {
-    flush();
+  return -1;
+}
+
+function trimTrailingStableCells(cells: readonly StableCell[]): StableCell[] {
+  let end = cells.length;
+
+  while (end > 0 && cells[end - 1]?.text === " " && cells[end - 1]?.width === 1) {
+    end -= 1;
   }
 
-  return rows;
+  return cells.slice(0, end);
+}
+
+function dropLeadingStableSpaces(cells: readonly StableCell[]): StableCell[] {
+  let start = 0;
+
+  while (start < cells.length && cells[start]?.text === " " && cells[start]?.width === 1) {
+    start += 1;
+  }
+
+  return cells.slice(start);
 }
 
 function renderStableFrameRow(

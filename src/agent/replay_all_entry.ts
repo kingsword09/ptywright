@@ -14,15 +14,17 @@ import {
   type AgentRunArtifact,
   type AgentRunResult,
 } from "./runner";
+import type { ResolvedPtywrightConfig } from "../config";
 
 export async function replayRecordEntry(
   filePath: string,
   artifactsDir: string,
-  options: { headless: boolean; updateSnapshots: boolean },
+  options: { config?: ResolvedPtywrightConfig; headless: boolean; updateSnapshots: boolean },
 ): Promise<AgentRunResult> {
   try {
     return await replayAgentRecordPath(filePath, {
       artifactsDir,
+      config: options.config,
       headless: options.headless,
       updateSnapshots: options.updateSnapshots,
     });

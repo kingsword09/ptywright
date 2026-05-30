@@ -112,7 +112,7 @@ const snapshotStepSchema = z.object({
   type: z.literal("snapshot"),
   name: z.string().min(1),
   compare: z.boolean().optional(),
-  targets: z.array(z.enum(["terminal", "dom", "screenshot"])).optional(),
+  targets: z.array(z.enum(["terminal", "dom", "layout", "screenshot"])).optional(),
   fullPage: z.boolean().optional(),
 });
 

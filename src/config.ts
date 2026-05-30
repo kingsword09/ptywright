@@ -19,6 +19,7 @@ export type PtywrightAgentReportStableFrameFlowConfig = {
   matchMode?: "first" | "last";
   matchRegex?: string | string[];
   matchText?: string | string[];
+  previewSource?: "captured-dom" | "pty-replay";
   rows?: number;
   skip?: boolean;
   stableMs?: number;

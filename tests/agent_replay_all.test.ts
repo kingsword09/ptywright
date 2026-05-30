@@ -1,3 +1,4 @@
+import { Buffer } from "node:buffer";
 import { cpSync, existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { dirname, join, resolve } from "node:path";
 
@@ -147,6 +148,76 @@ test("agent replay-all runs copied cassettes as a regression suite", async () =>
   expect(html).toContain("agent-replay.summary.json");
   expect(html).toContain("ptywright agent commands");
   expect(html).toContain("--update-snapshots");
+}, 15_000);
+
+test("agent replay-all passes report config to entry reports", async () => {
+  const dir = join(".tmp", "tests", "agent-replay-all-report-config");
+  const cassetteDir = join(dir, "cassettes");
+  const artifactsRoot = join(dir, "suite");
+  const replayPath = join(dir, "recordings", "stable.pty.json");
+  rmSync(dir, { recursive: true, force: true });
+  mkdirSync(cassetteDir, { recursive: true });
+  mkdirSync(dirname(replayPath), { recursive: true });
+
+  writeFileSync(
+    replayPath,
+    JSON.stringify(
+      {
+        version: 1,
+        createdAt: "2026-05-25T00:00:00.000Z",
+        durationMs: 100,
+        command: { file: "codex", args: [], cols: 80, rows: 24 },
+        events: [
+          { atMs: 0, type: "resize", cols: 80, rows: 24 },
+          {
+            atMs: 0,
+            type: "output",
+            dataBase64: Buffer.from("stable source from config\r\n", "utf8").toString("base64"),
+          },
+          { atMs: 100, type: "exit", exitCode: 0 },
+        ],
+      },
+      null,
+      2,
+    ),
+    "utf8",
+  );
+
+  const copiedCassettePath = join(cassetteDir, "agent_replay_all_config_fixture.cassette.json");
+  copyCommittedCassette(copiedCassettePath);
+  const cassette = JSON.parse(readFileSync(copiedCassettePath, "utf8")) as {
+    spec?: { launch?: { args?: string[] } };
+  };
+  cassette.spec!.launch!.args = ["exec", "--pty-replay", resolve(replayPath)];
+  writeFileSync(copiedCassettePath, JSON.stringify(cassette, null, 2) + "\n", "utf8");
+
+  const result = await replayAllAgentRecords({
+    config: {
+      rootDir: resolve(dir),
+      agent: {
+        report: {
+          stableFrames: {
+            previewSource: "pty-replay",
+            theme: "dark",
+          },
+        },
+      },
+    },
+    dir: cassetteDir,
+    artifactsRoot,
+    headless: true,
+  });
+
+  expect(result.ok).toBe(true);
+  const entryArtifactsDir = result.entries[0]!.result.artifactsDir;
+  const domPreview = readFileSync(
+    join(entryArtifactsDir, "desktop.ready.dom.preview.html"),
+    "utf8",
+  );
+  expect(domPreview).toContain("stable-frame preview");
+  expect(domPreview).toContain("stable source from config");
+  expect(domPreview).toContain('theme="dark"');
+  expect(domPreview).not.toContain("Deterministic Agent Ready");
 }, 15_000);
 
 test("agent replay-all can update snapshots from copied cassettes", async () => {

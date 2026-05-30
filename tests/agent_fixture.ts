@@ -11,7 +11,7 @@ export function deterministicAgentSpec(args: {
   name: string;
   artifactsDir: string;
   snapshotDir: string;
-  targets?: Array<"terminal" | "dom" | "screenshot">;
+  targets?: Array<"terminal" | "dom" | "layout" | "screenshot">;
 }): AgentFlowSpec {
   return {
     name: args.name,
