@@ -356,6 +356,132 @@ test("agent report links terminal artifacts to fullscreen viewport viewers", asy
   expect(domPreview).not.toContain("--term-cell-width:");
 });
 
+test("agent report detail page does not overflow mobile viewports", async () => {
+  const fixture = createAittyReportFixture("agent-report-mobile-layout");
+  const { artifactsDir, runnerDir } = fixture;
+  const snapshotDir = join(artifactsDir, "snapshots");
+  const reportPath = join(artifactsDir, "index.html");
+  const longName = "agent_report_extremely_long_claude_dangerously_skip_permissions_replay";
+  const recordPath = join(artifactsDir, `${longName}.agent-run.json`);
+  const flowPath = join(artifactsDir, `${longName}.flow.json`);
+  const cassettePath = join(artifactsDir, `${longName}.cassette.json`);
+  const terminalPath = join(artifactsDir, "mobile.final.terminal.txt");
+  const domPath = join(artifactsDir, "mobile.final.dom.html");
+  const longCommandArg = "very-long-command-argument-".repeat(12);
+
+  writeFileSync(terminalPath, "Ready\n", "utf8");
+  writeFileSync(
+    domPath,
+    [
+      '<div class="term-grid" data-cols="41" data-rows="1" style="--term-cols: 41; --term-rows: 1;">',
+      '<div class="term-row"><span>Ready</span></div>',
+      "</div>",
+    ].join(""),
+    "utf8",
+  );
+  writeFileSync(
+    flowPath,
+    JSON.stringify({ launch: { mode: "command", args: ["exec", longCommandArg] } }, null, 2),
+    "utf8",
+  );
+  writeFileSync(
+    cassettePath,
+    JSON.stringify({ spec: { launch: { args: ["exec", longCommandArg] } } }, null, 2),
+    "utf8",
+  );
+
+  const originalCwd = process.cwd();
+  try {
+    process.chdir(runnerDir);
+    await writeAgentReport(reportPath, {
+      ok: true,
+      name: longName,
+      mode: "replay",
+      agentFlavor: "claude",
+      startedAt: Date.parse("2026-05-25T00:00:00.000Z"),
+      durationMs: 2388,
+      artifactsDir,
+      snapshotDir,
+      reportPath,
+      recordPath,
+      flowPath,
+      cassettePath,
+      replayCommand: `ptywright agent replay ${longName}.agent-run.json`,
+      commands: {
+        replay: {
+          argv: ["ptywright", "agent", "replay", recordPath],
+        },
+        updateSnapshots: {
+          argv: ["ptywright", "agent", "replay", recordPath, "--update-snapshots"],
+        },
+      },
+      viewports: [
+        { name: "desktop", width: 1280, height: 820 },
+        { name: "mobile", width: 390, height: 844, isMobile: true, hasTouch: true },
+      ],
+      cassetteFrameCount: 2,
+      steps: [
+        { type: "waitForText", text: "Ready" },
+        { type: "snapshot", name: "final", targets: ["terminal", "dom", "layout"] },
+        { type: "typeText", text: longCommandArg, enter: true },
+      ],
+      artifacts: [
+        {
+          name: "final",
+          viewport: "mobile",
+          kind: "terminal",
+          path: terminalPath,
+          baselinePath: join(
+            snapshotDir,
+            `${"mobile-final-terminal-baseline-".repeat(5)}.snap.txt`,
+          ),
+          hash: "terminalhash",
+          ok: true,
+        },
+        {
+          name: "final",
+          viewport: "mobile",
+          kind: "dom",
+          path: domPath,
+          baselinePath: join(snapshotDir, `${"mobile-final-dom-baseline-".repeat(5)}.snap.html`),
+          hash: "domhash",
+          ok: true,
+        },
+      ],
+      errors: [],
+    } satisfies AgentRunResult);
+  } finally {
+    process.chdir(originalCwd);
+  }
+
+  const browser = await chromium.launch({ headless: true });
+  try {
+    const page = await browser.newPage({
+      hasTouch: true,
+      isMobile: true,
+      viewport: { width: 390, height: 844 },
+    });
+    await page.goto(pathToFileURL(reportPath).href);
+    const layout = await page.evaluate(() => {
+      const documentWidth = document.documentElement.clientWidth;
+      const scrollWidth = document.documentElement.scrollWidth;
+      const pre = document.querySelector("pre");
+      return {
+        documentWidth,
+        scrollWidth,
+        commandHasLocalOverflow:
+          pre instanceof HTMLElement && pre.scrollWidth > pre.clientWidth + 1,
+      };
+    });
+
+    expect(layout.scrollWidth).toBeLessThanOrEqual(layout.documentWidth + 1);
+    expect(layout.commandHasLocalOverflow).toBe(true);
+    await page.close();
+  } finally {
+    await browser.close();
+  }
+}, 15_000);
+
 test("agent report does not copy Aitty assets when no DOM preview is needed", async () => {
   const fixture = createAittyReportFixture("agent-report-terminal-only-aitty-assets");
 

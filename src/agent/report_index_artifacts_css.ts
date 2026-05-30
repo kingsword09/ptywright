@@ -2,6 +2,7 @@ export function renderAgentReportArtifactsCss(): string {
   return `      .artifacts {
         display: grid;
         gap: 14px;
+        min-width: 0;
       }
       .artifact {
         display: grid;
@@ -10,12 +11,14 @@ export function renderAgentReportArtifactsCss(): string {
         border-radius: 8px;
         padding: 12px;
         background: var(--panel);
+        min-width: 0;
       }
       .artifact-summary {
         display: grid;
-        grid-template-columns: auto minmax(0, 1fr) minmax(96px, auto);
+        grid-template-columns: auto minmax(0, 1fr) minmax(0, auto);
         gap: 14px;
         align-items: start;
+        min-width: 0;
       }
       .artifact-meta {
         display: grid;
@@ -26,19 +29,23 @@ export function renderAgentReportArtifactsCss(): string {
         display: flex;
         flex-wrap: wrap;
         gap: 8px 12px;
+        min-width: 0;
       }
       .artifact a {
         color: var(--focus);
         font-weight: 700;
         text-decoration: none;
+        overflow-wrap: anywhere;
       }
       .artifact code {
         color: var(--muted);
         overflow-wrap: anywhere;
+        min-width: 0;
       }
       .artifact-hash {
         justify-self: end;
         text-align: right;
+        max-width: 100%;
       }
       .badge {
         justify-self: start;

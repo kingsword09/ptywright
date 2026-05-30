@@ -2,15 +2,18 @@ export function renderAgentReportCommandsCss(): string {
   return `      .commands {
         display: grid;
         gap: 10px;
+        min-width: 0;
       }
       .command {
         display: grid;
         gap: 5px;
+        min-width: 0;
       }
       .command span {
         color: var(--muted);
         font-size: 13px;
         font-weight: 700;
+        overflow-wrap: anywhere;
       }
       .artifact code,
       pre {
@@ -18,6 +21,8 @@ export function renderAgentReportCommandsCss(): string {
       }
       pre {
         overflow: auto;
+        max-width: 100%;
+        min-width: 0;
         margin: 0;
         border-radius: 8px;
         background: oklch(20% 0.015 230);
