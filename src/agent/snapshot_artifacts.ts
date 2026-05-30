@@ -12,7 +12,7 @@ import {
 import type { AgentRunArtifact } from "./runner_types";
 import type { AgentFlowSpec, AgentFlowStep, AgentTextMaskRule, AgentViewport } from "./schema";
 import { renderSnapshotDiff } from "./snapshot_diff";
-import { readTerminalDom, readTerminalText } from "./terminal_dom";
+import { readTerminalDom, readTerminalLayout, readTerminalText } from "./terminal_dom";
 
 export type SnapshotArtifactContext = {
   spec: AgentFlowSpec;
@@ -67,6 +67,20 @@ export async function captureSnapshotStep(
         continue;
       }
 
+      if (target === "layout") {
+        const layout = normalizeTerminalText(await readTerminalLayout(ctx.page), ctx.masks);
+        await writeComparableArtifact(ctx, {
+          name: step.name,
+          kind: "layout",
+          relativePath: `${base}.layout.txt`,
+          baselineRelativePath: `${base}.layout.snap.txt`,
+          diffRelativePath: `${base}.layout.diff.txt`,
+          content: layout + "\n",
+          compare: step.compare ?? true,
+        });
+        continue;
+      }
+
       const screenshotPath = join(ctx.artifactsDir, `${base}.png`);
       await ctx.page.screenshot({ path: screenshotPath, fullPage: step.fullPage ?? false });
       ctx.artifacts.push({
@@ -90,7 +104,7 @@ async function writeComparableArtifact(
   ctx: SnapshotArtifactContext,
   artifact: {
     name: string;
-    kind: "terminal" | "dom";
+    kind: "terminal" | "dom" | "layout";
     relativePath: string;
     baselineRelativePath: string;
     diffRelativePath: string;

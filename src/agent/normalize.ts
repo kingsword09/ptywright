@@ -74,6 +74,13 @@ export function normalizeDomSnapshot(
   return applyAgentMasks(stable, rules, { replacement: escapeHtmlText });
 }
 
+export function normalizeReplayDom(
+  input: string,
+  rules: readonly AgentTextMaskRule[] = [],
+): string {
+  return applyAgentMasks(input.replace(/\r\n?/g, "\n"), rules, { replacement: escapeHtmlText });
+}
+
 export function sanitizeArtifactName(input: string): string {
   const value = input
     .trim()

@@ -30,10 +30,10 @@ test("agent replay uses cassette frames instead of launching the original comman
       snapshotDir,
       steps: [
         { type: "waitForText", text: "Deterministic Agent Ready" },
-        { type: "snapshot", name: "ready", targets: ["terminal", "dom"] },
+        { type: "snapshot", name: "ready", targets: ["terminal", "dom", "layout"] },
         { type: "typeText", text: "status", enter: true },
         { type: "waitForText", text: "Status: stable" },
-        { type: "snapshot", name: "status", targets: ["terminal", "dom"] },
+        { type: "snapshot", name: "status", targets: ["terminal", "dom", "layout"] },
       ],
     },
     { updateSnapshots: true, headless: true },
@@ -42,6 +42,10 @@ test("agent replay uses cassette frames instead of launching the original comman
   expect(run.ok).toBe(true);
   expect(existsSync(run.cassettePath)).toBe(true);
   expect(run.cassetteFrameCount).toBeGreaterThan(0);
+  expect(run.artifacts.some((artifact) => artifact.kind === "layout" && artifact.ok)).toBe(true);
+  expect(readFileSync(join(artifactsDir, "desktop.ready.layout.txt"), "utf8")).toContain(
+    "# terminal-layout v1",
+  );
 
   const cassette = normalizeAgentCassette(
     JSON.parse(readFileSync(run.cassettePath, "utf8")) as unknown,
@@ -92,6 +96,7 @@ test("agent replay uses cassette frames instead of launching the original comman
   expect(replay.ok).toBe(true);
   expect(replay.mode).toBe("replay");
   expect(replay.artifacts.every((artifact) => artifact.ok)).toBe(true);
+  expect(existsSync(join(replay.artifactsDir, "desktop.ready.layout.txt"))).toBe(true);
   const replayRecord = JSON.parse(readFileSync(replay.recordPath, "utf8")) as {
     cassettePath?: string;
     cassetteFrameCount?: number;

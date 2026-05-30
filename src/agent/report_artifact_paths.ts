@@ -7,6 +7,12 @@ export function artifactViewerPath(artifact: AgentRunArtifact): string | null {
       : `${artifact.path}.viewer.html`;
   }
 
+  if (artifact.kind === "layout") {
+    return artifact.path.endsWith(".layout.txt")
+      ? artifact.path.replace(/\.layout\.txt$/, ".layout.viewer.html")
+      : `${artifact.path}.viewer.html`;
+  }
+
   if (artifact.kind === "dom") {
     return artifact.path.endsWith(".dom.html")
       ? artifact.path.replace(/\.dom\.html$/, ".dom.viewer.html")

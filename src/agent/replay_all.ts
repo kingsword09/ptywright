@@ -35,6 +35,7 @@ export async function replayAllAgentRecords(
     const artifactsDir = join(suiteDir, "tests", safeArtifactsDirName(relative(dir, filePath)));
     const entryStartedAt = Date.now();
     const result = await replayRecordEntry(filePath, artifactsDir, {
+      config: options.config,
       headless: options.headless ?? true,
       updateSnapshots,
     });

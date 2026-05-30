@@ -1,6 +1,10 @@
 import type { AgentViewport } from "./schema";
 import type { ResolvedPtywrightConfig } from "../config";
 import { readFlagValueFromArgSets, readReportLaunchArgSets } from "./report_launch_args";
+import {
+  resolveStableFrameConfig,
+  shouldUsePtyReplayStableFrameDomPreview,
+} from "./report_stable_frame_config";
 import type { AgentRunResult } from "./runner";
 
 export type AgentReportScreenMode = "plain" | "termvision";
@@ -29,7 +33,7 @@ export function resolveReportViewOptions(
   const lineHeightArg = readFlagValueFromArgSets(launchArgSets, "--line-height");
   const stableFrameConfig = resolveStableFrameConfig(config, result.name);
   const themeOverride =
-    ptyReplayArg && stableFrameConfig.enabled !== false && !stableFrameConfig.skip
+    ptyReplayArg && shouldUsePtyReplayStableFrameDomPreview({ config, flowName: result.name })
       ? stableFrameConfig.theme
       : undefined;
 
@@ -45,21 +49,4 @@ function parsePositiveNumber(value: string | undefined): number | undefined {
   if (value === undefined) return undefined;
   const parsed = Number(value);
   return Number.isFinite(parsed) && parsed > 0 ? parsed : undefined;
-}
-
-function resolveStableFrameConfig(
-  config: ResolvedPtywrightConfig | undefined,
-  flowName: string,
-): {
-  enabled?: boolean;
-  skip?: boolean;
-  theme?: AgentReportTheme;
-} {
-  const stableFrames = config?.agent?.report?.stableFrames;
-  const flowConfig = stableFrames?.flows?.[flowName];
-  return {
-    enabled: flowConfig?.enabled ?? stableFrames?.enabled,
-    skip: flowConfig?.skip ?? stableFrames?.skip,
-    theme: flowConfig?.theme ?? stableFrames?.theme ?? "dark",
-  };
 }

@@ -67,6 +67,7 @@ async function runAgentCheck(
   context: AgentExecutionCommandContext,
 ): Promise<number> {
   const result = await checkAgentRegression({
+    config: context.config,
     cassetteDir:
       args.path ??
       args.cassetteDir ??
@@ -123,6 +124,7 @@ async function runAgentReplayAll(
   context: AgentExecutionCommandContext,
 ): Promise<number> {
   const result = await replayAllAgentRecords({
+    config: context.config,
     dir: args.path ?? resolveAgentConfigPath(context.config, context.config?.agent?.cassetteDir),
     artifactsRoot:
       args.artifactsRoot ??

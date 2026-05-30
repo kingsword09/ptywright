@@ -1,6 +1,8 @@
 import type { AgentRunResult } from "./runner";
+import type { ResolvedPtywrightConfig } from "../config";
 
 export type AgentReplayAllOptions = {
+  config?: ResolvedPtywrightConfig;
   dir?: string;
   artifactsRoot?: string;
   headless?: boolean;

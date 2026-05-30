@@ -5,7 +5,7 @@ import { expect, test } from "bun:test";
 
 import { buildCommandLaunchCommand, extractUrlFromOutput } from "../src/agent/command_launch";
 import { formatAgentLaunchCommand } from "../src/agent/launch";
-import { applyAgentMasks, normalizeDomSnapshot } from "../src/agent/normalize";
+import { applyAgentMasks, normalizeDomSnapshot, normalizeReplayDom } from "../src/agent/normalize";
 import {
   createAgentTemplateSpec,
   resolveAgentFlavor,
@@ -143,6 +143,17 @@ test("agent DOM masks escape replacement text as HTML", () => {
   );
 
   expect(dom).toContain("overflow: hidden");
+  expect(dom).toContain("&lt;model&gt;");
+  expect(dom).not.toContain("<model>");
+});
+
+test("agent replay DOM preserves terminal cell whitespace", () => {
+  const dom = normalizeReplayDom(
+    '<div class="term-row"><span style="width: calc(var(--term-cell-width, 1ch) * 19);">    unit/ # Vitest </span><span>gpt-5.5</span></div>',
+    [{ regex: "\\bgpt-[A-Za-z0-9._:-]+\\b", flags: "gi", replacement: "<model>" }],
+  );
+
+  expect(dom).toContain(">    unit/ # Vitest <");
   expect(dom).toContain("&lt;model&gt;");
   expect(dom).not.toContain("<model>");
 });

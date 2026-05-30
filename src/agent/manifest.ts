@@ -28,6 +28,7 @@ const agentManifestFileKindSchema = z.enum([
   "report",
   "terminal",
   "dom",
+  "layout",
   "screenshot",
   "diff",
 ]);

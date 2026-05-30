@@ -27,7 +27,7 @@ export const agentReplayFailedArtifactSchema = z
   .object({
     name: z.string().min(1),
     viewport: z.string().min(1),
-    kind: z.enum(["terminal", "dom", "screenshot"]),
+    kind: z.enum(["terminal", "dom", "layout", "screenshot"]),
     path: z.string().min(1),
     baselinePath: z.string().min(1).optional(),
     diffPath: z.string().min(1).optional(),

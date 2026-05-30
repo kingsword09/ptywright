@@ -15,6 +15,7 @@ import {
   extractPtyReplayStableFrameForReport,
   renderPtyReplayStableFramePreviewDocument,
 } from "./report_pty_stable_frame";
+import { shouldUsePtyReplayStableFrameDomPreview } from "./report_stable_frame_config";
 import { renderDomPreviewDocument } from "./report_terminal_preview";
 import { resolveReportViewOptions } from "./report_view_options";
 import type { AgentRunArtifact, AgentRunResult } from "./runner";
@@ -53,14 +54,17 @@ export async function writeArtifactViewerPages(
     domPreviewPathsBySnapshot.size > 0
       ? prepareAittyReportAssets({
           artifactsDir: result.artifactsDir,
-          flowPath: result.flowPath,
-          reportPath: result.reportPath,
         })
       : null;
   const writtenDomPreviewPaths = new Set<string>();
-  const ptyReplayStableFrame = aittyAssets
-    ? await extractPtyReplayStableFrameForReport({ config: options.config, result })
-    : null;
+  const usePtyReplayStableFrameDomPreview = shouldUsePtyReplayStableFrameDomPreview({
+    config: options.config,
+    flowName: result.name,
+  });
+  const ptyReplayStableFrame =
+    aittyAssets && usePtyReplayStableFrameDomPreview
+      ? await extractPtyReplayStableFrameForReport({ config: options.config, result })
+      : null;
 
   if (aittyAssets) {
     for (const { artifact, content } of readableArtifacts) {
