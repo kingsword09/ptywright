@@ -18,19 +18,14 @@ function renderRawArtifactViewerCss(): string {
         width: max-content;
         min-height: 100%;
         margin: 0;
-        background:
-          linear-gradient(180deg, color-mix(in srgb, #162033 92%, black), #0c111d);
-        color: #e6edf7;
-        font-family: ui-monospace, "SFMono-Regular", Menlo, Consolas, "Liberation Mono", monospace;
+        background: var(--panel);
+        color: var(--ink);
+        font-family: var(--font-mono);
         font-size: 13px;
         line-height: 1.45;
         overflow: visible;
         padding: 12px;
         white-space: pre;
-      }
-      .viewer-page[data-theme="light"] .raw-artifact-text {
-        background: #ffffff;
-        color: #4c4f69;
       }
 ${renderReportViewportPanCss()}`;
 }

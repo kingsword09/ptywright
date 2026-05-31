@@ -1,30 +1,15 @@
+import { renderReportThemeCss } from "./report_theme_css";
+
 export function renderArtifactViewerShellCss(): string {
-  return `      :root {
-        color-scheme: dark;
-        --bg: #080d16;
-        --panel: #0c111d;
-        --line: rgba(148, 163, 184, 0.26);
-        --ink: #e6edf7;
-        --muted: #91a0b8;
-        --focus: #79c0ff;
-        font-family:
-          ui-sans-serif,
-          system-ui,
-          -apple-system,
-          BlinkMacSystemFont,
-          "Segoe UI",
-          sans-serif;
-      }
-      * {
-        box-sizing: border-box;
-      }
+  return `${renderReportThemeCss()}
+
       html,
       body {
         width: 100%;
         height: 100%;
         margin: 0;
         overflow: hidden;
-        background: var(--bg);
+        background: var(--canvas);
         color: var(--ink);
       }
       .viewer-page {
@@ -42,7 +27,7 @@ export function renderArtifactViewerShellCss(): string {
         align-items: center;
         min-width: 0;
         border-bottom: 1px solid var(--line);
-        background: color-mix(in srgb, var(--panel) 88%, black);
+        background: var(--raised);
         padding: 10px 12px;
       }
       .viewer-title {
@@ -50,7 +35,8 @@ export function renderArtifactViewerShellCss(): string {
         margin-right: auto;
         overflow-wrap: anywhere;
         font-size: 14px;
-        font-weight: 700;
+        font-weight: 640;
+        color: var(--ink);
       }
       .viewer-link,
       .viewer-pill {
@@ -63,10 +49,15 @@ export function renderArtifactViewerShellCss(): string {
         color: var(--muted);
         font-size: 12px;
         text-decoration: none;
+        transition: all 0.12s ease;
       }
       .viewer-link {
-        color: var(--focus);
-        font-weight: 700;
+        color: var(--accent);
+        font-weight: 640;
+      }
+      .viewer-link:hover {
+        border-color: var(--accent);
+        background: var(--accent-soft);
       }
       .viewer-stage {
         display: grid;
@@ -77,9 +68,7 @@ export function renderArtifactViewerShellCss(): string {
         justify-items: center;
         align-content: start;
         overflow: hidden;
-        background:
-          radial-gradient(circle at top left, rgba(121, 192, 255, 0.1), transparent 32%),
-          #060a13;
+        background: var(--canvas);
         padding: 14px;
       }
       .viewer-viewport {
@@ -90,10 +79,10 @@ export function renderArtifactViewerShellCss(): string {
         overflow: auto;
         overscroll-behavior: contain;
         border: 0;
-        border-radius: 8px;
-        background: #0c111d;
+        border-radius: var(--radius-sm);
+        background: var(--panel);
         outline: 1px solid var(--line);
-        box-shadow: 0 18px 52px rgba(0, 0, 0, 0.34);
+        box-shadow: var(--shadow);
       }
       .viewer-viewport[data-mobile="true"] {
         width: min(var(--config-viewport-width), 100%);
@@ -106,22 +95,7 @@ export function renderArtifactViewerShellCss(): string {
         width: 100%;
         height: 100%;
         border: 0;
-        background: #0c111d;
-      }
-      .viewer-page[data-theme="light"] {
-        --bg: #f8fafc;
-        --panel: #ffffff;
-        --line: rgba(15, 23, 42, 0.14);
-        --ink: #0f172a;
-        --muted: #64748b;
-        --focus: #1e66f5;
-      }
-      .viewer-page[data-theme="light"] .viewer-stage {
-        background: #f8fafc;
-      }
-      .viewer-page[data-theme="light"] .viewer-viewport,
-      .viewer-page[data-theme="light"] .dom-viewer-frame {
-        background: #ffffff;
+        background: var(--panel);
       }
       @media (max-width: 720px) {
         .viewer-toolbar {

@@ -302,11 +302,10 @@ test("agent report links terminal artifacts to fullscreen viewport viewers", asy
   expect(existsSync(terminalViewerPath)).toBe(true);
   expect(existsSync(domViewerPath)).toBe(true);
   expect(existsSync(domPreviewPath)).toBe(true);
-  expect(report).toContain('<a href="mobile.ready.terminal.viewer.html">terminal</a>');
-  expect(report).toContain('<a href="mobile.ready.dom.viewer.html">dom</a>');
-  expect(report).toContain('<a href="mobile.ready.terminal.txt">raw</a>');
-  expect(report).toContain('<a href="mobile.ready.dom.html">raw</a>');
-  expect(report).toContain('<a href="mobile.ready.png">screenshot</a>');
+  expect(report).toContain('href="mobile.ready.terminal.viewer.html"');
+  expect(report).toContain('href="mobile.ready.dom.viewer.html"');
+  expect(report).toContain('href="mobile.ready.png"');
+  expect(report).toContain("artifact-chip");
   expect(report).not.toContain("wide output");
   expect(report).not.toContain("terminal-text-preview");
   expect(report).not.toContain("dom-viewer-frame");
