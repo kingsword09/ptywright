@@ -493,7 +493,7 @@ test("agent rerun CLI can rerun replay summaries with update mode", async () => 
 
   const summary = readAgentReplaySummaryPath(first.replay.summaryPath);
   expect(summary.updateSnapshots).toBe(true);
-  expect(readFileSync(summary.reportPath, "utf8")).toContain("update snapshots");
+  expect(readFileSync(summary.reportPath, "utf8")).toContain("Update Snapshots");
 }, 30_000);
 
 test("agent rerun CLI prints replay summary JSON for replay summaries", async () => {

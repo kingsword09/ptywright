@@ -168,8 +168,8 @@ test("agent replay-all runs copied cassettes as a regression suite", async () =>
   });
 
   const html = readFileSync(result.reportPath, "utf8");
-  expect(html).toContain("ptywright agent replay report");
-  expect(html).toContain("agent-replay.summary.json");
+  expect(html).toContain("Agent Replay Report");
+  expect(html).toContain("summary.json");
   expect(html).toContain("ptywright agent commands");
   expect(html).toContain("--update-snapshots");
 }, 15_000);

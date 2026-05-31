@@ -1,29 +1,8 @@
+import { renderReportThemeCss } from "./report_theme_css";
+
 export function renderAgentReportBaseCss(): string {
-  return `      :root {
-        color-scheme: light;
-        --bg: oklch(97.5% 0.008 210);
-        --ink: oklch(19% 0.018 230);
-        --muted: oklch(48% 0.02 230);
-        --line: oklch(86% 0.018 230);
-        --panel: oklch(99% 0.006 210);
-        --good: oklch(55% 0.15 155);
-        --bad: oklch(58% 0.19 25);
-        --focus: oklch(55% 0.14 235);
-        font-family:
-          ui-sans-serif,
-          system-ui,
-          -apple-system,
-          BlinkMacSystemFont,
-          "Segoe UI",
-          sans-serif;
-      }
-      * { box-sizing: border-box; }
-      body {
-        margin: 0;
-        background: var(--bg);
-        color: var(--ink);
-        overflow-wrap: anywhere;
-      }
+  return `${renderReportThemeCss()}
+
       main {
         display: grid;
         gap: 24px;
@@ -61,6 +40,12 @@ export function renderAgentReportBaseCss(): string {
         line-height: 1.25;
         overflow-wrap: anywhere;
       }
+      h3 {
+        margin: 0;
+        font-size: 16px;
+        line-height: 1.3;
+        overflow-wrap: anywhere;
+      }
       .meta {
         display: flex;
         flex-wrap: wrap;
@@ -86,21 +71,24 @@ export function renderAgentReportBaseCss(): string {
         font-weight: 700;
       }
       .status.pass {
-        border-color: color-mix(in oklch, var(--good) 42%, var(--line));
-        color: var(--good);
+        border-color: var(--pass);
+        background: var(--pass-soft);
+        color: var(--pass);
       }
       .status.fail {
-        border-color: color-mix(in oklch, var(--bad) 44%, var(--line));
-        color: var(--bad);
+        border-color: var(--fail);
+        background: var(--fail-soft);
+        color: var(--fail);
       }
       .panel {
         display: grid;
         gap: 16px;
         border: 1px solid var(--line);
-        border-radius: 8px;
+        border-radius: var(--radius);
         background: var(--panel);
         padding: 18px;
         min-width: 0;
+        box-shadow: var(--shadow);
       }
       .panel > * {
         min-width: 0;
@@ -108,6 +96,13 @@ export function renderAgentReportBaseCss(): string {
       .panel p {
         margin: 0;
         max-width: 100%;
+        overflow-wrap: break-word;
+        word-break: break-word;
+      }
+      code {
+        font-family: var(--font-mono);
+        overflow-wrap: break-word;
+        word-break: break-all;
       }
       @media (max-width: 720px) {
         main {
